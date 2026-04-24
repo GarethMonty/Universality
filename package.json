@@ -1,0 +1,28 @@
+{
+  "name": "universality",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Universality is a modular Tauri workstation for exploring multiple datastore families from one desktop app.",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "dev": "npm run dev --workspace @universality/desktop",
+    "build": "npm run build --workspace @universality/shared-types && npm run build --workspace @universality/desktop",
+    "lint": "npm run lint --workspace @universality/desktop",
+    "test": "npm run test --workspace @universality/desktop",
+    "check": "npm run lint && npm run test && npm run build",
+    "rust:check": "cargo check --manifest-path apps/desktop/src-tauri/Cargo.toml",
+    "rust:test": "cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml",
+    "rust:fmt": "cd apps/desktop/src-tauri && cargo fmt --check",
+    "rust:clippy": "cargo clippy --manifest-path apps/desktop/src-tauri/Cargo.toml -- -D warnings",
+    "check:native": "npm run rust:fmt && npm run rust:check && npm run rust:test && npm run rust:clippy",
+    "check:all": "npm run check && npm run check:native",
+    "tauri:dev": "npm run tauri:dev --workspace @universality/desktop",
+    "tauri:build": "npm run tauri:build --workspace @universality/desktop"
+  }
+}

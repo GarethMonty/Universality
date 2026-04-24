@@ -1,0 +1,35 @@
+{
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Universality: Tauri Debug (LLDB)",
+      "type": "lldb",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/apps/desktop",
+      "cargo": {
+        "args": [
+          "build",
+          "--manifest-path",
+          "${workspaceFolder}/apps/desktop/src-tauri/Cargo.toml",
+          "--no-default-features"
+        ],
+        "filter": {
+          "name": "universality-desktop",
+          "kind": "bin"
+        }
+      },
+      "preLaunchTask": "universality:ui:dev"
+    },
+    {
+      "name": "Universality: Tauri Debug (Windows)",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/apps/desktop/src-tauri/target/debug/universality-desktop.exe",
+      "cwd": "${workspaceFolder}/apps/desktop",
+      "preLaunchTask": "universality:dev"
+    }
+  ]
+}

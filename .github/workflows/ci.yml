@@ -1,0 +1,175 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - 'release/**'
+    tags:
+      - 'app-v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  frontend-and-contracts:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Install workspace dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm run test
+
+      - name: Build
+        run: npm run build
+
+      - name: Rust format check
+        run: npm run rust:fmt
+
+      - name: Rust check
+        run: npm run rust:check
+
+      - name: Rust tests
+        run: npm run rust:test
+
+      - name: Rust clippy
+        run: npm run rust:clippy
+
+  adapter-integration-linux:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Linux desktop dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust artifacts
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './apps/desktop/src-tauri -> target'
+
+      - name: Install workspace dependencies
+        run: npm ci
+
+      - name: Start fixture services
+        working-directory: tests/fixtures
+        run: docker compose up -d --wait
+
+      - name: Seed SQL Server fixture
+        run: |
+          docker exec universality-sqlserver /opt/mssql-tools18/bin/sqlcmd \
+            -S localhost -U sa -P 'Universality_pwd_123' -C \
+            -i /work/001_seed.sql
+
+      - name: Run adapter integration tests
+        working-directory: apps/desktop/src-tauri
+        env:
+          UNIVERSALITY_FIXTURE_RUN: '1'
+          UNIVERSALITY_POSTGRES_HOST: 127.0.0.1
+          UNIVERSALITY_POSTGRES_PORT: '54329'
+          UNIVERSALITY_POSTGRES_DB: universality
+          UNIVERSALITY_POSTGRES_USER: universality
+          UNIVERSALITY_POSTGRES_PASSWORD: universality
+          UNIVERSALITY_SQLSERVER_HOST: 127.0.0.1
+          UNIVERSALITY_SQLSERVER_PORT: '14333'
+          UNIVERSALITY_SQLSERVER_DB: universality
+          UNIVERSALITY_SQLSERVER_USER: sa
+          UNIVERSALITY_SQLSERVER_PASSWORD: Universality_pwd_123
+          UNIVERSALITY_MYSQL_HOST: 127.0.0.1
+          UNIVERSALITY_MYSQL_PORT: '33060'
+          UNIVERSALITY_MYSQL_DB: commerce
+          UNIVERSALITY_MYSQL_USER: universality
+          UNIVERSALITY_MYSQL_PASSWORD: universality
+          UNIVERSALITY_MONGODB_HOST: 127.0.0.1
+          UNIVERSALITY_MONGODB_PORT: '27018'
+          UNIVERSALITY_MONGODB_DB: catalog
+          UNIVERSALITY_MONGODB_USER: universality
+          UNIVERSALITY_MONGODB_PASSWORD: universality
+          UNIVERSALITY_REDIS_HOST: 127.0.0.1
+          UNIVERSALITY_REDIS_PORT: '6380'
+        run: cargo test --test adapters_integration -- --nocapture
+
+      - name: Stop fixture services
+        if: always()
+        working-directory: tests/fixtures
+        run: docker compose down -v
+
+  native-smoke:
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/') || startsWith(github.ref, 'refs/tags/app-v')
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - ubuntu-22.04
+          - windows-latest
+          - macos-latest
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Linux desktop dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust artifacts
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './apps/desktop/src-tauri -> target'
+
+      - name: Install workspace dependencies
+        run: npm ci
+
+      - name: Build frontend workspace
+        run: npm run build
+
+      - name: Cargo check
+        working-directory: apps/desktop/src-tauri
+        run: cargo check

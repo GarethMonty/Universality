@@ -1,0 +1,41 @@
+{
+  // See https://go.microsoft.com/fwlink/?LinkId=733558
+  // for the documentation about the tasks.json format
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "universality:rust:build",
+      "type": "shell",
+      "command": "cargo",
+      "args": [
+        "build",
+        "--manifest-path",
+        "${workspaceFolder}/apps/desktop/src-tauri/Cargo.toml"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "universality:ui:dev",
+      "type": "shell",
+      "command": "node",
+      "args": [
+        ".vscode/ensure-ui-dev.mjs"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "universality:dev",
+      "dependsOn": [
+        "universality:rust:build",
+        "universality:ui:dev"
+      ],
+      "dependsOrder": "parallel"
+    }
+  ]
+}

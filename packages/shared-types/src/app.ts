@@ -1,0 +1,76 @@
+import type { AdapterManifest } from './capabilities'
+import type {
+  ConnectionProfile,
+  EnvironmentProfile,
+  ResolvedEnvironment,
+} from './connection'
+import type { AppPreferences, GuardrailDecision, LockState } from './security'
+import type {
+  DiagnosticsReport,
+  ExplorerNode,
+  QueryTabState,
+  SavedWorkItem,
+} from './workspace'
+
+export interface AppHealth {
+  runtime: 'browser-preview' | 'tauri'
+  adapterHost: 'scaffolded' | 'connected' | 'simulated'
+  secretStorage: 'planned' | 'ready' | 'keyring'
+  platform: string
+  telemetry: 'disabled' | 'opt-in'
+}
+
+export type UiActivity =
+  | 'connections'
+  | 'explorer'
+  | 'saved-work'
+  | 'search'
+  | 'settings'
+
+export type SidebarPane = 'connections' | 'explorer' | 'saved-work' | 'search'
+
+export type BottomPanelTab = 'results' | 'messages' | 'details'
+
+export type RightDrawerView = 'none' | 'connection' | 'inspection' | 'diagnostics'
+
+export interface UiState {
+  activeConnectionId: string
+  activeEnvironmentId: string
+  activeTabId: string
+  explorerFilter: string
+  activeActivity: UiActivity
+  sidebarCollapsed: boolean
+  activeSidebarPane: SidebarPane
+  bottomPanelVisible: boolean
+  activeBottomPanelTab: BottomPanelTab
+  bottomPanelHeight: number
+  rightDrawer: RightDrawerView
+}
+
+export interface WorkspaceSnapshot {
+  schemaVersion: number
+  connections: ConnectionProfile[]
+  environments: EnvironmentProfile[]
+  tabs: QueryTabState[]
+  savedWork: SavedWorkItem[]
+  explorerNodes: ExplorerNode[]
+  adapterManifests: AdapterManifest[]
+  preferences: AppPreferences
+  guardrails: GuardrailDecision[]
+  lockState: LockState
+  ui: UiState
+  updatedAt: string
+}
+
+export interface BootstrapPayload {
+  health: AppHealth
+  snapshot: WorkspaceSnapshot
+  resolvedEnvironment: ResolvedEnvironment
+  diagnostics: DiagnosticsReport
+}
+
+export interface ExportBundle {
+  format: 'universality-bundle'
+  version: number
+  encryptedPayload: string
+}
