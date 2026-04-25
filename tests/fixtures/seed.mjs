@@ -72,6 +72,62 @@ function seedSqlWithStdin(container, command, args, scriptPath) {
   })
 }
 
+function redisProtocolCommand(parts) {
+  return `*${parts.length}\r\n${parts
+    .map((part) => {
+      const value = String(part)
+      return `$${Buffer.byteLength(value)}\r\n${value}\r\n`
+    })
+    .join('')}`
+}
+
+function seedRedisPerfKeys(container, command = 'redis-cli') {
+  if (!containerRunning(container)) {
+    return
+  }
+
+  const keyCount = Number.parseInt(process.env.UNIVERSALITY_REDIS_PERF_KEYS ?? '50000', 10)
+  const commands = []
+
+  commands.push(redisProtocolCommand(['DEL', 'perf:manifest']))
+  commands.push(
+    redisProtocolCommand([
+      'HSET',
+      'perf:manifest',
+      'keyCount',
+      String(keyCount),
+      'description',
+      'Synthetic keys for Universality result and explorer performance tests.',
+    ]),
+  )
+
+  for (let index = 1; index <= keyCount; index += 1) {
+    const key = `perf:session:${String(index).padStart(6, '0')}`
+    commands.push(
+      redisProtocolCommand([
+        'HSET',
+        key,
+        'userId',
+        `user-${index % 10000}`,
+        'region',
+        ['eu-west-1', 'us-east-1', 'ap-southeast-1', 'af-south-1', 'local'][index % 5],
+        'active',
+        index % 3 === 0 ? '0' : '1',
+        'score',
+        String(index % 1000),
+      ]),
+    )
+
+    if (index % 5 === 0) {
+      commands.push(redisProtocolCommand(['EXPIRE', key, String(1800 + (index % 7200))]))
+    }
+  }
+
+  docker(['exec', '-i', container, command, '--pipe'], {
+    input: commands.join(''),
+  })
+}
+
 function runPython(script) {
   const candidates = process.env.PYTHON ? [process.env.PYTHON] : ['python3', 'python']
 
@@ -203,6 +259,7 @@ async function seedCore() {
       'cache:feature-flags',
       '{"beta":true,"region":"local"}',
     ])
+    seedRedisPerfKeys('universality-redis')
   }
 
   runPython(join(root, 'sqlite', 'seed.py'))
@@ -224,6 +281,7 @@ async function seedCache() {
       '1',
     ])
     docker(['exec', 'universality-valkey', 'valkey-cli', 'EXPIRE', 'session:9f2d7e1a', '1800'])
+    seedRedisPerfKeys('universality-valkey', 'valkey-cli')
   }
 
   if (shouldSeed('universality-memcached', 'cache')) {

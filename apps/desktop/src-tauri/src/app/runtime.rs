@@ -4,6 +4,7 @@ use std::{
 };
 
 use sha2::{Digest, Sha256};
+use serde_json::json;
 use tauri::AppHandle;
 
 use crate::{
@@ -14,7 +15,8 @@ use crate::{
             AdapterDiagnosticsRequest, AdapterDiagnosticsResponse, AppHealth, AppPreferences,
             BootstrapPayload, CancelExecutionRequest, CancelExecutionResult,
             ClosedQueryTabSnapshot, ConnectionAuth, ConnectionProfile, ConnectionTestRequest,
-            ConnectionTestResult, DiagnosticsCounts, DiagnosticsReport, EnvironmentProfile,
+            ConnectionTestResult, CreateScopedQueryTabRequest, DiagnosticsCounts, DiagnosticsReport,
+            EnvironmentProfile,
             ExecutionRequest, ExecutionResponse, ExplorerInspectRequest, ExplorerInspectResponse,
             ExplorerRequest, ExplorerResponse, ExportBundle, LockState, OperationExecutionRequest,
             OperationExecutionResponse, OperationManifestRequest, OperationManifestResponse,
@@ -23,6 +25,7 @@ use crate::{
             QueryTabReorderRequest, QueryTabState, ResolvedConnectionProfile, ResolvedEnvironment,
             ResultPageRequest, ResultPageResponse, SavedWorkItem, SecretRef, StructureRequest,
             StructureResponse, UiState, UpdateUiStateRequest, UserFacingError, WorkspaceSnapshot,
+            UpdateQueryBuilderStateRequest,
         },
     },
     persistence, security,
@@ -350,6 +353,30 @@ impl ManagedAppState {
         Ok(self.bootstrap_payload())
     }
 
+    pub fn create_scoped_query_tab(
+        &mut self,
+        request: CreateScopedQueryTabRequest,
+    ) -> Result<BootstrapPayload, CommandError> {
+        let connection = self
+            .snapshot
+            .connections
+            .iter()
+            .find(|item| item.id == request.connection_id)
+            .cloned()
+            .ok_or_else(|| CommandError::new("connection-missing", "Connection was not found."))?;
+        let tab = build_scoped_query_tab(&self.snapshot, &connection, request);
+
+        self.snapshot.tabs.push(tab.clone());
+        self.snapshot.ui.active_connection_id = tab.connection_id.clone();
+        self.snapshot.ui.active_environment_id = tab.environment_id.clone();
+        self.snapshot.ui.active_tab_id = tab.id.clone();
+        self.snapshot.ui.active_activity = "connections".into();
+        self.snapshot.ui.active_sidebar_pane = "connections".into();
+        self.snapshot.updated_at = timestamp_now();
+        self.persist()?;
+        Ok(self.bootstrap_payload())
+    }
+
     pub fn close_query_tab(&mut self, tab_id: &str) -> Result<BootstrapPayload, CommandError> {
         let tab_index = self
             .snapshot
@@ -455,6 +482,31 @@ impl ManagedAppState {
             .find(|item| item.id == tab_id)
             .ok_or_else(|| CommandError::new("tab-missing", "Tab was not found."))?;
         tab.query_text = query_text.into();
+        tab.dirty = true;
+        tab.status = "idle".into();
+        tab.result = None;
+        tab.error = None;
+        tab.last_run_at = None;
+        self.snapshot.updated_at = timestamp_now();
+        self.persist()?;
+        Ok(self.bootstrap_payload())
+    }
+
+    pub fn update_query_builder_state(
+        &mut self,
+        request: UpdateQueryBuilderStateRequest,
+    ) -> Result<BootstrapPayload, CommandError> {
+        let tab = self
+            .snapshot
+            .tabs
+            .iter_mut()
+            .find(|item| item.id == request.tab_id)
+            .ok_or_else(|| CommandError::new("tab-missing", "Tab was not found."))?;
+
+        tab.builder_state = Some(request.builder_state);
+        if let Some(query_text) = request.query_text {
+            tab.query_text = query_text;
+        }
         tab.dirty = true;
         tab.status = "idle".into();
         tab.result = None;
@@ -618,6 +670,7 @@ impl ManagedAppState {
             saved_query_id: Some(item.id.clone()),
             editor_label: editor_label_for_connection(&connection),
             query_text,
+            builder_state: None,
             status: "idle".into(),
             dirty: false,
             last_run_at: None,
@@ -1355,6 +1408,7 @@ fn build_query_tab(connection: &ConnectionProfile, dirty: bool, title: String) -
         saved_query_id: None,
         editor_label: editor_label_for_connection(connection),
         query_text: default_query_text(connection),
+        builder_state: None,
         status: "idle".into(),
         dirty,
         last_run_at: None,
@@ -1362,6 +1416,142 @@ fn build_query_tab(connection: &ConnectionProfile, dirty: bool, title: String) -
         history: Vec::new(),
         error: None,
     }
+}
+
+fn build_scoped_query_tab(
+    snapshot: &WorkspaceSnapshot,
+    connection: &ConnectionProfile,
+    request: CreateScopedQueryTabRequest,
+) -> QueryTabState {
+    let builder_kind = scoped_builder_kind(connection, &request.target);
+    let target_label = normalized_target_label(&request.target.label);
+    let limit = 50;
+    let query_text = if builder_kind.as_deref() == Some("mongo-find") {
+        mongo_find_query_text(&target_label, limit)
+    } else {
+        request
+            .target
+            .query_template
+            .clone()
+            .unwrap_or_else(|| default_query_text(connection))
+    };
+    let builder_state = builder_kind
+        .filter(|kind| kind == "mongo-find")
+        .map(|_| mongo_find_builder_state(&target_label, &query_text, limit));
+    let title = scoped_query_tab_title(snapshot, connection, &target_label, builder_state.is_some());
+    let environment_id = request
+        .environment_id
+        .or_else(|| connection.environment_ids.first().cloned())
+        .unwrap_or_else(|| "env-dev".into());
+
+    QueryTabState {
+        id: generate_id("tab"),
+        title,
+        connection_id: connection.id.clone(),
+        environment_id,
+        family: connection.family.clone(),
+        language: language_for_connection(connection),
+        pinned: None,
+        saved_query_id: None,
+        editor_label: editor_label_for_connection(connection),
+        query_text,
+        builder_state,
+        status: "idle".into(),
+        dirty: true,
+        last_run_at: None,
+        result: None,
+        history: Vec::new(),
+        error: None,
+    }
+}
+
+fn scoped_builder_kind(
+    connection: &ConnectionProfile,
+    target: &crate::domain::models::ScopedQueryTarget,
+) -> Option<String> {
+    if connection.engine == "mongodb" && target.preferred_builder.as_deref() == Some("mongo-find") {
+        Some("mongo-find".into())
+    } else {
+        None
+    }
+}
+
+fn scoped_query_tab_title(
+    snapshot: &WorkspaceSnapshot,
+    connection: &ConnectionProfile,
+    target_label: &str,
+    has_builder: bool,
+) -> String {
+    let extension = if connection.family == "document" { "json" } else { "sql" };
+    let candidate = if has_builder {
+        format!("{target_label}.find.{extension}")
+    } else {
+        format!("{target_label}.{extension}")
+    };
+    unique_query_tab_title(snapshot, &candidate)
+}
+
+fn unique_query_tab_title(snapshot: &WorkspaceSnapshot, candidate: &str) -> String {
+    if !snapshot.tabs.iter().any(|tab| tab.title == candidate) {
+        return candidate.into();
+    }
+
+    let (stem, extension) = candidate
+        .rsplit_once('.')
+        .map(|(stem, extension)| (stem.to_string(), format!(".{extension}")))
+        .unwrap_or_else(|| (candidate.to_string(), String::new()));
+    let mut index = 2;
+    let mut title = format!("{stem} {index}{extension}");
+
+    while snapshot.tabs.iter().any(|tab| tab.title == title) {
+        index += 1;
+        title = format!("{stem} {index}{extension}");
+    }
+
+    title
+}
+
+fn normalized_target_label(label: &str) -> String {
+    let trimmed = label.trim();
+
+    if trimmed.is_empty() {
+        "query".into()
+    } else {
+        trimmed
+            .chars()
+            .map(|character| {
+                if character.is_control() || character == '/' || character == '\\' {
+                    '_'
+                } else {
+                    character
+                }
+            })
+            .take(80)
+            .collect()
+    }
+}
+
+fn mongo_find_query_text(collection: &str, limit: u32) -> String {
+    serde_json::to_string_pretty(&json!({
+        "collection": collection,
+        "filter": {},
+        "limit": limit,
+    }))
+    .unwrap_or_else(|_| format!("{{\n  \"collection\": \"{collection}\",\n  \"filter\": {{}},\n  \"limit\": {limit}\n}}"))
+}
+
+fn mongo_find_builder_state(collection: &str, query_text: &str, limit: u32) -> serde_json::Value {
+    json!({
+        "kind": "mongo-find",
+        "collection": collection,
+        "filters": [],
+        "projectionMode": "all",
+        "projectionFields": [],
+        "sort": [],
+        "skip": 0,
+        "limit": limit,
+        "lastAppliedQueryText": query_text,
+    })
 }
 
 pub fn timestamp_now() -> String {
@@ -1872,6 +2062,7 @@ fn fixture_query_tab(
         saved_query_id: Some(format!("saved-{}", seed.id)),
         editor_label: editor_label_for_connection(connection),
         query_text: seed.query_text.into(),
+        builder_state: None,
         status: "idle".into(),
         dirty: false,
         last_run_at: None,
@@ -1971,6 +2162,7 @@ fn fixture_closed_tabs(
             saved_query_id: None,
             editor_label: editor_label_for_connection(connection),
             query_text: "select count(*) as table_count from observability.table_health;".into(),
+            builder_state: None,
             status: "idle".into(),
             dirty: true,
             last_run_at: None,
@@ -2819,6 +3011,121 @@ mod tests {
                 "missing fixture connection {expected}"
             );
         }
+    }
+
+    #[test]
+    fn scoped_mongodb_collection_tab_gets_builder_state() {
+        let mut snapshot = blank_workspace_snapshot();
+        snapshot.environments.push(EnvironmentProfile {
+            id: "env-dev".into(),
+            label: "Dev".into(),
+            color: "#10b981".into(),
+            risk: "low".into(),
+            inherits_from: None,
+            variables: HashMap::new(),
+            sensitive_keys: Vec::new(),
+            requires_confirmation: false,
+            safe_mode: false,
+            exportable: true,
+            created_at: timestamp_now(),
+            updated_at: timestamp_now(),
+        });
+        let connection = ConnectionProfile {
+            id: "conn-mongo".into(),
+            name: "Mongo".into(),
+            engine: "mongodb".into(),
+            family: "document".into(),
+            host: "localhost".into(),
+            port: Some(27017),
+            database: Some("universality".into()),
+            connection_string: None,
+            connection_mode: Some("native".into()),
+            environment_ids: vec!["env-dev".into()],
+            tags: Vec::new(),
+            favorite: false,
+            read_only: false,
+            icon: "mongodb".into(),
+            color: None,
+            group: None,
+            notes: None,
+            auth: ConnectionAuth::default(),
+            created_at: timestamp_now(),
+            updated_at: timestamp_now(),
+        };
+        let tab = build_scoped_query_tab(
+            &snapshot,
+            &connection,
+            CreateScopedQueryTabRequest {
+                connection_id: connection.id.clone(),
+                environment_id: None,
+                target: crate::domain::models::ScopedQueryTarget {
+                    kind: "collection".into(),
+                    label: "products".into(),
+                    path: vec!["Mongo".into(), "Collections".into()],
+                    scope: Some("collection:products".into()),
+                    query_template: None,
+                    preferred_builder: Some("mongo-find".into()),
+                },
+            },
+        );
+
+        assert_eq!(tab.title, "products.find.json");
+        assert_eq!(tab.environment_id, "env-dev");
+        assert!(tab.query_text.contains("\"collection\": \"products\""));
+        assert_eq!(
+            tab.builder_state
+                .as_ref()
+                .and_then(|value| value.get("kind"))
+                .and_then(serde_json::Value::as_str),
+            Some("mongo-find")
+        );
+    }
+
+    #[test]
+    fn scoped_raw_query_tab_uses_query_template_without_builder() {
+        let snapshot = blank_workspace_snapshot();
+        let connection = ConnectionProfile {
+            id: "conn-postgres".into(),
+            name: "Postgres".into(),
+            engine: "postgresql".into(),
+            family: "sql".into(),
+            host: "localhost".into(),
+            port: Some(5432),
+            database: Some("universality".into()),
+            connection_string: None,
+            connection_mode: Some("native".into()),
+            environment_ids: vec!["env-dev".into()],
+            tags: Vec::new(),
+            favorite: false,
+            read_only: false,
+            icon: "postgresql".into(),
+            color: None,
+            group: None,
+            notes: None,
+            auth: ConnectionAuth::default(),
+            created_at: timestamp_now(),
+            updated_at: timestamp_now(),
+        };
+        let tab = build_scoped_query_tab(
+            &snapshot,
+            &connection,
+            CreateScopedQueryTabRequest {
+                connection_id: connection.id.clone(),
+                environment_id: Some("env-dev".into()),
+                target: crate::domain::models::ScopedQueryTarget {
+                    kind: "table".into(),
+                    label: "accounts".into(),
+                    path: vec!["Postgres".into(), "public".into()],
+                    scope: Some("table:public.accounts".into()),
+                    query_template: Some("select * from public.accounts limit 100;".into()),
+                    preferred_builder: None,
+                },
+            },
+        );
+
+        assert_eq!(tab.title, "accounts.sql");
+        assert_eq!(tab.query_text, "select * from public.accounts limit 100;");
+        assert!(tab.builder_state.is_none());
     }
 
     #[test]

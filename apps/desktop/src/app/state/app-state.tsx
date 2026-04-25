@@ -13,6 +13,7 @@ import type {
   BootstrapPayload,
   ConnectionProfile,
   ConnectionTestResult,
+  CreateScopedQueryTabRequest,
   DiagnosticsReport,
   EnvironmentProfile,
   ExecutionRequest,
@@ -38,6 +39,7 @@ import type {
   SecretRef,
   StructureRequest,
   StructureResponse,
+  UpdateQueryBuilderStateRequest,
   UpdateUiStateRequest,
   WorkspaceSnapshot,
 } from '@universality/shared-types'
@@ -634,10 +636,12 @@ interface Actions {
   createEnvironment(): Promise<void>
   saveEnvironment(profile: EnvironmentProfile): Promise<void>
   createTab(connectionId: string): Promise<void>
+  createScopedTab(request: CreateScopedQueryTabRequest): Promise<void>
   closeTab(tabId: string): Promise<void>
   reopenClosedTab(closedTabId: string): Promise<void>
   reorderTabs(orderedTabIds: string[]): Promise<void>
   updateQuery(tabId: string, queryText: string): Promise<void>
+  updateQueryBuilderState(request: UpdateQueryBuilderStateRequest): Promise<void>
   renameTab(tabId: string, title: string): Promise<void>
   saveCurrentQuery(tabId: string): Promise<void>
   saveAndCloseTab(tabId: string): Promise<void>
@@ -699,10 +703,12 @@ const defaultActions: Actions = {
   createEnvironment: noop,
   saveEnvironment: noop,
   createTab: noop,
+  createScopedTab: noop,
   closeTab: noop,
   reopenClosedTab: noop,
   reorderTabs: noop,
   updateQuery: noop,
+  updateQueryBuilderState: noop,
   renameTab: noop,
   saveCurrentQuery: noop,
   saveAndCloseTab: noop,
@@ -971,6 +977,17 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     [applyPayload, handleError],
   )
 
+  const createScopedTab = useCallback<Actions['createScopedTab']>(
+    async (request) => {
+      try {
+        applyPayload(await desktopClient.createScopedQueryTab(request))
+      } catch (error) {
+        handleError(error)
+      }
+    },
+    [applyPayload, handleError],
+  )
+
   const closeTab = useCallback<Actions['closeTab']>(
     async (tabId) => {
       try {
@@ -1008,6 +1025,17 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     async (tabId, queryText) => {
       try {
         applyPayload(await desktopClient.updateQueryTab(tabId, queryText))
+      } catch (error) {
+        handleError(error)
+      }
+    },
+    [applyPayload, handleError],
+  )
+
+  const updateQueryBuilderState = useCallback<Actions['updateQueryBuilderState']>(
+    async (request) => {
+      try {
+        applyPayload(await desktopClient.updateQueryBuilderState(request))
       } catch (error) {
         handleError(error)
       }
@@ -1435,10 +1463,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       createEnvironment,
       saveEnvironment,
       createTab,
+      createScopedTab,
       closeTab,
       reopenClosedTab,
       reorderTabs,
       updateQuery,
+      updateQueryBuilderState,
       renameTab,
       saveCurrentQuery,
       saveAndCloseTab,
@@ -1473,6 +1503,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       createConnection,
       createEnvironment,
       createTab,
+      createScopedTab,
       closeTab,
       deleteConnection,
       duplicateConnection,
@@ -1506,6 +1537,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       setTheme,
       testConnection,
       updateUiState,
+      updateQueryBuilderState,
       updateQuery,
     ],
   )

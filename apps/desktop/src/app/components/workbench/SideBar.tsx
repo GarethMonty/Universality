@@ -6,6 +6,7 @@ import type {
   EnvironmentProfile,
   ExplorerNode,
   SavedWorkItem,
+  ScopedQueryTarget,
   UiState,
 } from '@universality/shared-types'
 import {
@@ -63,6 +64,11 @@ interface ConnectionTreeNode {
   label: string
   kind: string
   detail?: string
+  scope?: string
+  path?: string[]
+  queryTemplate?: string
+  queryable?: boolean
+  builderKind?: ScopedQueryTarget['preferredBuilder']
   children?: ConnectionTreeNode[]
 }
 
@@ -97,6 +103,7 @@ interface SideBarProps {
   onDeleteConnection(connectionId: string): void
   onOpenConnectionOperations(connectionId: string): void
   onOpenConnectionExplorer(connectionId: string): void
+  onOpenScopedQuery(connectionId: string, target: ScopedQueryTarget): void
   onCreateTab(connectionId?: string): void
   onSaveCurrentQuery(): void
   onOpenSavedWork(savedWorkId: string): void
@@ -133,6 +140,7 @@ export function SideBar({
   onDeleteConnection,
   onOpenConnectionOperations,
   onOpenConnectionExplorer,
+  onOpenScopedQuery,
   onCreateTab,
   onSaveCurrentQuery,
   onOpenSavedWork,
@@ -240,6 +248,7 @@ export function SideBar({
           onOpenConnectionOperations={onOpenConnectionOperations}
           onDuplicateConnection={onDuplicateConnection}
           onOpenConnectionExplorer={onOpenConnectionExplorer}
+          onOpenScopedQuery={onOpenScopedQuery}
           onCreateTab={onCreateTab}
           onSelectConnection={onSelectConnection}
         />
@@ -258,6 +267,7 @@ export function SideBar({
 
       {ui.activeSidebarPane === 'explorer' ? (
         <ExplorerPane
+          activeConnection={connections.find((connection) => connection.id === activeConnectionId)}
           explorerFilter={ui.explorerFilter}
           explorerItems={explorerItems}
           explorerStatus={explorerStatus}
@@ -265,6 +275,7 @@ export function SideBar({
           onExplorerFilterChange={onExplorerFilterChange}
           onRefreshExplorer={onRefreshExplorer}
           onSelectExplorerNode={onSelectExplorerNode}
+          onOpenScopedQuery={(target) => onOpenScopedQuery(activeConnectionId, target)}
         />
       ) : null}
 
@@ -315,6 +326,7 @@ function ConnectionsPane({
   onOpenConnectionOperations,
   onDuplicateConnection,
   onOpenConnectionExplorer,
+  onOpenScopedQuery,
   onCreateTab,
   onSelectConnection,
 }: {
@@ -330,6 +342,7 @@ function ConnectionsPane({
   onOpenConnectionOperations(connectionId: string): void
   onDuplicateConnection(connectionId: string): void
   onOpenConnectionExplorer(connectionId: string): void
+  onOpenScopedQuery(connectionId: string, target: ScopedQueryTarget): void
   onCreateTab(connectionId?: string): void
   onSelectConnection(connectionId: string): void
 }) {
@@ -586,7 +599,12 @@ function ConnectionsPane({
                     </span>
                   </div>
 
-                  {expanded ? <ConnectionObjectTree connection={connection} /> : null}
+                  {expanded ? (
+                    <ConnectionObjectTree
+                      connection={connection}
+                      onOpenScopedQuery={onOpenScopedQuery}
+                    />
+                  ) : null}
                 </div>
               )
             })}
@@ -678,28 +696,88 @@ function ConnectionsPane({
   )
 }
 
-function ConnectionObjectTree({ connection }: { connection: ConnectionProfile }) {
+function ConnectionObjectTree({
+  connection,
+  onOpenScopedQuery,
+}: {
+  connection: ConnectionProfile
+  onOpenScopedQuery(connectionId: string, target: ScopedQueryTarget): void
+}) {
   const nodes = useMemo(() => buildConnectionObjectTree(connection), [connection])
   const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({})
+  const [contextMenu, setContextMenu] = useState<{
+    node: ConnectionTreeNode
+    x: number
+    y: number
+  }>()
   const toggleNode = (nodeKey: string) =>
     setExpandedNodes((current) => ({
       ...current,
       [nodeKey]: !current[nodeKey],
     }))
+  const openNodeContextMenu = (event: MouseEvent, node: ConnectionTreeNode) => {
+    if (!isScopedQueryable(node)) {
+      return
+    }
+
+    event.preventDefault()
+    event.stopPropagation()
+    setContextMenu({
+      node,
+      x: event.clientX,
+      y: event.clientY,
+    })
+  }
+
+  useEffect(() => {
+    if (!contextMenu) {
+      return
+    }
+
+    const close = () => setContextMenu(undefined)
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        close()
+      }
+    }
+
+    window.addEventListener('pointerdown', close)
+    window.addEventListener('resize', close)
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      window.removeEventListener('pointerdown', close)
+      window.removeEventListener('resize', close)
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [contextMenu])
 
   return (
-    <div className="connection-object-tree" role="tree" aria-label={`${connection.name} objects`}>
-      {nodes.map((node) => (
-        <ConnectionObjectTreeNode
-          key={node.id}
-          depth={1}
-          expandedNodes={expandedNodes}
-          node={node}
-          nodeKey={node.id}
-          onToggleNode={toggleNode}
+    <>
+      <div className="connection-object-tree" role="tree" aria-label={`${connection.name} objects`}>
+        {nodes.map((node) => (
+          <ConnectionObjectTreeNode
+            key={node.id}
+            depth={1}
+            expandedNodes={expandedNodes}
+            node={node}
+            nodeKey={node.id}
+            onOpenContextMenu={openNodeContextMenu}
+            onToggleNode={toggleNode}
+          />
+        ))}
+      </div>
+      {contextMenu ? (
+        <ScopedQueryContextMenu
+          ariaLabel={`Object options for ${contextMenu.node.label}`}
+          connectionId={connection.id}
+          target={connectionTreeNodeTarget(contextMenu.node)}
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onClose={() => setContextMenu(undefined)}
+          onOpenScopedQuery={onOpenScopedQuery}
         />
-      ))}
-    </div>
+      ) : null}
+    </>
   )
 }
 
@@ -708,12 +786,14 @@ function ConnectionObjectTreeNode({
   expandedNodes,
   node,
   nodeKey,
+  onOpenContextMenu,
   onToggleNode,
 }: {
   depth: number
   expandedNodes: Record<string, boolean>
   node: ConnectionTreeNode
   nodeKey: string
+  onOpenContextMenu(event: MouseEvent, node: ConnectionTreeNode): void
   onToggleNode(nodeKey: string): void
 }) {
   const children = node.children ?? []
@@ -736,6 +816,7 @@ function ConnectionObjectTreeNode({
         style={{ '--tree-depth': depth } as CSSProperties}
         title={node.detail ? `${node.label}: ${node.detail}` : node.label}
         onClick={toggleNode}
+        onContextMenu={(event) => onOpenContextMenu(event, node)}
         onKeyDown={(event) => {
           if (hasChildren && (event.key === 'Enter' || event.key === ' ')) {
             event.preventDefault()
@@ -788,6 +869,7 @@ function ConnectionObjectTreeNode({
                 expandedNodes={expandedNodes}
                 node={child}
                 nodeKey={childKey}
+                onOpenContextMenu={onOpenContextMenu}
                 onToggleNode={onToggleNode}
               />
             )
@@ -795,6 +877,100 @@ function ConnectionObjectTreeNode({
         : null}
     </>
   )
+}
+
+function ScopedQueryContextMenu({
+  ariaLabel,
+  connectionId,
+  onClose,
+  onOpenScopedQuery,
+  target,
+  x,
+  y,
+}: {
+  ariaLabel: string
+  connectionId: string
+  onClose(): void
+  onOpenScopedQuery(connectionId: string, target: ScopedQueryTarget): void
+  target: ScopedQueryTarget
+  x: number
+  y: number
+}) {
+  const canOpenBuilder = target.preferredBuilder === 'mongo-find'
+
+  return (
+    <div
+      className="connection-context-menu"
+      role="menu"
+      aria-label={ariaLabel}
+      style={{ left: x, top: y }}
+      onClick={(event) => event.stopPropagation()}
+      onPointerDown={(event) => event.stopPropagation()}
+    >
+      <button
+        type="button"
+        role="menuitem"
+        className="connection-context-menu-item"
+        aria-label={`Open query for ${target.label}`}
+        onClick={() => {
+          onClose()
+          onOpenScopedQuery(connectionId, { ...target, preferredBuilder: undefined })
+        }}
+      >
+        <PlayIcon className="connection-context-menu-icon" />
+        <span>Open Query</span>
+      </button>
+      {canOpenBuilder ? (
+        <button
+          type="button"
+          role="menuitem"
+          className="connection-context-menu-item"
+          aria-label={`Open query builder for ${target.label}`}
+          onClick={() => {
+            onClose()
+            onOpenScopedQuery(connectionId, target)
+          }}
+        >
+          <JsonIcon className="connection-context-menu-icon" />
+          <span>Open Query Builder</span>
+        </button>
+      ) : null}
+    </div>
+  )
+}
+
+function isScopedQueryable(node: ConnectionTreeNode) {
+  return Boolean(node.queryable || node.queryTemplate || node.builderKind)
+}
+
+function connectionTreeNodeTarget(node: ConnectionTreeNode): ScopedQueryTarget {
+  return {
+    kind: node.kind,
+    label: node.label,
+    path: node.path,
+    scope: node.scope,
+    queryTemplate: node.queryTemplate,
+    preferredBuilder: node.builderKind,
+  }
+}
+
+function isExplorerNodeQueryable(node: ExplorerNode) {
+  return Boolean(node.queryTemplate || ['collection', 'table', 'view'].includes(node.kind))
+}
+
+function explorerNodeTarget(
+  node: ExplorerNode,
+  connection: ConnectionProfile | undefined,
+): ScopedQueryTarget {
+  return {
+    kind: node.kind,
+    label: node.label,
+    path: node.path,
+    scope: node.scope,
+    queryTemplate: node.queryTemplate,
+    preferredBuilder:
+      connection?.engine === 'mongodb' && node.kind === 'collection' ? 'mongo-find' : undefined,
+  }
 }
 
 function buildConnectionObjectTree(connection: ConnectionProfile): ConnectionTreeNode[] {
@@ -828,11 +1004,23 @@ function sqlConnectionTree(connection: ConnectionProfile): ConnectionTreeNode[] 
     branch('schemas', 'Schemas', 'schemas', `${connection.engine} metadata scopes`, [
       branch(`schema-${schema}`, schema, 'schema', connection.database ?? 'default schema', [
         branch('tables', 'Tables', 'tables', 'Base tables and table-like relations', [
-          leaf('table-accounts', 'accounts', 'table', 'sample table'),
-          leaf('table-transactions', 'transactions', 'table', 'sample table'),
+          leaf('table-accounts', 'accounts', 'table', 'sample table', {
+            path: [connection.name, schema, 'Tables'],
+            queryable: true,
+            queryTemplate: sqlObjectQueryTemplate(connection, schema, 'accounts'),
+          }),
+          leaf('table-transactions', 'transactions', 'table', 'sample table', {
+            path: [connection.name, schema, 'Tables'],
+            queryable: true,
+            queryTemplate: sqlObjectQueryTemplate(connection, schema, 'transactions'),
+          }),
         ]),
         branch('views', 'Views', 'views', 'Saved select projections', [
-          leaf('view-active-accounts', 'active_accounts', 'view', 'sample view'),
+          leaf('view-active-accounts', 'active_accounts', 'view', 'sample view', {
+            path: [connection.name, schema, 'Views'],
+            queryable: true,
+            queryTemplate: sqlObjectQueryTemplate(connection, schema, 'active_accounts'),
+          }),
         ]),
         supportsStoredRoutines
           ? branch('stored-procedures', 'Stored Procedures', 'stored-procedures', 'Callable routines', [
@@ -856,9 +1044,9 @@ function documentConnectionTree(connection: ConnectionProfile): ConnectionTreeNo
     branch('databases', 'Databases', 'databases', 'Document database namespaces', [
       branch(`database-${database}`, database, 'database', `${connection.engine} database`, [
         branch('collections', 'Collections', 'collections', 'Document collections', [
-          leaf('collection-products', 'products', 'collection', 'sample collection'),
-          leaf('collection-inventory', 'inventory', 'collection', 'sample collection'),
-          leaf('collection-orders', 'orders', 'collection', 'sample collection'),
+          documentCollectionLeaf(connection, 'products'),
+          documentCollectionLeaf(connection, 'inventory'),
+          documentCollectionLeaf(connection, 'orders'),
         ]),
         branch('indexes', 'Indexes', 'indexes', 'Collection index definitions', [
           leaf('index-products-sku', 'products.sku_1', 'index', 'sample index'),
@@ -866,6 +1054,28 @@ function documentConnectionTree(connection: ConnectionProfile): ConnectionTreeNo
       ]),
     ]),
   ]
+}
+
+function documentCollectionLeaf(connection: ConnectionProfile, collection: string) {
+  return leaf(`collection-${collection}`, collection, 'collection', 'sample collection', {
+    path: [connection.name, connection.database ?? 'default', 'Collections'],
+    scope: `collection:${collection}`,
+    queryable: true,
+    builderKind: connection.engine === 'mongodb' ? 'mongo-find' : undefined,
+    queryTemplate: `{\n  "collection": "${collection}",\n  "filter": {},\n  "limit": 50\n}`,
+  })
+}
+
+function sqlObjectQueryTemplate(connection: ConnectionProfile, schema: string, objectName: string) {
+  if (connection.engine === 'sqlserver') {
+    return `select top 100 * from ${schema}.${objectName};`
+  }
+
+  if (connection.engine === 'sqlite' || connection.engine === 'duckdb') {
+    return `select * from ${objectName} limit 100;`
+  }
+
+  return `select * from ${schema}.${objectName} limit 100;`
 }
 
 function keyValueConnectionTree(connection: ConnectionProfile): ConnectionTreeNode[] {
@@ -1049,8 +1259,14 @@ function branch(
   return { id, label, kind, detail, children }
 }
 
-function leaf(id: string, label: string, kind: string, detail: string): ConnectionTreeNode {
-  return { id, label, kind, detail }
+function leaf(
+  id: string,
+  label: string,
+  kind: string,
+  detail: string,
+  options: Partial<ConnectionTreeNode> = {},
+): ConnectionTreeNode {
+  return { id, label, kind, detail, ...options }
 }
 
 function connectionsCount(connectionGroups: Record<string, ConnectionProfile[]>) {
@@ -1253,22 +1469,54 @@ function EnvironmentsPane({
 }
 
 function ExplorerPane({
+  activeConnection,
   explorerFilter,
   explorerItems,
   explorerStatus,
   explorerSummary,
   onExplorerFilterChange,
+  onOpenScopedQuery,
   onRefreshExplorer,
   onSelectExplorerNode,
 }: {
+  activeConnection?: ConnectionProfile
   explorerFilter: string
   explorerItems: ExplorerNode[]
   explorerStatus: 'idle' | 'loading' | 'ready'
   explorerSummary?: string
   onExplorerFilterChange(value: string): void
+  onOpenScopedQuery(target: ScopedQueryTarget): void
   onRefreshExplorer(): void
   onSelectExplorerNode(node: ExplorerNode): void
 }) {
+  const [contextMenu, setContextMenu] = useState<{
+    item: ExplorerNode
+    x: number
+    y: number
+  }>()
+
+  useEffect(() => {
+    if (!contextMenu) {
+      return
+    }
+
+    const close = () => setContextMenu(undefined)
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        close()
+      }
+    }
+
+    window.addEventListener('pointerdown', close)
+    window.addEventListener('resize', close)
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      window.removeEventListener('pointerdown', close)
+      window.removeEventListener('resize', close)
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [contextMenu])
+
   return (
     <>
       <div className="sidebar-header">
@@ -1324,6 +1572,18 @@ function ExplorerPane({
                   : `${item.label}: inspect this ${item.kind}.`
               }
               onClick={() => onSelectExplorerNode(item)}
+              onContextMenu={(event) => {
+                if (!isExplorerNodeQueryable(item)) {
+                  return
+                }
+
+                event.preventDefault()
+                setContextMenu({
+                  item,
+                  x: event.clientX,
+                  y: event.clientY,
+                })
+              }}
             >
               <span className="tree-item-chevron">
                 {item.expandable ? (
@@ -1346,6 +1606,17 @@ function ExplorerPane({
           )
         })}
       </div>
+      {contextMenu ? (
+        <ScopedQueryContextMenu
+          ariaLabel={`Object options for ${contextMenu.item.label}`}
+          connectionId=""
+          target={explorerNodeTarget(contextMenu.item, activeConnection)}
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onClose={() => setContextMenu(undefined)}
+          onOpenScopedQuery={(_connectionId, target) => onOpenScopedQuery(target)}
+        />
+      ) : null}
     </>
   )
 }

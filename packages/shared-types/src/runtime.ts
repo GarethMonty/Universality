@@ -5,6 +5,8 @@ import type { GuardrailDecision } from './security'
 import type {
   ExecutionResultEnvelope,
   ExplorerNode,
+  QueryBuilderKind,
+  QueryBuilderState,
   QueryLanguage,
   QueryTabState,
   ResultPageInfo,
@@ -294,6 +296,27 @@ export interface CancelExecutionResult {
 
 export interface QueryTabReorderRequest {
   orderedTabIds: string[]
+}
+
+export interface ScopedQueryTarget {
+  kind: string
+  label: string
+  path?: string[]
+  scope?: string
+  queryTemplate?: string
+  preferredBuilder?: QueryBuilderKind
+}
+
+export interface CreateScopedQueryTabRequest {
+  connectionId: string
+  environmentId?: string
+  target: ScopedQueryTarget
+}
+
+export interface UpdateQueryBuilderStateRequest {
+  tabId: string
+  builderState: QueryBuilderState
+  queryText?: string
 }
 
 export type LocalDatabaseCreateMode = 'empty' | 'starter'

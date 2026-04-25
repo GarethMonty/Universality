@@ -72,6 +72,54 @@ export interface QueryTabDefinition {
   savedQueryId?: string
 }
 
+export type QueryBuilderKind = 'mongo-find'
+
+export type MongoFilterOperator =
+  | 'eq'
+  | 'ne'
+  | 'gt'
+  | 'gte'
+  | 'lt'
+  | 'lte'
+  | 'regex'
+  | 'exists'
+  | 'in'
+
+export type MongoBuilderValueType = 'string' | 'number' | 'boolean' | 'null' | 'json'
+
+export interface MongoFindFilterRow {
+  id: string
+  field: string
+  operator: MongoFilterOperator
+  value: string
+  valueType: MongoBuilderValueType
+}
+
+export interface MongoFindProjectionField {
+  id: string
+  field: string
+}
+
+export interface MongoFindSortRow {
+  id: string
+  field: string
+  direction: 'asc' | 'desc'
+}
+
+export interface MongoFindBuilderState {
+  kind: 'mongo-find'
+  collection: string
+  filters: MongoFindFilterRow[]
+  projectionMode: 'all' | 'include' | 'exclude'
+  projectionFields: MongoFindProjectionField[]
+  sort: MongoFindSortRow[]
+  skip?: number
+  limit?: number
+  lastAppliedQueryText?: string
+}
+
+export type QueryBuilderState = MongoFindBuilderState
+
 export interface QueryExecutionNotice {
   code: string
   level: 'info' | 'warning' | 'error'
@@ -267,6 +315,7 @@ export interface UserFacingError {
 export interface QueryTabState extends QueryTabDefinition {
   editorLabel: string
   queryText: string
+  builderState?: QueryBuilderState
   status: QueryExecutionState
   dirty: boolean
   lastRunAt?: string

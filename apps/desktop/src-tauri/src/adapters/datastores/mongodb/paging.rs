@@ -28,14 +28,23 @@ pub(crate) async fn fetch_mongodb_page(
             )
         })?;
     let collection = database.collection::<Document>(collection_name);
-    let skip = u64::from(page_index) * u64::from(page_size);
+    let query_skip = input.get("skip").and_then(Value::as_u64).unwrap_or(0);
+    let skip = query_skip + u64::from(page_index) * u64::from(page_size);
+    let explicit_limit = input
+        .get("limit")
+        .and_then(Value::as_u64)
+        .and_then(|value| u32::try_from(value).ok())
+        .filter(|value| *value > 0);
+    let effective_page_size = explicit_limit
+        .map(|limit| limit.min(page_size))
+        .unwrap_or(page_size);
     let documents = if let Some(pipeline) = input.get("pipeline").and_then(Value::as_array) {
         let mut pipeline = pipeline
             .iter()
             .map(bson::to_document)
             .collect::<Result<Vec<Document>, _>>()?;
         pipeline.push(doc! { "$skip": i64::try_from(skip).unwrap_or(i64::MAX) });
-        pipeline.push(doc! { "$limit": i64::from(page_size + 1) });
+        pipeline.push(doc! { "$limit": i64::from(effective_page_size + 1) });
         collection
             .aggregate(pipeline)
             .await?
@@ -43,18 +52,25 @@ pub(crate) async fn fetch_mongodb_page(
             .await?
     } else {
         let filter = input.get("filter").cloned().unwrap_or_else(|| json!({}));
-        collection
+        let mut find = collection
             .find(bson::to_document(&filter)?)
             .skip(skip)
-            .limit(i64::from(page_size + 1))
-            .await?
-            .try_collect::<Vec<Document>>()
-            .await?
+            .limit(i64::from(effective_page_size + 1));
+
+        if let Some(projection) = input.get("projection") {
+            find = find.projection(bson::to_document(projection)?);
+        }
+
+        if let Some(sort) = input.get("sort") {
+            find = find.sort(bson::to_document(sort)?);
+        }
+
+        find.await?.try_collect::<Vec<Document>>().await?
     };
-    let has_more = documents.len() > page_size as usize;
+    let has_more = documents.len() > effective_page_size as usize;
     let visible_documents = documents
         .iter()
-        .take(page_size as usize)
+        .take(effective_page_size as usize)
         .collect::<Vec<&Document>>();
     let buffered_rows = visible_documents.len() as u32;
 
@@ -62,7 +78,7 @@ pub(crate) async fn fetch_mongodb_page(
         request,
         payload_document(serde_json::to_value(visible_documents)?),
         PageResponseInput {
-            page_size,
+            page_size: effective_page_size,
             page_index,
             buffered_rows,
             has_more,

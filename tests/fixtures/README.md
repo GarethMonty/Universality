@@ -64,6 +64,23 @@ npm run rust:test
 
 Seed data uses a small shared domain: accounts, products, orders/transactions, sessions, events, metrics, and alerts. Scripts are designed to be safe to rerun.
 
+## Performance Seed Data
+
+The core fixtures also include deterministic high-volume data for paging, virtualization, copy/export, and explorer performance testing:
+
+| Engine | Object | Default volume |
+| --- | --- | ---: |
+| PostgreSQL | `observability.perf_events` | 100,000 rows |
+| MySQL | `perf_inventory_events` | 100,000 rows |
+| SQL Server | `dbo.perf_events` | 100,000 rows |
+| SQLite | `perf_events` | 100,000 rows |
+| MongoDB | `catalog.perfDocuments` | 100,000 documents |
+| Redis | `perf:session:*` plus `perf:manifest` | 50,000 keys |
+| MariaDB (`sqlplus`) | `perf_order_events` | 100,000 rows |
+| Valkey (`cache`) | `perf:session:*` plus `perf:manifest` | 50,000 keys |
+
+Redis/Valkey key volume can be overridden for local experiments with `UNIVERSALITY_REDIS_PERF_KEYS`.
+
 ## Resource Expectations
 
 The default stack is intended for everyday debugging. `oracle`, `widecolumn`, `graph`, and `search` can consume several GB of memory and should be started only when needed. `fixtures:up:all` is deliberately opt-in.

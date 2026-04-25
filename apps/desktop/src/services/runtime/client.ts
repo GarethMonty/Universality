@@ -5,12 +5,12 @@ import type {
   ConnectionProfile,
   ConnectionTestRequest,
   ConnectionTestResult,
+  CreateScopedQueryTabRequest,
   DiagnosticsReport,
   EnvironmentProfile,
   ExecutionCapabilities,
   ExecutionRequest,
   ExecutionResponse,
-  UpdateUiStateRequest,
   ExportBundle,
   ExplorerInspectRequest,
   ExplorerInspectResponse,
@@ -37,6 +37,8 @@ import type {
   SecretRef,
   StructureRequest,
   StructureResponse,
+  UpdateQueryBuilderStateRequest,
+  UpdateUiStateRequest,
   WorkspaceSnapshot,
 } from '@universality/shared-types'
 import { datastoreBacklogByEngine } from '@universality/shared-types'
@@ -169,6 +171,113 @@ function createQueryTabForConnection(
     dirty,
     history: [],
   }
+}
+
+function createScopedQueryTabInSnapshot(
+  snapshot: WorkspaceSnapshot,
+  request: CreateScopedQueryTabRequest,
+): WorkspaceSnapshot {
+  const next = cloneSnapshot(snapshot)
+  const connection = next.connections.find((item) => item.id === request.connectionId)
+
+  if (!connection) {
+    return next
+  }
+
+  const targetLabel = normalizeScopedTargetLabel(request.target.label)
+  const builderKind =
+    connection.engine === 'mongodb' && request.target.preferredBuilder === 'mongo-find'
+      ? 'mongo-find'
+      : undefined
+  const queryText =
+    builderKind === 'mongo-find'
+      ? mongoFindQueryText(targetLabel, 50)
+      : (request.target.queryTemplate ?? defaultQueryTextForConnection(connection))
+  const tab: QueryTabState = {
+    id: createId('tab'),
+    title: uniqueScopedQueryTitle(next, connection, targetLabel, builderKind === 'mongo-find'),
+    connectionId: connection.id,
+    environmentId:
+      request.environmentId ?? connection.environmentIds[0] ?? next.environments[0]?.id ?? 'env-dev',
+    family: connection.family,
+    language: languageForConnection(connection),
+    editorLabel: editorLabelForConnection(connection),
+    queryText,
+    builderState:
+      builderKind === 'mongo-find'
+        ? {
+            kind: 'mongo-find',
+            collection: targetLabel,
+            filters: [],
+            projectionMode: 'all',
+            projectionFields: [],
+            sort: [],
+            skip: 0,
+            limit: 50,
+            lastAppliedQueryText: queryText,
+          }
+        : undefined,
+    status: 'idle',
+    dirty: true,
+    history: [],
+  }
+
+  return upsertTab(next, tab)
+}
+
+function normalizeScopedTargetLabel(label: string) {
+  const trimmed = label.trim()
+
+  if (!trimmed) {
+    return 'query'
+  }
+
+  return [...trimmed]
+    .map((character) =>
+      character < ' ' || character === '/' || character === '\\' ? '_' : character,
+    )
+    .join('')
+    .slice(0, 80)
+}
+
+function uniqueScopedQueryTitle(
+  snapshot: WorkspaceSnapshot,
+  connection: ConnectionProfile,
+  label: string,
+  hasBuilder: boolean,
+) {
+  const extension = connection.family === 'document' ? 'json' : 'sql'
+  const candidate = hasBuilder ? `${label}.find.${extension}` : `${label}.${extension}`
+  const titles = new Set(snapshot.tabs.map((tab) => tab.title))
+
+  if (!titles.has(candidate)) {
+    return candidate
+  }
+
+  const splitAt = candidate.lastIndexOf('.')
+  const stem = splitAt >= 0 ? candidate.slice(0, splitAt) : candidate
+  const suffix = splitAt >= 0 ? candidate.slice(splitAt) : ''
+  let index = 2
+  let title = `${stem} ${index}${suffix}`
+
+  while (titles.has(title)) {
+    index += 1
+    title = `${stem} ${index}${suffix}`
+  }
+
+  return title
+}
+
+function mongoFindQueryText(collection: string, limit: number) {
+  return JSON.stringify(
+    {
+      collection,
+      filter: {},
+      limit,
+    },
+    null,
+    2,
+  )
 }
 
 function upsertConnection(
@@ -1699,6 +1808,18 @@ export const desktopClient = {
     return buildBrowserPayload(snapshot)
   },
 
+  async createScopedQueryTab(
+    request: CreateScopedQueryTabRequest,
+  ): Promise<BootstrapPayload> {
+    if (isTauriRuntime()) {
+      return invokeDesktop<BootstrapPayload>('create_scoped_query_tab', { request })
+    }
+
+    const snapshot = createScopedQueryTabInSnapshot(loadBrowserSnapshot(), request)
+    saveBrowserSnapshot(snapshot)
+    return buildBrowserPayload(snapshot)
+  },
+
   async closeQueryTab(tabId: string): Promise<BootstrapPayload> {
     if (isTauriRuntime()) {
       return invokeDesktop<BootstrapPayload>('close_query_tab', { tabId })
@@ -1776,6 +1897,33 @@ export const desktopClient = {
     }
 
     next.updatedAt = new Date().toISOString()
+    saveBrowserSnapshot(next)
+    return buildBrowserPayload(next)
+  },
+
+  async updateQueryBuilderState(
+    request: UpdateQueryBuilderStateRequest,
+  ): Promise<BootstrapPayload> {
+    if (isTauriRuntime()) {
+      return invokeDesktop<BootstrapPayload>('update_query_builder_state', { request })
+    }
+
+    const next = cloneSnapshot(loadBrowserSnapshot())
+    const tab = findTab(next, request.tabId)
+
+    if (tab) {
+      tab.builderState = request.builderState
+      if (request.queryText !== undefined) {
+        tab.queryText = request.queryText
+      }
+      tab.dirty = true
+      tab.result = undefined
+      tab.error = undefined
+      tab.status = 'idle'
+      tab.lastRunAt = undefined
+      next.updatedAt = new Date().toISOString()
+    }
+
     saveBrowserSnapshot(next)
     return buildBrowserPayload(next)
   },

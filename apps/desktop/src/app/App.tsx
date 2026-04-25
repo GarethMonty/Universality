@@ -4,8 +4,10 @@ import type {
   ConnectionProfile,
   EnvironmentProfile,
   ExecutionCapabilities,
+  QueryBuilderState,
   QueryTabState,
   ResultPayload,
+  ScopedQueryTarget,
   WorkspaceSnapshot,
 } from '@universality/shared-types'
 import { ErrorBoundary } from './components/ErrorBoundary'
@@ -18,6 +20,7 @@ import { RightDrawer } from './components/workbench/RightDrawer'
 import { SideBar } from './components/workbench/SideBar'
 import { StatusBar } from './components/workbench/StatusBar'
 import { StructureWorkspace } from './components/workbench/StructureWorkspace'
+import { QueryBuilderPanel } from './components/workbench/query-builder/QueryBuilderPanel'
 import { AppStateProvider, useAppState } from './state/app-state'
 import {
   defaultRowLimitForConnection,
@@ -441,6 +444,18 @@ function DesktopWorkspace() {
     })()
   }
 
+  const openScopedQuery = (connectionId: string, target: ScopedQueryTarget) => {
+    const environmentId =
+      snapshot.ui.activeEnvironmentId ||
+      snapshot.connections.find((connection) => connection.id === connectionId)?.environmentIds[0]
+
+    void actions.createScopedTab({
+      connectionId,
+      environmentId,
+      target,
+    })
+  }
+
   const runCommand = (command: string) => {
     setCommandPaletteOpen(false)
 
@@ -716,6 +731,7 @@ function DesktopWorkspace() {
             onDeleteConnection={requestDeleteConnection}
             onOpenConnectionOperations={openOperationsDrawer}
             onOpenConnectionExplorer={openConnectionExplorer}
+            onOpenScopedQuery={openScopedQuery}
             onCreateTab={(connectionId) =>
               connectionId || activeConnection
                 ? void actions.createTab(connectionId ?? activeConnection?.id ?? '')
@@ -851,6 +867,16 @@ function DesktopWorkspace() {
                           {activeConnection.name} / {activeEnvironment.label}
                         </span>
                       </div>
+                      <QueryBuilderPanel
+                        tab={activeTab}
+                        onApply={(builderState: QueryBuilderState, queryText: string) =>
+                          void actions.updateQueryBuilderState({
+                            tabId: activeTab.id,
+                            builderState,
+                            queryText,
+                          })
+                        }
+                      />
                       <DesktopCodeEditor
                         value={activeTab.queryText}
                         language={runtimeCapabilities.editorLanguage}

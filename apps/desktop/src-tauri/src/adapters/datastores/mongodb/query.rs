@@ -30,9 +30,17 @@ pub(super) async fn execute_mongodb_query(
             )
         })?;
     let collection = database.collection::<Document>(collection_name);
-    let row_limit = request
+    let requested_row_limit = request
         .row_limit
         .unwrap_or(adapter.execution_capabilities().default_row_limit);
+    let explicit_limit = input
+        .get("limit")
+        .and_then(Value::as_u64)
+        .and_then(|value| u32::try_from(value).ok())
+        .filter(|value| *value > 0);
+    let row_limit = explicit_limit
+        .map(|limit| limit.min(requested_row_limit))
+        .unwrap_or(requested_row_limit);
     let limit = i64::from(row_limit + 1);
     let documents = if let Some(pipeline) = input.get("pipeline").and_then(Value::as_array) {
         let mut pipeline = pipeline
@@ -47,13 +55,21 @@ pub(super) async fn execute_mongodb_query(
             .await?
     } else {
         let filter = input.get("filter").cloned().unwrap_or_else(|| json!({}));
-        let document = bson::to_document(&filter)?;
-        collection
-            .find(document)
-            .limit(limit)
-            .await?
-            .try_collect::<Vec<Document>>()
-            .await?
+        let mut find = collection.find(bson::to_document(&filter)?).limit(limit);
+
+        if let Some(projection) = input.get("projection") {
+            find = find.projection(bson::to_document(projection)?);
+        }
+
+        if let Some(sort) = input.get("sort") {
+            find = find.sort(bson::to_document(sort)?);
+        }
+
+        if let Some(skip) = input.get("skip").and_then(Value::as_u64) {
+            find = find.skip(skip);
+        }
+
+        find.await?.try_collect::<Vec<Document>>().await?
     };
     let truncated = documents.len() > row_limit as usize;
     let documents_json = serde_json::to_value(

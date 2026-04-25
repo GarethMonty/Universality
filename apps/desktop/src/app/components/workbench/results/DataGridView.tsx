@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { copyText } from './payload-export'
 
@@ -24,6 +24,7 @@ export function DataGridView({ columns, rows }: DataGridViewProps) {
   const [selection, setSelection] = useState<GridSelection>()
   const [columnWidths, setColumnWidths] = useState<Record<number, number>>({})
   const [copyMessage, setCopyMessage] = useState('')
+  const [viewportWidth, setViewportWidth] = useState(0)
   const parentRef = useRef<HTMLDivElement>(null)
   const dragStartRef = useRef<{ row: number; column: number } | null>(null)
   const resizeStartRef = useRef<{ column: number; x: number; width: number } | null>(null)
@@ -66,6 +67,7 @@ export function DataGridView({ columns, rows }: DataGridViewProps) {
       (total, _column, index) => total + (columnWidths[index] ?? DEFAULT_COLUMN_WIDTH),
       0,
     )
+  const renderedGridWidth = Math.max(gridWidth, viewportWidth)
   const virtualItems = virtualizer.getVirtualItems()
   const renderedRows =
     virtualItems.length > 0
@@ -130,6 +132,26 @@ export function DataGridView({ columns, rows }: DataGridViewProps) {
   const finishResize = () => {
     resizeStartRef.current = null
   }
+
+  useEffect(() => {
+    const parent = parentRef.current
+
+    if (!parent) {
+      return
+    }
+
+    const updateViewportWidth = () => setViewportWidth(parent.clientWidth)
+    updateViewportWidth()
+
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', updateViewportWidth)
+      return () => window.removeEventListener('resize', updateViewportWidth)
+    }
+
+    const observer = new ResizeObserver(updateViewportWidth)
+    observer.observe(parent)
+    return () => observer.disconnect()
+  }, [])
 
   const beginSelection = (row: number, column: number) => {
     dragStartRef.current = { row, column }
@@ -221,7 +243,7 @@ export function DataGridView({ columns, rows }: DataGridViewProps) {
       >
         <div
           className="data-grid-inner"
-          style={{ height: virtualizer.getTotalSize() + 32, width: gridWidth }}
+          style={{ height: virtualizer.getTotalSize() + 32, width: renderedGridWidth }}
         >
           <div className="data-grid-row data-grid-row--header">
             <div className="data-grid-cell data-grid-cell--row-number">#</div>

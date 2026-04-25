@@ -11,15 +11,16 @@ use crate::{
         models::{
             AdapterDiagnosticsRequest, AdapterDiagnosticsResponse, BootstrapPayload,
             CancelExecutionRequest, CancelExecutionResult, ConnectionProfile,
-            ConnectionTestRequest, ConnectionTestResult, EnvironmentProfile, ExecutionRequest,
-            ExecutionResponse, ExplorerInspectRequest, ExplorerInspectResponse, ExplorerRequest,
-            ExplorerResponse, ExportBundle, LocalDatabaseCreateRequest, LocalDatabaseCreateResult,
+            ConnectionTestRequest, ConnectionTestResult, CreateScopedQueryTabRequest,
+            EnvironmentProfile, ExecutionRequest, ExecutionResponse, ExplorerInspectRequest,
+            ExplorerInspectResponse, ExplorerRequest, ExplorerResponse, ExportBundle,
+            LocalDatabaseCreateRequest, LocalDatabaseCreateResult,
             LocalDatabasePickRequest, LocalDatabasePickResult, OperationExecutionRequest,
             OperationExecutionResponse, OperationManifestRequest, OperationManifestResponse,
             OperationPlanRequest, OperationPlanResponse, PermissionInspectionRequest,
             PermissionInspectionResponse, QueryTabReorderRequest, ResultPageRequest,
             ResultPageResponse, SavedWorkItem, StructureRequest, StructureResponse,
-            UpdateUiStateRequest,
+            UpdateQueryBuilderStateRequest, UpdateUiStateRequest,
         },
     },
 };
@@ -102,6 +103,15 @@ pub fn create_query_tab(
 }
 
 #[tauri::command]
+pub fn create_scoped_query_tab(
+    state: State<'_, SharedAppState>,
+    request: CreateScopedQueryTabRequest,
+) -> Result<BootstrapPayload, CommandError> {
+    let mut state = state.lock().unwrap();
+    state.create_scoped_query_tab(request)
+}
+
+#[tauri::command]
 pub fn close_query_tab(
     state: State<'_, SharedAppState>,
     tab_id: String,
@@ -136,6 +146,15 @@ pub fn update_query_tab(
 ) -> Result<BootstrapPayload, CommandError> {
     let mut state = state.lock().unwrap();
     state.update_query_tab(&tab_id, &query_text)
+}
+
+#[tauri::command]
+pub fn update_query_builder_state(
+    state: State<'_, SharedAppState>,
+    request: UpdateQueryBuilderStateRequest,
+) -> Result<BootstrapPayload, CommandError> {
+    let mut state = state.lock().unwrap();
+    state.update_query_builder_state(request)
 }
 
 #[tauri::command]

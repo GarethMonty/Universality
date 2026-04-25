@@ -187,6 +187,8 @@ pub struct QueryTabState {
     pub saved_query_id: Option<String>,
     pub editor_label: String,
     pub query_text: String,
+    #[serde(default)]
+    pub builder_state: Option<Value>,
     pub status: String,
     pub dirty: bool,
     pub last_run_at: Option<String>,
@@ -661,6 +663,34 @@ pub struct CancelExecutionResult {
 #[serde(rename_all = "camelCase")]
 pub struct QueryTabReorderRequest {
     pub ordered_tab_ids: Vec<String>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ScopedQueryTarget {
+    pub kind: String,
+    pub label: String,
+    #[serde(default)]
+    pub path: Vec<String>,
+    pub scope: Option<String>,
+    pub query_template: Option<String>,
+    pub preferred_builder: Option<String>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateScopedQueryTabRequest {
+    pub connection_id: String,
+    pub environment_id: Option<String>,
+    pub target: ScopedQueryTarget,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateQueryBuilderStateRequest {
+    pub tab_id: String,
+    pub builder_state: Value,
+    pub query_text: Option<String>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
