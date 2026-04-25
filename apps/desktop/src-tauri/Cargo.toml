@@ -15,6 +15,7 @@ tauri-build = { version = "2", features = [] }
 aes-gcm = "0.10"
 async-trait = "0.1"
 base64 = "0.22"
+duckdb = { version = "1.10502.0", features = ["bundled"] }
 futures-util = "0.3"
 keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
 mongodb = "3.4"
@@ -26,6 +27,7 @@ serde_json = "1"
 sha2 = "0.10"
 sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "postgres", "mysql", "sqlite", "json"] }
 tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
 tiberius = { version = "0.12", default-features = false, features = ["tds73", "rustls"] }
 tokio = { version = "1", features = ["net"] }

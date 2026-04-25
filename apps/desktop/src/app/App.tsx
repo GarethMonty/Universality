@@ -1,8 +1,10 @@
 import { useDeferredValue, useEffect, useState } from 'react'
-import type { ComponentType } from 'react'
+import type { ComponentType, CSSProperties } from 'react'
 import type {
   ConnectionProfile,
+  EnvironmentProfile,
   ExecutionCapabilities,
+  QueryTabState,
   ResultPayload,
   WorkspaceSnapshot,
 } from '@universality/shared-types'
@@ -15,8 +17,13 @@ import { EditorToolbar } from './components/workbench/EditorToolbar'
 import { RightDrawer } from './components/workbench/RightDrawer'
 import { SideBar } from './components/workbench/SideBar'
 import { StatusBar } from './components/workbench/StatusBar'
+import { StructureWorkspace } from './components/workbench/StructureWorkspace'
 import { WarningIcon } from './components/workbench/icons'
 import { AppStateProvider, useAppState } from './state/app-state'
+import {
+  defaultRowLimitForConnection,
+  editorLanguageForConnection,
+} from './state/helpers'
 
 export function App() {
   return (
@@ -38,6 +45,9 @@ function DesktopWorkspace() {
     explorerError,
     explorerInspection,
     explorerStatus,
+    structure,
+    structureError,
+    structureStatus,
     executionStatus,
     lastExecution,
     lastExecutionRequest,
@@ -53,6 +63,7 @@ function DesktopWorkspace() {
     renderer?: string
     tabId?: string
   }>({})
+  const [pendingTabClose, setPendingTabClose] = useState<QueryTabState | undefined>()
   const deferredCommandQuery = useDeferredValue(commandQuery)
 
   const openCommandPalette = () => {
@@ -151,7 +162,10 @@ function DesktopWorkspace() {
       !activeConnectionId ||
       !activeEnvironmentId ||
       activeSidebarPane !== 'explorer' ||
-      sidebarCollapsed
+      sidebarCollapsed ||
+      (explorer?.connectionId === activeConnectionId &&
+        explorer.environmentId === activeEnvironmentId &&
+        (explorer.nodes.length > 0 || explorerStatus === 'loading'))
     ) {
       return
     }
@@ -165,8 +179,33 @@ function DesktopWorkspace() {
     activeConnectionId,
     activeEnvironmentId,
     activeSidebarPane,
+    explorer,
+    explorerStatus,
     loadExplorer,
     sidebarCollapsed,
+  ])
+
+  useEffect(() => {
+    if (
+      !activeConnectionId ||
+      !activeEnvironmentId ||
+      snapshot?.ui.activeActivity !== 'explorer' ||
+      snapshot.ui.explorerView !== 'structure'
+    ) {
+      return
+    }
+
+    void actions.loadStructureMap({
+      connectionId: activeConnectionId,
+      environmentId: activeEnvironmentId,
+      limit: 120,
+    })
+  }, [
+    actions,
+    activeConnectionId,
+    activeEnvironmentId,
+    snapshot?.ui.activeActivity,
+    snapshot?.ui.explorerView,
   ])
 
   if (status === 'booting' || !payload || !snapshot) {
@@ -187,53 +226,69 @@ function DesktopWorkspace() {
     )
   }
 
-  if (!activeConnection || !activeTab || !activeEnvironment) {
-    return (
-      <BootSurface
-        title="Workspace seed is incomplete."
-        copy="Universality needs at least one connection, environment, and query tab to open the desktop shell."
-      />
-    )
-  }
-
   const resolvedTheme = resolveThemeMode(snapshot.preferences.theme)
   const runtimeCapabilities =
-    explorer?.capabilities ?? deriveCapabilities(snapshot, activeConnection)
+    activeConnection && explorer?.capabilities
+      ? explorer.capabilities
+      : activeConnection
+        ? deriveCapabilities(snapshot, activeConnection)
+        : defaultCapabilities()
   const explorerFilter = snapshot.ui.explorerFilter
-  const explorerItems = (explorer?.nodes ?? snapshot.explorerNodes).filter((node) => {
+  const explorerItems = activeConnection ? (explorer?.nodes ?? snapshot.explorerNodes).filter((node) => {
     const matchesFamily =
       node.family === 'shared' || node.family === activeConnection.family
     const filter = explorerFilter.toLowerCase()
     const searchable = `${node.label} ${node.kind} ${node.detail} ${(node.path ?? []).join(' ')}`.toLowerCase()
     return matchesFamily && searchable.includes(filter)
-  })
+  }) : []
   const commandItems = [
     'Open command palette',
     'Open connections',
+    'New connection',
+    ...(activeConnection ? ['Duplicate active connection', 'Delete active connection'] : []),
     'Open explorer',
     'Open saved work',
-    'Create query tab',
-    'Save current query',
-    'Run current query',
-    'Explain current query',
-    'Open connection drawer',
-    'Refresh explorer',
+    ...(activeConnection ? ['Create query tab', 'Open connection drawer', 'Refresh explorer'] : []),
+    ...(activeTab
+      ? ['Save current query', 'Close current tab', 'Run current query', 'Explain current query']
+      : []),
+    ...(snapshot.closedTabs.length > 0 ? ['Recover last closed tab'] : []),
     'Refresh diagnostics',
     'Toggle theme',
     'Toggle sidebar',
     'Toggle bottom panel',
     'Lock workspace',
+    'Open environments',
+    'New environment',
   ].filter((item) => item.toLowerCase().includes(deferredCommandQuery.toLowerCase()))
-  const connectionTest = connectionTests[activeConnection.id]
+  const connectionTest = activeConnection ? connectionTests[activeConnection.id] : undefined
   const activeRenderer =
+    activeTab &&
     rendererPreference.tabId === activeTab.id &&
     activeTab.result?.rendererModes.some((mode) => mode === rendererPreference.renderer)
       ? rendererPreference.renderer
-      : activeTab.result?.defaultRenderer
-  const activePayload = selectPayload(activeTab.result?.payloads ?? [], activeRenderer)
+      : activeTab?.result?.defaultRenderer
+  const activePayload = selectPayload(activeTab?.result?.payloads ?? [], activeRenderer)
   const canCancelExecution = Boolean(
     runtimeCapabilities.canCancel && lastExecution?.executionId,
   )
+  const showingEnvironmentWorkspace = snapshot.ui.activeActivity === 'environments'
+  const showingExplorerWorkspace = snapshot.ui.activeActivity === 'explorer'
+
+  const requestCloseTab = (tabId: string) => {
+    const tab = snapshot.tabs.find((item) => item.id === tabId)
+
+    if (!tab) {
+      return
+    }
+
+    if (tab.savedQueryId && tab.dirty) {
+      setPendingTabClose(tab)
+      return
+    }
+
+    void actions.closeTab(tab.id)
+  }
 
   const setActivity = (activity: WorkspaceSnapshot['ui']['activeActivity']) => {
     if (activity === 'settings') {
@@ -281,6 +336,10 @@ function DesktopWorkspace() {
   }
 
   const handleExplorerSelection = (node: NonNullable<typeof explorerItems>[number]) => {
+    if (!activeConnection || !activeEnvironment) {
+      return
+    }
+
     void actions.inspectExplorer({
       connectionId: activeConnection.id,
       environmentId: activeEnvironment.id,
@@ -304,6 +363,18 @@ function DesktopWorkspace() {
     })
   }
 
+  const openConnectionExplorer = (connectionId: string) => {
+    void (async () => {
+      await actions.selectConnection(connectionId)
+      await actions.updateUiState({
+        activeActivity: 'explorer',
+        activeSidebarPane: 'explorer',
+        sidebarCollapsed: false,
+        rightDrawer: snapshot.ui.rightDrawer === 'diagnostics' ? 'none' : snapshot.ui.rightDrawer,
+      })
+    })()
+  }
+
   const runCommand = (command: string) => {
     setCommandPaletteOpen(false)
 
@@ -314,6 +385,35 @@ function DesktopWorkspace() {
 
     if (command === 'Open connections') {
       setActivity('connections')
+      return
+    }
+
+    if (command === 'New connection') {
+      void actions.createConnection()
+      return
+    }
+
+    if (command === 'Open environments') {
+      setActivity('environments')
+      return
+    }
+
+    if (command === 'New environment') {
+      void actions.createEnvironment()
+      return
+    }
+
+    if (command === 'Duplicate active connection') {
+      if (activeConnection) {
+        void actions.duplicateConnection(activeConnection.id)
+      }
+      return
+    }
+
+    if (command === 'Delete active connection') {
+      if (activeConnection) {
+        void actions.deleteConnection(activeConnection.id)
+      }
       return
     }
 
@@ -328,23 +428,47 @@ function DesktopWorkspace() {
     }
 
     if (command === 'Create query tab') {
-      void actions.createTab(activeConnection.id)
+      if (activeConnection) {
+        void actions.createTab(activeConnection.id)
+      }
       return
     }
 
     if (command === 'Save current query') {
-      void actions.saveCurrentQuery(activeTab.id)
+      if (activeTab) {
+        void actions.saveCurrentQuery(activeTab.id)
+      }
       setActivity('saved-work')
       return
     }
 
+    if (command === 'Close current tab') {
+      if (activeTab) {
+        requestCloseTab(activeTab.id)
+      }
+      return
+    }
+
+    if (command === 'Recover last closed tab') {
+      const closedTab = snapshot.closedTabs[0]
+
+      if (closedTab) {
+        void actions.reopenClosedTab(closedTab.id)
+      }
+      return
+    }
+
     if (command === 'Run current query') {
-      void actions.executeQuery(activeTab.id)
+      if (activeTab) {
+        void actions.executeQuery(activeTab.id)
+      }
       return
     }
 
     if (command === 'Explain current query') {
-      void actions.executeQuery(activeTab.id, 'explain')
+      if (activeTab) {
+        void actions.executeQuery(activeTab.id, 'explain')
+      }
       return
     }
 
@@ -354,11 +478,13 @@ function DesktopWorkspace() {
     }
 
     if (command === 'Refresh explorer') {
-      void actions.loadExplorer({
-        connectionId: activeConnection.id,
-        environmentId: activeEnvironment.id,
-        limit: 50,
-      })
+      if (activeConnection && activeEnvironment) {
+        void actions.loadExplorer({
+          connectionId: activeConnection.id,
+          environmentId: activeEnvironment.id,
+          limit: 50,
+        })
+      }
       setActivity('explorer')
       return
     }
@@ -429,7 +555,32 @@ function DesktopWorkspace() {
         </div>
       ) : null}
 
-      <div className="ads-workbench">
+      {pendingTabClose ? (
+        <CloseSavedTabDialog
+          tab={pendingTabClose}
+          onCancel={() => setPendingTabClose(undefined)}
+          onDiscard={() => {
+            const tabId = pendingTabClose.id
+            setPendingTabClose(undefined)
+            void actions.closeTab(tabId)
+          }}
+          onSaveAndClose={() => {
+            const tabId = pendingTabClose.id
+            setPendingTabClose(undefined)
+            void actions.saveAndCloseTab(tabId)
+          }}
+        />
+      ) : null}
+
+      <div
+        className="ads-workbench"
+        style={
+          {
+            '--sidebar-width': `${snapshot.ui.sidebarWidth}px`,
+            '--drawer-width': `${snapshot.ui.rightDrawerWidth}px`,
+          } as CSSProperties
+        }
+      >
         <ActivityBar
           activeActivity={snapshot.ui.activeActivity}
           sidebarCollapsed={snapshot.ui.sidebarCollapsed}
@@ -451,89 +602,186 @@ function DesktopWorkspace() {
         {!snapshot.ui.sidebarCollapsed ? (
           <SideBar
             ui={snapshot.ui}
+            width={snapshot.ui.sidebarWidth}
             connections={snapshot.connections}
             environments={snapshot.environments}
             savedWork={snapshot.savedWork}
+            closedTabs={snapshot.closedTabs}
             explorerItems={explorerItems}
             explorerSummary={explorer?.summary ?? explorerError}
             explorerStatus={explorerStatus}
-            activeConnectionId={activeConnection.id}
+            activeConnectionId={activeConnection?.id ?? ''}
+            activeEnvironmentId={activeEnvironment?.id ?? ''}
             commandPaletteEnabled={snapshot.preferences.commandPaletteEnabled}
             commandQuery={commandQuery}
             commandItems={commandItems}
             onCommandQueryChange={setCommandQuery}
             onRunCommand={runCommand}
             onSelectConnection={(connectionId) => void actions.selectConnection(connectionId)}
-            onCreateTab={() => void actions.createTab(activeConnection.id)}
-            onOpenConnectionDrawer={openConnectionDrawer}
-            onSaveCurrentQuery={() => void actions.saveCurrentQuery(activeTab.id)}
+            onSelectEnvironment={(environmentId) =>
+              void actions.updateUiState({
+                activeEnvironmentId: environmentId,
+                activeActivity: 'environments',
+                activeSidebarPane: 'environments',
+                sidebarCollapsed: false,
+              })
+            }
+            onCreateConnection={() => void actions.createConnection()}
+            onCreateEnvironment={() => void actions.createEnvironment()}
+            onDuplicateConnection={(connectionId) =>
+              void actions.duplicateConnection(connectionId)
+            }
+            onDeleteConnection={(connectionId) => void actions.deleteConnection(connectionId)}
+            onOpenConnectionExplorer={openConnectionExplorer}
+            onCreateTab={() =>
+              activeConnection ? void actions.createTab(activeConnection.id) : undefined
+            }
+            onSaveCurrentQuery={() =>
+              activeTab ? void actions.saveCurrentQuery(activeTab.id) : undefined
+            }
             onOpenSavedWork={(savedWorkId) => void actions.openSavedWork(savedWorkId)}
             onDeleteSavedWork={(savedWorkId) => void actions.deleteSavedWork(savedWorkId)}
+            onReopenClosedTab={(closedTabId) => void actions.reopenClosedTab(closedTabId)}
             onExplorerFilterChange={(value) =>
               void actions.updateUiState({ explorerFilter: value })
             }
             onRefreshExplorer={() =>
-              void actions.loadExplorer({
-                connectionId: activeConnection.id,
-                environmentId: activeEnvironment.id,
-                limit: 50,
-              })
+              activeConnection && activeEnvironment
+                ? void actions.loadExplorer({
+                    connectionId: activeConnection.id,
+                    environmentId: activeEnvironment.id,
+                    limit: 50,
+                  })
+                : undefined
             }
             onSelectExplorerNode={handleExplorerSelection}
+            onResize={(width) =>
+              void actions.updateUiState({
+                sidebarWidth: width,
+              })
+            }
           />
         ) : null}
 
         <div className="workbench-center">
           <main className="editor-workspace">
-            <EditorTabs
-              tabs={snapshot.tabs}
-              activeTabId={activeTab.id}
-              connections={snapshot.connections}
-              onSelectTab={(tabId) => void actions.selectTab(tabId)}
-              onCreateTab={() => void actions.createTab(activeConnection.id)}
-            />
-
-            <EditorToolbar
-              connections={snapshot.connections}
-              activeConnection={activeConnection}
-              activeEnvironment={activeEnvironment}
-              executionStatus={executionStatus}
-              capabilities={runtimeCapabilities}
-              canCancelExecution={canCancelExecution}
-              bottomPanelVisible={snapshot.ui.bottomPanelVisible}
-              onExecute={() => void actions.executeQuery(activeTab.id)}
-              onExplain={() => void actions.executeQuery(activeTab.id, 'explain')}
-              onCancel={() =>
-                lastExecution?.executionId
-                  ? void actions.cancelExecution(lastExecution.executionId, activeTab.id)
-                  : undefined
-              }
-              onSelectConnection={(connectionId) => void actions.selectConnection(connectionId)}
-              onOpenConnectionDrawer={openConnectionDrawer}
-              onToggleBottomPanel={() =>
-                void actions.updateUiState({
-                  bottomPanelVisible: !snapshot.ui.bottomPanelVisible,
-                })
-              }
-            />
-
-            <div className="editor-surface">
-              <div className="editor-surface-meta">
-                <span>{activeTab.editorLabel}</span>
-                <span>
-                  {activeConnection.name} / {activeEnvironment.label}
-                </span>
-              </div>
-              <DesktopCodeEditor
-                value={activeTab.queryText}
-                language={runtimeCapabilities.editorLanguage}
-                theme={resolvedTheme}
-                onChange={(value) => void actions.updateQuery(activeTab.id, value)}
+            {showingEnvironmentWorkspace ? (
+              <EnvironmentWorkspace
+                key={`${activeEnvironment?.id ?? 'none'}-${activeEnvironment?.updatedAt ?? ''}`}
+                activeEnvironment={activeEnvironment}
+                environments={snapshot.environments}
+                onCreateEnvironment={() => void actions.createEnvironment()}
+                onSaveEnvironment={(environment) => void actions.saveEnvironment(environment)}
               />
-            </div>
+            ) : showingExplorerWorkspace ? (
+              <StructureWorkspace
+                activeConnection={activeConnection}
+                activeEnvironment={activeEnvironment}
+                explorerView={snapshot.ui.explorerView}
+                status={structureStatus}
+                structure={structure}
+                error={structureError}
+                onExplorerViewChange={(view) =>
+                  void actions.updateUiState({ explorerView: view })
+                }
+                onRefresh={() =>
+                  activeConnection && activeEnvironment
+                    ? void actions.loadStructureMap({
+                        connectionId: activeConnection.id,
+                        environmentId: activeEnvironment.id,
+                        limit: 120,
+                      })
+                    : undefined
+                }
+                onInspectNode={(node) => {
+                  if (!activeConnection || !activeEnvironment) {
+                    return
+                  }
+
+                  void actions.inspectExplorer({
+                    connectionId: activeConnection.id,
+                    environmentId: activeEnvironment.id,
+                    nodeId: node.id,
+                  })
+                  void actions.updateUiState({ rightDrawer: 'inspection' })
+                }}
+              />
+            ) : (
+              <>
+                <EditorTabs
+                  tabs={snapshot.tabs}
+                  activeTabId={activeTab?.id ?? ''}
+                  connections={snapshot.connections}
+                  environments={snapshot.environments}
+                  canCreateTab={Boolean(activeConnection)}
+                  onSelectTab={(tabId) => void actions.selectTab(tabId)}
+                  onCloseTab={requestCloseTab}
+                  onCreateTab={() =>
+                    activeConnection ? void actions.createTab(activeConnection.id) : undefined
+                  }
+                  onRenameTab={(tabId, title) => void actions.renameTab(tabId, title)}
+                  onSaveTab={(tabId) => void actions.saveCurrentQuery(tabId)}
+                />
+
+                {activeConnection && activeEnvironment && activeTab ? (
+                  <>
+                    <EditorToolbar
+                      connections={snapshot.connections}
+                      environments={snapshot.environments}
+                      activeConnection={activeConnection}
+                      activeEnvironment={activeEnvironment}
+                      executionStatus={executionStatus}
+                      capabilities={runtimeCapabilities}
+                      canCancelExecution={canCancelExecution}
+                      bottomPanelVisible={snapshot.ui.bottomPanelVisible}
+                      onExecute={() => void actions.executeQuery(activeTab.id)}
+                      onExplain={() => void actions.executeQuery(activeTab.id, 'explain')}
+                      onCancel={() =>
+                        lastExecution?.executionId
+                          ? void actions.cancelExecution(lastExecution.executionId, activeTab.id)
+                          : undefined
+                      }
+                      onSelectConnection={(connectionId) =>
+                        void actions.selectConnection(connectionId)
+                      }
+                      onSelectEnvironment={(environmentId) =>
+                        void actions.selectEnvironment(activeTab.id, environmentId)
+                      }
+                      onOpenConnectionDrawer={openConnectionDrawer}
+                      onToggleBottomPanel={() =>
+                        void actions.updateUiState({
+                          bottomPanelVisible: !snapshot.ui.bottomPanelVisible,
+                        })
+                      }
+                    />
+
+                    <div className="editor-surface">
+                      <div className="editor-surface-meta">
+                        <span>{activeTab.editorLabel}</span>
+                        <span>
+                          {activeConnection.name} / {activeEnvironment.label}
+                        </span>
+                      </div>
+                      <DesktopCodeEditor
+                        value={activeTab.queryText}
+                        language={runtimeCapabilities.editorLanguage}
+                        theme={resolvedTheme}
+                        onChange={(value) => void actions.updateQuery(activeTab.id, value)}
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <WelcomeSurface
+                    onCreateConnection={() => void actions.createConnection()}
+                    onImportWorkspace={openDiagnosticsDrawer}
+                    onOpenDiagnostics={openDiagnosticsDrawer}
+                  />
+                )}
+              </>
+            )}
           </main>
 
-          {snapshot.ui.bottomPanelVisible ? (
+          {!showingEnvironmentWorkspace && !showingExplorerWorkspace && snapshot.ui.bottomPanelVisible && activeTab && activeConnection && activeEnvironment ? (
             <BottomPanel
               activeTab={activeTab}
               activeConnection={activeConnection}
@@ -556,11 +804,12 @@ function DesktopWorkspace() {
               onSelectRenderer={(renderer) =>
                 setRendererPreference({ renderer, tabId: activeTab.id })
               }
-              onResize={(delta) =>
-                void actions.updateUiState({
-                  bottomPanelHeight: snapshot.ui.bottomPanelHeight + delta,
-                })
-              }
+              onLoadNextPage={() => void actions.fetchResultPage(activeTab.id, activeRenderer)}
+                onResize={(nextHeight) =>
+                  void actions.updateUiState({
+                    bottomPanelHeight: nextHeight,
+                  })
+                }
               onClose={() =>
                 void actions.updateUiState({
                   bottomPanelVisible: false,
@@ -569,19 +818,28 @@ function DesktopWorkspace() {
               onConfirmExecution={(guardrailId, mode) =>
                 void actions.executeQuery(activeTab.id, mode, guardrailId)
               }
+              onRestoreHistory={(queryText) =>
+                void actions.updateQuery(activeTab.id, queryText)
+              }
             />
           ) : null}
         </div>
 
         {snapshot.ui.rightDrawer !== 'none' ? (
           <RightDrawer
-            key={`${snapshot.ui.rightDrawer}-${activeConnection.id}-${activeEnvironment.id}`}
+            key={[
+              snapshot.ui.rightDrawer,
+              activeConnection?.id ?? 'none',
+              activeConnection?.updatedAt ?? 'none',
+              activeEnvironment?.id ?? 'none',
+              activeEnvironment?.updatedAt ?? 'none',
+            ].join('-')}
             view={snapshot.ui.rightDrawer}
+            width={snapshot.ui.rightDrawerWidth}
             health={payload.health}
             theme={snapshot.preferences.theme}
             activeConnection={activeConnection}
-            activeEnvironment={activeEnvironment}
-            resolvedEnvironment={payload.resolvedEnvironment}
+            environments={snapshot.environments}
             connectionTest={connectionTest}
             diagnostics={diagnostics}
             explorerInspection={explorerInspection}
@@ -592,21 +850,34 @@ function DesktopWorkspace() {
             onExportPassphraseChange={setExportPassphrase}
             onImportPayloadChange={setImportPayload}
             onClose={closeDrawer}
-            onSaveConnection={(profile) => void actions.saveConnection(profile)}
-            onSaveEnvironment={(profile) => void actions.saveEnvironment(profile)}
-            onTestConnection={(profile) => void actions.testConnection(profile, activeEnvironment.id)}
+            onSaveConnection={(profile, secret) =>
+              void actions.saveConnection(profile, secret)
+            }
+            onTestConnection={(profile, environmentId) =>
+              void actions.testConnection(
+                profile,
+                environmentId || activeEnvironment?.id || '',
+              )
+            }
             onRefreshDiagnostics={() => void actions.refreshDiagnostics()}
             onExportWorkspace={() => void actions.exportWorkspace(exportPassphrase)}
             onImportWorkspace={() =>
               void actions.importWorkspace(exportPassphrase, importPayload)
             }
             onApplyTemplate={(queryTemplate) =>
-              queryTemplate
+              queryTemplate && activeTab
                 ? void actions.updateQuery(activeTab.id, queryTemplate)
                 : undefined
             }
             onToggleTheme={() =>
               void actions.setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')
+            }
+            onPickLocalDatabaseFile={actions.pickLocalDatabaseFile}
+            onCreateLocalDatabase={actions.createLocalDatabase}
+            onResize={(width) =>
+              void actions.updateUiState({
+                rightDrawerWidth: width,
+              })
             }
           />
         ) : null}
@@ -630,6 +901,101 @@ function DesktopWorkspace() {
   )
 }
 
+function CloseSavedTabDialog({
+  tab,
+  onCancel,
+  onDiscard,
+  onSaveAndClose,
+}: {
+  tab: QueryTabState
+  onCancel(): void
+  onDiscard(): void
+  onSaveAndClose(): void
+}) {
+  return (
+    <div className="workbench-modal-overlay" role="presentation">
+      <section
+        className="workbench-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="close-tab-dialog-title"
+      >
+        <p className="sidebar-eyebrow">Unsaved Saved Query</p>
+        <h2 id="close-tab-dialog-title">Save changes before closing?</h2>
+        <p>
+          {tab.title} has edits that are not saved to its saved query. Ephemeral
+          tabs close immediately, but saved work needs an explicit choice.
+        </p>
+        <div className="workbench-dialog-actions">
+          <button type="button" className="drawer-button" onClick={onCancel}>
+            Cancel
+          </button>
+          <button type="button" className="drawer-button" onClick={onDiscard}>
+            Discard Changes
+          </button>
+          <button
+            type="button"
+            className="drawer-button drawer-button--primary"
+            onClick={onSaveAndClose}
+          >
+            Save and Close
+          </button>
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function resolveEnvironmentPreview(
+  environments: EnvironmentProfile[],
+  draft: EnvironmentProfile,
+) {
+  const environmentMap = new Map(
+    environments.map((environment) => [environment.id, environment]),
+  )
+  environmentMap.set(draft.id, draft)
+
+  const resolvedChain: EnvironmentProfile[] = []
+  const visited = new Set<string>()
+  let current: EnvironmentProfile | undefined = draft
+
+  while (current && !visited.has(current.id)) {
+    visited.add(current.id)
+    resolvedChain.unshift(current)
+    current = current.inheritsFrom
+      ? environmentMap.get(current.inheritsFrom)
+      : undefined
+  }
+
+  const variables: Record<string, string> = {}
+  const inheritedChain: string[] = []
+  const sensitiveKeys = new Set<string>()
+
+  for (const environment of resolvedChain) {
+    inheritedChain.push(environment.label)
+    Object.assign(variables, environment.variables)
+
+    for (const key of environment.sensitiveKeys) {
+      sensitiveKeys.add(key)
+    }
+  }
+
+  const unresolvedKeys = Object.entries(variables)
+    .filter(([, value]) => value.includes('${'))
+    .map(([key]) => key)
+
+  return {
+    variables,
+    sensitiveKeys: [...sensitiveKeys],
+    unresolvedKeys,
+    inheritedChain,
+  }
+}
+
+function normalizeColor(value: string | undefined) {
+  return /^#[0-9a-f]{6}$/i.test(value ?? '') ? value! : '#2dbf9b'
+}
+
 function BootSurface({ title, copy }: { title: string; copy: string }) {
   return (
     <div className="boot-surface">
@@ -642,12 +1008,435 @@ function BootSurface({ title, copy }: { title: string; copy: string }) {
   )
 }
 
+function EnvironmentWorkspace({
+  activeEnvironment,
+  environments,
+  onCreateEnvironment,
+  onSaveEnvironment,
+}: {
+  activeEnvironment?: EnvironmentProfile
+  environments: EnvironmentProfile[]
+  onCreateEnvironment(): void
+  onSaveEnvironment(environment: EnvironmentProfile): void
+}) {
+  const [environmentDraft, setEnvironmentDraft] = useState(activeEnvironment)
+  const [newVariableKey, setNewVariableKey] = useState('')
+  const [newVariableValue, setNewVariableValue] = useState('')
+  const [newVariableSecret, setNewVariableSecret] = useState(false)
+
+  if (!environmentDraft) {
+    return (
+      <section className="environment-workspace" aria-label="Environment workspace">
+        <div className="environment-empty">
+          <p className="sidebar-eyebrow">Environments</p>
+          <h1>Create an environment.</h1>
+          <p>
+            Environments hold variables, risk settings, and safety behavior. Add one,
+            then assign it from a connection profile.
+          </p>
+          <button
+            type="button"
+            className="drawer-button drawer-button--primary"
+            onClick={onCreateEnvironment}
+          >
+            New Environment
+          </button>
+        </div>
+      </section>
+    )
+  }
+
+  const environmentOptions = environments.filter((item) => item.id !== environmentDraft.id)
+  const variableEntries = Object.entries(environmentDraft.variables).sort(([left], [right]) =>
+    left.localeCompare(right),
+  )
+  const resolvedPreview = resolveEnvironmentPreview(environments, environmentDraft)
+  const resolvedEntries = Object.entries(resolvedPreview.variables).sort(([left], [right]) =>
+    left.localeCompare(right),
+  )
+  const sensitiveKeys = new Set(environmentDraft.sensitiveKeys)
+  const resolvedSensitiveKeys = new Set(resolvedPreview.sensitiveKeys)
+  const unresolvedKeys = new Set(resolvedPreview.unresolvedKeys)
+
+  const updateDraft = (patch: Partial<EnvironmentProfile>) => {
+    setEnvironmentDraft((current) =>
+      current
+        ? {
+            ...current,
+            ...patch,
+            updatedAt: new Date().toISOString(),
+          }
+        : current,
+    )
+  }
+
+  const updateVariableKey = (currentKey: string, nextKey: string) => {
+    setEnvironmentDraft((current) => {
+      if (!current) {
+        return current
+      }
+
+      const variables = { ...current.variables }
+      const value = variables[currentKey] ?? ''
+      delete variables[currentKey]
+
+      if (nextKey) {
+        variables[nextKey] = value
+      }
+
+      return {
+        ...current,
+        variables,
+        sensitiveKeys: current.sensitiveKeys
+          .map((key) => (key === currentKey ? nextKey : key))
+          .filter((key, index, keys): key is string => Boolean(key) && keys.indexOf(key) === index),
+        updatedAt: new Date().toISOString(),
+      }
+    })
+  }
+
+  const updateVariableValue = (key: string, value: string) => {
+    setEnvironmentDraft((current) =>
+      current
+        ? {
+            ...current,
+            variables: {
+              ...current.variables,
+              [key]: value,
+            },
+            updatedAt: new Date().toISOString(),
+          }
+        : current,
+    )
+  }
+
+  const toggleSensitiveKey = (key: string) => {
+    setEnvironmentDraft((current) =>
+      current
+        ? {
+            ...current,
+            sensitiveKeys: current.sensitiveKeys.includes(key)
+              ? current.sensitiveKeys.filter((item) => item !== key)
+              : [...current.sensitiveKeys, key],
+            updatedAt: new Date().toISOString(),
+          }
+        : current,
+    )
+  }
+
+  const deleteVariable = (key: string) => {
+    setEnvironmentDraft((current) => {
+      if (!current) {
+        return current
+      }
+
+      const variables = { ...current.variables }
+      delete variables[key]
+
+      return {
+        ...current,
+        variables,
+        sensitiveKeys: current.sensitiveKeys.filter((item) => item !== key),
+        updatedAt: new Date().toISOString(),
+      }
+    })
+  }
+
+  const addVariable = () => {
+    const key = newVariableKey.trim()
+
+    if (!key) {
+      return
+    }
+
+    const shouldMarkSensitive =
+      newVariableSecret || /password|secret|token|key|pwd/i.test(key)
+
+    setEnvironmentDraft((current) =>
+      current
+        ? {
+            ...current,
+            variables: {
+              ...current.variables,
+              [key]: newVariableValue,
+            },
+            sensitiveKeys:
+              shouldMarkSensitive && !current.sensitiveKeys.includes(key)
+                ? [...current.sensitiveKeys, key]
+                : current.sensitiveKeys,
+            updatedAt: new Date().toISOString(),
+          }
+        : current,
+    )
+    setNewVariableKey('')
+    setNewVariableValue('')
+    setNewVariableSecret(false)
+  }
+
+  return (
+    <section className="environment-workspace" aria-label="Environment workspace">
+      <div className="environment-header">
+        <div>
+          <p className="sidebar-eyebrow">Environment</p>
+          <h1>{environmentDraft.label}</h1>
+        </div>
+        <div className="environment-actions">
+          <button type="button" className="drawer-button" onClick={onCreateEnvironment}>
+            New Environment
+          </button>
+          <button
+            type="button"
+            className="drawer-button drawer-button--primary"
+            onClick={() => onSaveEnvironment(environmentDraft)}
+          >
+            Save Environment
+          </button>
+        </div>
+      </div>
+
+      <div className="environment-body">
+        <section className="environment-card">
+          <div className="environment-section-header">
+            <strong>Profile</strong>
+            <span>{environmentDraft.risk}</span>
+          </div>
+          <div className="environment-form-grid">
+            <label className="environment-field">
+              <span>Label</span>
+              <input
+                value={environmentDraft.label}
+                onChange={(event) => updateDraft({ label: event.target.value })}
+              />
+            </label>
+            <label className="environment-field">
+              <span>Color</span>
+              <span className="environment-color-picker">
+                <input
+                  type="color"
+                  aria-label="Environment color"
+                  value={normalizeColor(environmentDraft.color)}
+                  onChange={(event) => updateDraft({ color: event.target.value })}
+                />
+                <span
+                  className="environment-color-swatch"
+                  style={{ backgroundColor: normalizeColor(environmentDraft.color) }}
+                />
+              </span>
+            </label>
+            <label className="environment-field">
+              <span>Risk</span>
+              <select
+                value={environmentDraft.risk}
+                onChange={(event) =>
+                  updateDraft({ risk: event.target.value as EnvironmentProfile['risk'] })
+                }
+              >
+                <option value="low">low</option>
+                <option value="medium">medium</option>
+                <option value="high">high</option>
+                <option value="critical">critical</option>
+              </select>
+            </label>
+            <label className="environment-field">
+              <span>Inherits from</span>
+              <select
+                value={environmentDraft.inheritsFrom ?? ''}
+                onChange={(event) =>
+                  updateDraft({ inheritsFrom: event.target.value || undefined })
+                }
+              >
+                <option value="">None</option>
+                {environmentOptions.map((environment) => (
+                  <option key={environment.id} value={environment.id}>
+                    {environment.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <div className="drawer-toggle-row">
+            <button
+              type="button"
+              className={`drawer-toggle${environmentDraft.requiresConfirmation ? ' is-active' : ''}`}
+              onClick={() =>
+                updateDraft({
+                  requiresConfirmation: !environmentDraft.requiresConfirmation,
+                })
+              }
+            >
+              Confirm risky actions
+            </button>
+            <button
+              type="button"
+              className={`drawer-toggle${environmentDraft.safeMode ? ' is-active' : ''}`}
+              onClick={() => updateDraft({ safeMode: !environmentDraft.safeMode })}
+            >
+              Safe mode
+            </button>
+          </div>
+        </section>
+
+        <section className="environment-card">
+          <div className="environment-section-header">
+            <strong>Variables</strong>
+            <span>{variableEntries.length}</span>
+          </div>
+
+          <div className="environment-variable-grid">
+            {variableEntries.map(([key, value]) => {
+              const secret = sensitiveKeys.has(key)
+              return (
+                <div key={key} className="environment-variable-row">
+                  <input
+                    aria-label={`Environment variable key ${key}`}
+                    value={key}
+                    onChange={(event) => updateVariableKey(key, event.target.value)}
+                  />
+                  <input
+                    aria-label={`Environment variable value ${key}`}
+                    value={value}
+                    onChange={(event) => updateVariableValue(key, event.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className={`drawer-toggle${secret ? ' is-active' : ''}`}
+                    aria-label={
+                      secret
+                        ? `Unmark ${key} as secret`
+                        : `Mark ${key} as secret`
+                    }
+                    onClick={() => toggleSensitiveKey(key)}
+                  >
+                    Secret
+                  </button>
+                  <button
+                    type="button"
+                    className="drawer-mini-button"
+                    aria-label={`Delete variable ${key}`}
+                    onClick={() => deleteVariable(key)}
+                  >
+                    x
+                  </button>
+                </div>
+              )
+            })}
+
+            <div className="environment-variable-row environment-variable-row--new">
+              <input
+                aria-label="New variable key"
+                placeholder="DB_HOST"
+                value={newVariableKey}
+                onChange={(event) => setNewVariableKey(event.target.value)}
+              />
+              <input
+                aria-label="New variable value"
+                placeholder="localhost"
+                value={newVariableValue}
+                onChange={(event) => setNewVariableValue(event.target.value)}
+              />
+              <button
+                type="button"
+                className={`drawer-toggle${newVariableSecret ? ' is-active' : ''}`}
+                aria-label="Mark new variable as secret"
+                onClick={() => setNewVariableSecret((current) => !current)}
+              >
+                Secret
+              </button>
+              <button type="button" className="drawer-button" onClick={addVariable}>
+                Add
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section className="environment-card">
+          <div className="environment-section-header">
+            <strong>Resolved Preview</strong>
+            <span>{resolvedPreview.inheritedChain.join(' / ') || environmentDraft.label}</span>
+          </div>
+
+          {resolvedPreview.unresolvedKeys.length > 0 ? (
+            <div className="drawer-callout is-error">
+              <strong>Unresolved variables</strong>
+              <span>{resolvedPreview.unresolvedKeys.join(', ')}</span>
+            </div>
+          ) : null}
+
+          <div className="drawer-variables">
+            {resolvedEntries.map(([key, value]) => {
+              const hidden = resolvedSensitiveKeys.has(key)
+              return (
+                <div
+                  key={key}
+                  className={`drawer-variable-row${unresolvedKeys.has(key) ? ' is-unresolved' : ''}`}
+                >
+                  <span>{key}</span>
+                  <code>{hidden ? '********' : value}</code>
+                </div>
+              )
+            })}
+          </div>
+        </section>
+      </div>
+    </section>
+  )
+}
+
+function WelcomeSurface({
+  onCreateConnection,
+  onImportWorkspace,
+  onOpenDiagnostics,
+}: {
+  onCreateConnection(): void
+  onImportWorkspace(): void
+  onOpenDiagnostics(): void
+}) {
+  return (
+    <section className="welcome-surface" aria-label="First run onboarding">
+      <div className="welcome-panel">
+        <p className="sidebar-eyebrow">Universality Desktop</p>
+        <h1>Connect to your first datastore.</h1>
+        <p>
+          Start with a real connection. Universality will keep credentials in the
+          desktop secret store and keep this workspace local to your machine.
+        </p>
+        <div className="welcome-actions">
+          <button
+            type="button"
+            className="drawer-button drawer-button--primary"
+            onClick={onCreateConnection}
+          >
+            New Connection
+          </button>
+          <button type="button" className="drawer-button" onClick={onImportWorkspace}>
+            Import Workspace
+          </button>
+          <button type="button" className="drawer-button" onClick={onOpenDiagnostics}>
+            Open Diagnostics
+          </button>
+        </div>
+      </div>
+    </section>
+  )
+}
+
 function resolveThemeMode(theme: WorkspaceSnapshot['preferences']['theme']) {
   if (theme === 'system') {
     return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
   }
 
   return theme
+}
+
+function defaultCapabilities(): ExecutionCapabilities {
+  return {
+    canCancel: false,
+    canExplain: false,
+    supportsLiveMetadata: false,
+    editorLanguage: 'sql',
+    defaultRowLimit: 200,
+  }
 }
 
 function deriveCapabilities(
@@ -665,14 +1454,12 @@ function deriveCapabilities(
     supportsLiveMetadata:
       capabilities.has('supports_schema_browser') ||
       capabilities.has('supports_key_browser') ||
-      capabilities.has('supports_document_view'),
-    editorLanguage:
-      connection.family === 'document'
-        ? 'json'
-        : connection.family === 'keyvalue'
-          ? 'plaintext'
-          : 'sql',
-    defaultRowLimit: connection.family === 'document' ? 100 : 200,
+      capabilities.has('supports_document_view') ||
+      capabilities.has('supports_graph_view') ||
+      capabilities.has('supports_index_management') ||
+      capabilities.has('supports_metrics_collection'),
+    editorLanguage: editorLanguageForConnection(connection),
+    defaultRowLimit: defaultRowLimitForConnection(connection),
   }
 }
 
@@ -729,6 +1516,7 @@ function DesktopCodeEditor({
   if (!LoadedEditor) {
     return (
       <textarea
+        aria-label="Query editor"
         className="editor-textarea"
         value={value}
         onChange={(event) => onChange(event.target.value)}

@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import type { ComponentType, ReactNode, SVGProps } from 'react'
+import { useRef, useState } from 'react'
+import type { ComponentType, CSSProperties, ReactNode, SVGProps } from 'react'
 import type {
   AppHealth,
   ConnectionProfile,
@@ -9,9 +9,16 @@ import type {
   ExecutionCapabilities,
   ExplorerInspectResponse,
   ExportBundle,
-  ResolvedEnvironment,
+  LocalDatabaseCreateRequest,
+  LocalDatabaseCreateResult,
+  LocalDatabasePickRequest,
+  LocalDatabasePickResult,
   RightDrawerView,
   WorkspaceSnapshot,
+} from '@universality/shared-types'
+import {
+  DATASTORE_FAMILIES,
+  DATASTORE_FEATURE_BACKLOG,
 } from '@universality/shared-types'
 import {
   CloseIcon,
@@ -26,11 +33,11 @@ import {
 
 interface RightDrawerProps {
   view: RightDrawerView
+  width: number
   health: AppHealth
   theme: WorkspaceSnapshot['preferences']['theme']
-  activeConnection: ConnectionProfile
-  activeEnvironment: EnvironmentProfile
-  resolvedEnvironment: ResolvedEnvironment
+  activeConnection?: ConnectionProfile
+  environments: EnvironmentProfile[]
   connectionTest?: ConnectionTestResult
   diagnostics?: DiagnosticsReport
   explorerInspection?: ExplorerInspectResponse
@@ -41,25 +48,46 @@ interface RightDrawerProps {
   onExportPassphraseChange(value: string): void
   onImportPayloadChange(value: string): void
   onClose(): void
-  onSaveConnection(profile: ConnectionProfile): void
-  onSaveEnvironment(profile: EnvironmentProfile): void
-  onTestConnection(profile: ConnectionProfile): void
+  onSaveConnection(profile: ConnectionProfile, secret?: string): void
+  onTestConnection(profile: ConnectionProfile, environmentId: string): void
   onRefreshDiagnostics(): void
   onExportWorkspace(): void
   onImportWorkspace(): void
   onApplyTemplate(queryTemplate?: string): void
   onToggleTheme(): void
+  onPickLocalDatabaseFile(request: LocalDatabasePickRequest): Promise<LocalDatabasePickResult>
+  onCreateLocalDatabase(
+    request: LocalDatabaseCreateRequest,
+  ): Promise<LocalDatabaseCreateResult | undefined>
+  onResize(width: number): void
 }
 
-const ENGINE_OPTIONS = [
-  { value: 'postgresql', family: 'sql' },
-  { value: 'sqlserver', family: 'sql' },
-  { value: 'mysql', family: 'sql' },
-  { value: 'mariadb', family: 'sql' },
-  { value: 'sqlite', family: 'sql' },
-  { value: 'mongodb', family: 'document' },
-  { value: 'redis', family: 'keyvalue' },
-] as const
+const ENGINE_OPTIONS = DATASTORE_FEATURE_BACKLOG.map((entry) => ({
+  value: entry.engine,
+  label: entry.displayName,
+  family: entry.family,
+  maturity: entry.maturity,
+  defaultPort: entry.defaultPort,
+  connectionMode: entry.connectionModes[0],
+  localDatabase: entry.localDatabase,
+}))
+
+const ENGINE_FAMILY_LABELS: Record<ConnectionProfile['family'], string> = {
+  sql: 'SQL',
+  document: 'Document',
+  keyvalue: 'Key-Value',
+  graph: 'Graph',
+  timeseries: 'Time-Series',
+  widecolumn: 'Wide-Column',
+  search: 'Search',
+  warehouse: 'Warehouse',
+  'embedded-olap': 'Embedded OLAP',
+}
+
+const ENGINE_GROUPS = DATASTORE_FAMILIES.map((family) => ({
+  label: ENGINE_FAMILY_LABELS[family],
+  options: ENGINE_OPTIONS.filter((option) => option.family === family),
+})).filter((group) => group.options.length > 0)
 
 const SHORTCUTS = [
   ['Run query', 'Ctrl Enter'],
@@ -71,11 +99,11 @@ const SHORTCUTS = [
 
 export function RightDrawer({
   view,
+  width,
   health,
   theme,
   activeConnection,
-  activeEnvironment,
-  resolvedEnvironment,
+  environments,
   connectionTest,
   diagnostics,
   explorerInspection,
@@ -87,28 +115,79 @@ export function RightDrawer({
   onImportPayloadChange,
   onClose,
   onSaveConnection,
-  onSaveEnvironment,
   onTestConnection,
   onRefreshDiagnostics,
   onExportWorkspace,
   onImportWorkspace,
   onApplyTemplate,
   onToggleTheme,
+  onPickLocalDatabaseFile,
+  onCreateLocalDatabase,
+  onResize,
 }: RightDrawerProps) {
+  const [isResizing, setIsResizing] = useState(false)
+  const lastPointerX = useRef(0)
+
   return (
     <aside className="workbench-drawer" aria-label={`${view} drawer`}>
+      <div
+        role="separator"
+        tabIndex={0}
+        aria-label="Resize right drawer"
+        aria-orientation="vertical"
+        aria-valuemin={320}
+        aria-valuemax={560}
+        aria-valuenow={width}
+        className={`pane-resize-handle pane-resize-handle--drawer${isResizing ? ' is-active' : ''}`}
+        onPointerDown={(event) => {
+          event.currentTarget.setPointerCapture(event.pointerId)
+          lastPointerX.current = event.clientX
+          setIsResizing(true)
+        }}
+        onPointerMove={(event) => {
+          if (!isResizing) {
+            return
+          }
+
+          const delta = lastPointerX.current - event.clientX
+          lastPointerX.current = event.clientX
+          onResize(width + delta)
+        }}
+        onPointerUp={() => setIsResizing(false)}
+        onPointerCancel={() => setIsResizing(false)}
+        onKeyDown={(event) => {
+          if (event.key === 'ArrowLeft') {
+            event.preventDefault()
+            onResize(width + 16)
+          }
+
+          if (event.key === 'ArrowRight') {
+            event.preventDefault()
+            onResize(width - 16)
+          }
+        }}
+      />
+
       {view === 'connection' ? (
-        <ConnectionBlade
-          activeConnection={activeConnection}
-          activeEnvironment={activeEnvironment}
-          capabilities={capabilities}
-          connectionTest={connectionTest}
-          resolvedEnvironment={resolvedEnvironment}
-          onClose={onClose}
-          onSaveConnection={onSaveConnection}
-          onSaveEnvironment={onSaveEnvironment}
-          onTestConnection={onTestConnection}
-        />
+        activeConnection ? (
+          <ConnectionBlade
+            activeConnection={activeConnection}
+            environments={environments}
+            connectionTest={connectionTest}
+            onClose={onClose}
+            onSaveConnection={onSaveConnection}
+            onTestConnection={onTestConnection}
+            onPickLocalDatabaseFile={onPickLocalDatabaseFile}
+            onCreateLocalDatabase={onCreateLocalDatabase}
+          />
+        ) : (
+          <DrawerPlaceholder
+            copy="Create a connection first to edit profile details."
+            icon={ConnectionsIcon}
+            title="No Connection"
+            onClose={onClose}
+          />
+        )
       ) : null}
 
       {view === 'inspection' ? (
@@ -141,31 +220,190 @@ export function RightDrawer({
   )
 }
 
+function DrawerPlaceholder({
+  copy,
+  icon,
+  title,
+  onClose,
+}: {
+  copy: string
+  icon: ComponentType<SVGProps<SVGSVGElement>>
+  title: string
+  onClose(): void
+}) {
+  return (
+    <>
+      <DrawerHeader title={title} subtitle="Workspace" icon={icon} onClose={onClose} />
+      <div className="drawer-scroll">
+        <div className="drawer-section">
+          <p className="drawer-copy">{copy}</p>
+        </div>
+      </div>
+    </>
+  )
+}
+
 function ConnectionBlade({
   activeConnection,
-  activeEnvironment,
-  capabilities,
+  environments,
   connectionTest,
-  resolvedEnvironment,
   onClose,
   onSaveConnection,
-  onSaveEnvironment,
   onTestConnection,
+  onPickLocalDatabaseFile,
+  onCreateLocalDatabase,
 }: {
   activeConnection: ConnectionProfile
-  activeEnvironment: EnvironmentProfile
-  capabilities: ExecutionCapabilities
+  environments: EnvironmentProfile[]
   connectionTest?: ConnectionTestResult
-  resolvedEnvironment: ResolvedEnvironment
   onClose(): void
-  onSaveConnection(profile: ConnectionProfile): void
-  onSaveEnvironment(profile: EnvironmentProfile): void
-  onTestConnection(profile: ConnectionProfile): void
+  onSaveConnection(profile: ConnectionProfile, secret?: string): void
+  onTestConnection(profile: ConnectionProfile, environmentId: string): void
+  onPickLocalDatabaseFile(request: LocalDatabasePickRequest): Promise<LocalDatabasePickResult>
+  onCreateLocalDatabase(
+    request: LocalDatabaseCreateRequest,
+  ): Promise<LocalDatabaseCreateResult | undefined>
 }) {
-  const [connectionDraft, setConnectionDraft] = useState(activeConnection)
-  const [environmentDraft, setEnvironmentDraft] = useState(activeEnvironment)
+  const [nameOverridden, setNameOverridden] = useState(() =>
+    isCustomConnectionName(activeConnection),
+  )
+  const [connectionDraft, setConnectionDraft] = useState(() =>
+    isCustomConnectionName(activeConnection)
+      ? activeConnection
+      : {
+          ...activeConnection,
+          name: inferConnectionName(activeConnection),
+        },
+  )
+  const [secretDraft, setSecretDraft] = useState('')
+  const [pendingCreatePath, setPendingCreatePath] = useState('')
+  const [localDatabaseStatus, setLocalDatabaseStatus] = useState('')
 
+  const selectedEngineOption = engineOption(connectionDraft.engine)
+  const isLocalDatabaseEngine = Boolean(
+    selectedEngineOption?.localDatabase && selectedEngineOption.maturity === 'mvp',
+  )
   const databaseLabel = connectionDraft.engine === 'sqlite' ? 'Database file' : 'Database'
+  const selectedEnvironmentId = connectionDraft.environmentIds[0] ?? ''
+  const selectedEnvironment = environments.find(
+    (environment) => environment.id === selectedEnvironmentId,
+  )
+  const environmentAccentStyle = environmentAccentVariables(selectedEnvironment)
+  const displayedResolvedHost = connectionTest
+    ? redactEnvironmentSecrets(connectionTest.resolvedHost, selectedEnvironmentId, environments)
+    : ''
+  const displayedResolvedDatabase = connectionTest?.resolvedDatabase
+    ? redactEnvironmentSecrets(
+        connectionTest.resolvedDatabase,
+        selectedEnvironmentId,
+        environments,
+      )
+    : undefined
+
+  const updateConnectionDraft = (
+    patch: Partial<ConnectionProfile>,
+    options: { preserveName?: boolean } = {},
+  ) => {
+    setConnectionDraft((current) => {
+      const next = {
+        ...current,
+        ...patch,
+        updatedAt: new Date().toISOString(),
+      }
+
+      return options.preserveName || nameOverridden
+        ? next
+        : {
+            ...next,
+            name: inferConnectionName(next),
+          }
+    })
+  }
+
+  const setLocalDatabasePath = (path: string) => {
+    updateConnectionDraft({
+      host: path,
+      database: path,
+      port: undefined,
+    })
+  }
+
+  const connectionForAction = () => ({
+    ...connectionDraft,
+    name: connectionDraft.name.trim() || inferConnectionName(connectionDraft),
+  })
+
+  const openExistingLocalDatabase = async () => {
+    const result = await onPickLocalDatabaseFile({
+      engine: connectionDraft.engine,
+      purpose: 'open',
+      currentPath: connectionDraft.database,
+    })
+
+    if (result.canceled || !result.path) {
+      return
+    }
+
+    setLocalDatabasePath(result.path)
+    setLocalDatabaseStatus('SQLite database path selected.')
+  }
+
+  const chooseNewLocalDatabasePath = async () => {
+    const result = await onPickLocalDatabaseFile({
+      engine: connectionDraft.engine,
+      purpose: 'create',
+      currentPath: connectionDraft.database,
+    })
+
+    if (result.canceled || !result.path) {
+      return
+    }
+
+    setPendingCreatePath(result.path)
+    setLocalDatabaseStatus('')
+  }
+
+  const createLocalDatabase = async (mode: LocalDatabaseCreateRequest['mode']) => {
+    if (!pendingCreatePath) {
+      return
+    }
+
+    const result = await onCreateLocalDatabase({
+      engine: connectionDraft.engine,
+      path: pendingCreatePath,
+      mode,
+      connectionId: connectionDraft.id,
+      environmentId: selectedEnvironmentId || undefined,
+    })
+
+    if (!result) {
+      return
+    }
+
+    const nextConnection = {
+      ...connectionDraft,
+      host: result.path,
+      database: result.path,
+    }
+    const updatedConnection = {
+      ...connectionDraft,
+      host: result.path,
+      database: result.path,
+      name: nameOverridden ? connectionDraft.name : inferConnectionName(nextConnection),
+      port: undefined,
+      updatedAt: new Date().toISOString(),
+    }
+
+    setConnectionDraft(updatedConnection)
+    setPendingCreatePath('')
+    setLocalDatabaseStatus(
+      result.warnings.length > 0
+        ? `${result.message} ${result.warnings.join(' ')}`
+        : result.message,
+    )
+    onSaveConnection(updatedConnection, secretDraft)
+    onTestConnection(updatedConnection, selectedEnvironmentId)
+  }
 
   return (
     <>
@@ -177,70 +415,140 @@ function ConnectionBlade({
       />
 
       <div className="drawer-scroll">
-        <div className="drawer-section">
+        <div
+          className={`drawer-section connection-profile-section${selectedEnvironment ? ' has-environment-accent' : ''}`}
+          style={environmentAccentStyle}
+        >
           <div className="drawer-section-header">
             <strong>Connection</strong>
             <span>{connectionDraft.engine}</span>
           </div>
 
           <div className="drawer-form">
-            <FormField label="Connection type">
+            <FormField label="Database type">
               <select
                 value={connectionDraft.engine}
                 onChange={(event) => {
                   const engine = event.target.value as ConnectionProfile['engine']
-                  setConnectionDraft((current) => ({
-                    ...current,
+                  const nextEngineOption = engineOption(engine)
+                  updateConnectionDraft({
                     engine,
                     family: engineFamily(engine),
-                    updatedAt: new Date().toISOString(),
-                  }))
+                    connectionMode:
+                      connectionDraft.engine === engine
+                        ? connectionDraft.connectionMode
+                        : nextEngineOption?.connectionMode,
+                    host:
+                      engine === 'sqlite'
+                        ? connectionDraft.database ?? connectionDraft.host
+                        : connectionDraft.host || 'localhost',
+                    port:
+                      engine === 'sqlite'
+                        ? undefined
+                        : connectionDraft.engine === engine
+                          ? connectionDraft.port
+                          : defaultPortForEngine(engine),
+                    auth:
+                      engine === 'sqlite'
+                        ? {
+                            ...connectionDraft.auth,
+                            username: undefined,
+                            sslMode: undefined,
+                          }
+                        : connectionDraft.auth,
+                  })
                 }}
               >
-                {ENGINE_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.value}
-                  </option>
+                {ENGINE_GROUPS.map((group) => (
+                  <optgroup key={group.label} label={group.label}>
+                    {group.options.map((option) => (
+                      <option
+                        key={option.value}
+                        value={option.value}
+                        disabled={option.maturity === 'planned'}
+                      >
+                        {option.maturity === 'planned'
+                          ? `${option.label} (planned)`
+                          : option.label}
+                      </option>
+                    ))}
+                  </optgroup>
                 ))}
               </select>
             </FormField>
 
-            <FormField label="Name">
-              <input
-                value={connectionDraft.name}
-                onChange={(event) =>
-                  setConnectionDraft((current) => ({
-                    ...current,
-                    name: event.target.value,
-                    updatedAt: new Date().toISOString(),
-                  }))
-                }
-              />
-            </FormField>
+            {isLocalDatabaseEngine ? (
+              <div className="connection-quick-actions" aria-label="Connection quick actions">
+                <div className="drawer-button-row drawer-button-row--compact">
+                  <button
+                    type="button"
+                    className="drawer-button"
+                    title="Choose an existing local database file and place its path in this connection."
+                    onClick={() => void openExistingLocalDatabase()}
+                  >
+                    Open Existing
+                  </button>
+                  <button
+                    type="button"
+                    className="drawer-button drawer-button--primary"
+                    title="Choose a path for a new SQLite database, then select empty or starter schema."
+                    onClick={() => void chooseNewLocalDatabasePath()}
+                  >
+                    Create New
+                  </button>
+                </div>
+              </div>
+            ) : null}
 
-            <FormField label="Server">
-              <input
-                value={connectionDraft.host}
-                onChange={(event) =>
-                  setConnectionDraft((current) => ({
-                    ...current,
-                    host: event.target.value,
-                    updatedAt: new Date().toISOString(),
-                  }))
-                }
-              />
-            </FormField>
+            {pendingCreatePath ? (
+              <div className="drawer-callout" role="dialog" aria-label="Create SQLite database">
+                <strong>Create SQLite database</strong>
+                <span>{pendingCreatePath}</span>
+                <div className="drawer-button-row drawer-button-row--compact">
+                  <button
+                    type="button"
+                    className="drawer-button"
+                    title="Create a blank SQLite database file at the selected path."
+                    onClick={() => void createLocalDatabase('empty')}
+                  >
+                    Empty database
+                  </button>
+                  <button
+                    type="button"
+                    className="drawer-button drawer-button--primary"
+                    title="Create a SQLite database with a small starter items table for local prototyping."
+                    onClick={() => void createLocalDatabase('starter')}
+                  >
+                    Starter schema
+                  </button>
+                </div>
+              </div>
+            ) : null}
 
-            {connectionDraft.engine !== 'sqlite' ? (
+            {localDatabaseStatus ? (
+              <div className="drawer-callout is-success">
+                <strong>Local database</strong>
+                <span>{localDatabaseStatus}</span>
+              </div>
+            ) : null}
+
+            {!isLocalDatabaseEngine ? (
+              <FormField label="Server">
+                <input
+                  value={connectionDraft.host}
+                  onChange={(event) => updateConnectionDraft({ host: event.target.value })}
+                />
+              </FormField>
+            ) : null}
+
+            {!isLocalDatabaseEngine ? (
               <FormField label="Port">
                 <input
                   value={connectionDraft.port ?? ''}
                   onChange={(event) =>
-                    setConnectionDraft((current) => ({
-                      ...current,
+                    updateConnectionDraft({
                       port: Number(event.target.value) || undefined,
-                      updatedAt: new Date().toISOString(),
-                    }))
+                    })
                   }
                 />
               </FormField>
@@ -248,204 +556,160 @@ function ConnectionBlade({
 
             <FormField label={databaseLabel}>
               <input
+                aria-label={databaseLabel}
                 value={connectionDraft.database ?? ''}
                 onChange={(event) =>
-                  setConnectionDraft((current) => ({
-                    ...current,
+                  updateConnectionDraft({
                     database: event.target.value,
-                    updatedAt: new Date().toISOString(),
-                  }))
+                    host: isLocalDatabaseEngine ? event.target.value : connectionDraft.host,
+                  })
                 }
               />
             </FormField>
 
-            <FormField label="User name">
+            {!isLocalDatabaseEngine ? (
+              <>
+                <FormField label="User name">
+                  <input
+                    value={connectionDraft.auth.username ?? ''}
+                    onChange={(event) =>
+                      updateConnectionDraft({
+                        auth: {
+                          ...connectionDraft.auth,
+                          username: event.target.value,
+                        },
+                      })
+                    }
+                  />
+                </FormField>
+
+                <FormField label="Password / Secret">
+                  <input
+                    type="password"
+                    autoComplete="new-password"
+                    value={secretDraft}
+                    placeholder={
+                      connectionDraft.auth.secretRef
+                        ? 'Stored in OS keyring'
+                        : 'Optional password'
+                    }
+                    onChange={(event) => setSecretDraft(event.target.value)}
+                  />
+                </FormField>
+
+                <FormField label="SSL mode">
+                  <input
+                    value={connectionDraft.auth.sslMode ?? ''}
+                    onChange={(event) =>
+                      updateConnectionDraft({
+                        auth: {
+                          ...connectionDraft.auth,
+                          sslMode:
+                            (event.target.value || undefined) as ConnectionProfile['auth']['sslMode'],
+                        },
+                      })
+                    }
+                  />
+                </FormField>
+              </>
+            ) : null}
+
+            <FormField label="Name">
               <input
-                value={connectionDraft.auth.username ?? ''}
-                onChange={(event) =>
-                  setConnectionDraft((current) => ({
-                    ...current,
-                    auth: {
-                      ...current.auth,
-                      username: event.target.value,
-                    },
-                    updatedAt: new Date().toISOString(),
-                  }))
-                }
+                value={connectionDraft.name}
+                placeholder={inferConnectionName(connectionDraft)}
+                onChange={(event) => {
+                  setNameOverridden(event.target.value.trim().length > 0)
+                  updateConnectionDraft(
+                    { name: event.target.value },
+                    { preserveName: true },
+                  )
+                }}
               />
             </FormField>
 
-            <FormField label="SSL mode">
-              <input
-                value={connectionDraft.auth.sslMode ?? ''}
-                onChange={(event) =>
-                  setConnectionDraft((current) => ({
-                    ...current,
-                    auth: {
-                      ...current.auth,
-                      sslMode:
-                        (event.target.value || undefined) as ConnectionProfile['auth']['sslMode'],
-                    },
-                    updatedAt: new Date().toISOString(),
-                  }))
-                }
-              />
-            </FormField>
-          </div>
-
-          <div className="drawer-toggle-row">
-            <button
-              type="button"
-              className={`drawer-toggle${connectionDraft.favorite ? ' is-active' : ''}`}
-              onClick={() =>
-                setConnectionDraft((current) => ({
-                  ...current,
-                  favorite: !current.favorite,
-                  updatedAt: new Date().toISOString(),
-                }))
-              }
-            >
-              <FavoriteIcon className="drawer-inline-icon" />
-              Favorite
-            </button>
-            <button
-              type="button"
-              className={`drawer-toggle${connectionDraft.readOnly ? ' is-active' : ''}`}
-              onClick={() =>
-                setConnectionDraft((current) => ({
-                  ...current,
-                  readOnly: !current.readOnly,
-                  updatedAt: new Date().toISOString(),
-                }))
-              }
-            >
-              <ReadOnlyIcon className="drawer-inline-icon" />
-              Read-only
-            </button>
-            <span className="drawer-pill">{capabilities.editorLanguage}</span>
-          </div>
-
-          {connectionTest ? (
-            <div className={`drawer-callout${connectionTest.ok ? ' is-success' : ' is-error'}`}>
-              <strong>{connectionTest.ok ? 'Connection ready' : 'Connection issue'}</strong>
-              <span>{connectionTest.message}</span>
-              <span>
-                {connectionTest.resolvedHost}
-                {connectionTest.resolvedDatabase ? ` / ${connectionTest.resolvedDatabase}` : ''}
-              </span>
-            </div>
-          ) : null}
-        </div>
-
-        <div className="drawer-section">
-          <div className="drawer-section-header">
-            <strong>Environment</strong>
-            <span>{environmentDraft.label}</span>
-          </div>
-
-          <div className="drawer-form">
-            <FormField label="Label">
-              <input
-                value={environmentDraft.label}
-                onChange={(event) =>
-                  setEnvironmentDraft((current) => ({
-                    ...current,
-                    label: event.target.value,
-                    updatedAt: new Date().toISOString(),
-                  }))
-                }
-              />
-            </FormField>
-
-            <FormField label="Color">
-              <input
-                value={environmentDraft.color}
-                onChange={(event) =>
-                  setEnvironmentDraft((current) => ({
-                    ...current,
-                    color: event.target.value,
-                    updatedAt: new Date().toISOString(),
-                  }))
-                }
-              />
-            </FormField>
-
-            <FormField label="Risk">
+            <FormField label="Environment">
               <select
-                value={environmentDraft.risk}
+                value={selectedEnvironmentId}
                 onChange={(event) =>
-                  setEnvironmentDraft((current) => ({
-                    ...current,
-                    risk: event.target.value as EnvironmentProfile['risk'],
-                    updatedAt: new Date().toISOString(),
-                  }))
+                  updateConnectionDraft({
+                    environmentIds: event.target.value ? [event.target.value] : [],
+                  })
                 }
               >
-                <option value="low">low</option>
-                <option value="medium">medium</option>
-                <option value="high">high</option>
-                <option value="critical">critical</option>
+                <option value="">None</option>
+                {environments.map((environment) => (
+                  <option key={environment.id} value={environment.id}>
+                    {environment.label}
+                  </option>
+                ))}
               </select>
             </FormField>
-          </div>
 
-          <div className="drawer-toggle-row">
-            <button
-              type="button"
-              className={`drawer-toggle${environmentDraft.requiresConfirmation ? ' is-active' : ''}`}
-              onClick={() =>
-                setEnvironmentDraft((current) => ({
-                  ...current,
-                  requiresConfirmation: !current.requiresConfirmation,
-                  updatedAt: new Date().toISOString(),
-                }))
-              }
-            >
-              Confirm
-            </button>
-            <button
-              type="button"
-              className={`drawer-toggle${environmentDraft.safeMode ? ' is-active' : ''}`}
-              onClick={() =>
-                setEnvironmentDraft((current) => ({
-                  ...current,
-                  safeMode: !current.safeMode,
-                  updatedAt: new Date().toISOString(),
-                }))
-              }
-            >
-              Safe
-            </button>
-          </div>
-
-          <div className="drawer-variables">
-            {Object.entries(resolvedEnvironment.variables).map(([key, value]) => {
-              const hidden = resolvedEnvironment.sensitiveKeys.includes(key)
-              return (
-                <div key={key} className="drawer-variable-row">
-                  <span>{key}</span>
-                  <code>{hidden ? '********' : value}</code>
-                </div>
-              )
-            })}
+            <div className="connection-flags-section">
+              <div className="connection-flags-title">
+                <span>Connection options</span>
+              </div>
+              <div className="drawer-toggle-row">
+                <button
+                  type="button"
+                  className={`drawer-toggle${connectionDraft.favorite ? ' is-active' : ''}`}
+                  onClick={() =>
+                    updateConnectionDraft({ favorite: !connectionDraft.favorite })
+                  }
+                >
+                  <FavoriteIcon className="drawer-inline-icon" />
+                  Favorite
+                </button>
+                <button
+                  type="button"
+                  className={`drawer-toggle${connectionDraft.readOnly ? ' is-active' : ''}`}
+                  onClick={() =>
+                    updateConnectionDraft({ readOnly: !connectionDraft.readOnly })
+                  }
+                >
+                  <ReadOnlyIcon className="drawer-inline-icon" />
+                  Read-only
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="drawer-footer">
-        <button type="button" className="drawer-button" onClick={() => onTestConnection(connectionDraft)}>
-          Test Connection
-        </button>
-        <button type="button" className="drawer-button" onClick={() => onSaveEnvironment(environmentDraft)}>
-          Save Environment
-        </button>
-        <button
-          type="button"
-          className="drawer-button drawer-button--primary"
-          onClick={() => onSaveConnection(connectionDraft)}
-        >
-          Save Connection
-        </button>
+      <div
+        className={`drawer-footer drawer-footer--stacked${selectedEnvironment ? ' has-environment-accent' : ''}`}
+        style={environmentAccentStyle}
+      >
+        {connectionTest ? (
+          <div className={`drawer-callout${connectionTest.ok ? ' is-success' : ' is-error'}`}>
+            <strong>{connectionTest.ok ? 'Connection ready' : 'Connection issue'}</strong>
+            <span>{connectionTest.message}</span>
+            <span>
+              {displayedResolvedHost}
+              {displayedResolvedDatabase ? ` / ${displayedResolvedDatabase}` : ''}
+            </span>
+          </div>
+        ) : null}
+
+        <div className="drawer-footer-actions">
+          <button
+            type="button"
+            className="drawer-button"
+            title="Test this connection using the selected environment and stored secret reference."
+            onClick={() => onTestConnection(connectionForAction(), selectedEnvironmentId)}
+          >
+            Test Connection
+          </button>
+          <button
+            type="button"
+            className="drawer-button drawer-button--primary"
+            title="Save this connection profile locally and close the drawer."
+            onClick={() => onSaveConnection(connectionForAction(), secretDraft)}
+          >
+            Save Connection
+          </button>
+        </div>
       </div>
     </>
   )
@@ -673,7 +937,13 @@ function DrawerHeader({
           <p>{subtitle}</p>
         </div>
       </div>
-      <button type="button" className="drawer-close" aria-label="Close drawer" onClick={onClose}>
+      <button
+        type="button"
+        className="drawer-close"
+        aria-label="Close drawer"
+        title="Close this drawer and return to the workbench."
+        onClick={onClose}
+      >
         <CloseIcon className="drawer-inline-icon" />
       </button>
     </div>
@@ -705,5 +975,142 @@ function DrawerDetailRow({ label, value }: { label: string; value: string }) {
 }
 
 function engineFamily(engine: ConnectionProfile['engine']): ConnectionProfile['family'] {
-  return ENGINE_OPTIONS.find((option) => option.value === engine)?.family ?? 'sql'
+  return engineOption(engine)?.family ?? 'sql'
+}
+
+function engineLabel(engine: ConnectionProfile['engine']) {
+  return engineOption(engine)?.label ?? engine
+}
+
+function engineOption(engine: ConnectionProfile['engine']) {
+  return ENGINE_OPTIONS.find((option) => option.value === engine)
+}
+
+function isCustomConnectionName(profile: ConnectionProfile) {
+  const name = profile.name.trim()
+
+  if (!name) {
+    return false
+  }
+
+  return ![
+    `New ${engineLabel(profile.engine)} connection`,
+    `${engineLabel(profile.engine)} connection`,
+    inferConnectionName(profile),
+  ].includes(name)
+}
+
+function inferConnectionName(profile: ConnectionProfile) {
+  const database = profile.database?.trim() ?? ''
+  const host = profile.host.trim()
+
+  if (profile.engine === 'sqlite') {
+    return fileStem(database || host) || 'SQLite connection'
+  }
+
+  if (database && !database.includes('${')) {
+    return database
+  }
+
+  if (host && host !== 'localhost' && !host.includes('${')) {
+    return `${engineLabel(profile.engine)} ${host}`
+  }
+
+  return `${engineLabel(profile.engine)} connection`
+}
+
+function fileStem(path: string) {
+  const fileName = path.split(/[\\/]/).filter(Boolean).at(-1) ?? ''
+  return fileName.replace(/\.[^.]+$/, '')
+}
+
+function environmentAccentVariables(
+  environment?: EnvironmentProfile,
+): CSSProperties | undefined {
+  const color = normalizeHexColor(environment?.color)
+
+  if (!color) {
+    return undefined
+  }
+
+  return {
+    '--connection-env-color': color,
+    '--connection-env-tint': hexToRgba(color, 0.1),
+    '--connection-env-border': hexToRgba(color, 0.45),
+  } as CSSProperties
+}
+
+function normalizeHexColor(color?: string) {
+  if (!color) {
+    return undefined
+  }
+
+  const trimmed = color.trim()
+
+  if (/^#[0-9a-fA-F]{6}$/.test(trimmed)) {
+    return trimmed
+  }
+
+  if (/^#[0-9a-fA-F]{3}$/.test(trimmed)) {
+    const [, red, green, blue] = trimmed
+    return `#${red}${red}${green}${green}${blue}${blue}`
+  }
+
+  return undefined
+}
+
+function hexToRgba(hex: string, alpha: number) {
+  const value = hex.replace('#', '')
+  const red = Number.parseInt(value.slice(0, 2), 16)
+  const green = Number.parseInt(value.slice(2, 4), 16)
+  const blue = Number.parseInt(value.slice(4, 6), 16)
+
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`
+}
+
+function defaultPortForEngine(engine: ConnectionProfile['engine']) {
+  return engineOption(engine)?.defaultPort
+}
+
+function redactEnvironmentSecrets(
+  value: string,
+  environmentId: string,
+  environments: EnvironmentProfile[],
+) {
+  if (!environmentId) {
+    return value
+  }
+
+  const environmentMap = new Map(
+    environments.map((environment) => [environment.id, environment]),
+  )
+  const variables: Record<string, string> = {}
+  const sensitiveKeys = new Set<string>()
+  const resolvedChain: EnvironmentProfile[] = []
+  const visited = new Set<string>()
+  let current = environmentMap.get(environmentId)
+
+  while (current && !visited.has(current.id)) {
+    visited.add(current.id)
+    resolvedChain.unshift(current)
+    current = current.inheritsFrom ? environmentMap.get(current.inheritsFrom) : undefined
+  }
+
+  for (const environment of resolvedChain) {
+    Object.assign(variables, environment.variables)
+
+    for (const key of environment.sensitiveKeys) {
+      sensitiveKeys.add(key)
+    }
+  }
+
+  return [...sensitiveKeys].reduce((redacted, key) => {
+    const secretValue = variables[key]
+
+    if (!secretValue) {
+      return redacted
+    }
+
+    return redacted.split(secretValue).join('********')
+  }, value)
 }

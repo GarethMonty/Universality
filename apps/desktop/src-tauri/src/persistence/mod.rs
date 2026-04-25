@@ -5,9 +5,13 @@ use tauri::{AppHandle, Manager};
 use crate::domain::{error::CommandError, models::WorkspaceSnapshot};
 
 pub const SNAPSHOT_FORMAT: &str = "universality-pack-v1";
-pub const SCHEMA_VERSION: u32 = 3;
+pub const SCHEMA_VERSION: u32 = 6;
 
 pub fn workspace_file_path(app: &AppHandle) -> PathBuf {
+    if let Ok(override_dir) = std::env::var("UNIVERSALITY_WORKSPACE_DIR") {
+        return PathBuf::from(override_dir).join("workspace.json");
+    }
+
     let base_dir = app
         .path()
         .app_data_dir()

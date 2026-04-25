@@ -21,10 +21,21 @@ import type {
   ExplorerInspectResponse,
   ExplorerRequest,
   ExplorerResponse,
+  LocalDatabaseCreateRequest,
+  LocalDatabaseCreateResult,
+  LocalDatabasePickRequest,
+  LocalDatabasePickResult,
+  ResultPageRequest,
+  ResultPageResponse,
+  ResultPayload,
   SavedWorkItem,
+  SecretRef,
+  StructureRequest,
+  StructureResponse,
   UpdateUiStateRequest,
   WorkspaceSnapshot,
 } from '@universality/shared-types'
+import { datastoreBacklogByEngine } from '@universality/shared-types'
 import { desktopClient } from '../../services/runtime/client'
 import { createId } from './helpers'
 
@@ -40,6 +51,9 @@ interface StateShape {
   explorer?: ExplorerResponse
   explorerError?: string
   explorerInspection?: ExplorerInspectResponse
+  structureStatus: RemoteStatus
+  structure?: StructureResponse
+  structureError?: string
   executionStatus: RemoteStatus
   lastExecution?: ExecutionResponse
   lastExecutionRequest?: ExecutionRequest
@@ -57,14 +71,19 @@ type Action =
   | { type: 'EXPLORER_READY'; explorer: ExplorerResponse }
   | { type: 'EXPLORER_ERROR'; message: string }
   | { type: 'EXPLORER_INSPECTION_READY'; inspection: ExplorerInspectResponse }
+  | { type: 'STRUCTURE_LOADING' }
+  | { type: 'STRUCTURE_READY'; structure: StructureResponse }
+  | { type: 'STRUCTURE_ERROR'; message: string }
   | { type: 'EXECUTION_LOADING' }
   | { type: 'EXECUTION_READY'; execution: ExecutionResponse; request: ExecutionRequest }
+  | { type: 'RESULT_PAGE_READY'; page: ResultPageResponse }
   | { type: 'BOOTSTRAP_ERROR'; message: string }
   | { type: 'COMMAND_ERROR'; message: string }
 
 const initialState: StateShape = {
   status: 'booting',
   explorerStatus: 'idle',
+  structureStatus: 'idle',
   executionStatus: 'idle',
   connectionTests: {},
 }
@@ -100,6 +119,141 @@ function applyExecutionToPayload(
   return next
 }
 
+function applyResultPageToPayload(
+  payload: BootstrapPayload | undefined,
+  page: ResultPageResponse,
+): BootstrapPayload | undefined {
+  if (!payload) {
+    return payload
+  }
+
+  const next = clonePayload(payload)
+  const tab = next.snapshot.tabs.find((item) => item.id === page.tabId)
+
+  if (!tab?.result) {
+    return next
+  }
+
+  const payloadIndex = tab.result.payloads.findIndex(
+    (item) => item.renderer === page.payload.renderer,
+  )
+
+  let mergedPayload = page.payload
+
+  if (payloadIndex < 0) {
+    tab.result.payloads.push(page.payload)
+  } else {
+    const currentPayload = tab.result.payloads[payloadIndex]
+
+    if (currentPayload) {
+      mergedPayload = mergeResultPayload(currentPayload, page.payload)
+      tab.result.payloads[payloadIndex] = mergedPayload
+    }
+  }
+
+  tab.result.pageInfo = {
+    ...page.pageInfo,
+    bufferedRows: resultPayloadSize(mergedPayload),
+  }
+  tab.result.truncated = page.pageInfo.hasMore
+  tab.result.continuationToken = page.pageInfo.nextCursor
+  tab.result.notices = [
+    ...tab.result.notices,
+    ...page.notices.map((message) => ({
+      code: 'result-page',
+      level: 'info' as const,
+      message,
+    })),
+  ]
+  next.snapshot.ui.bottomPanelVisible = true
+  next.snapshot.ui.activeBottomPanelTab = 'results'
+  next.snapshot.updatedAt = new Date().toISOString()
+  return next
+}
+
+function mergeExplorerResponse(
+  current: ExplorerResponse | undefined,
+  incoming: ExplorerResponse,
+): ExplorerResponse {
+  if (
+    !current ||
+    current.connectionId !== incoming.connectionId ||
+    current.environmentId !== incoming.environmentId
+  ) {
+    return incoming
+  }
+
+  const mergedNodes = new Map(current.nodes.map((node) => [node.id, node]))
+
+  for (const node of incoming.nodes) {
+    mergedNodes.set(node.id, node)
+  }
+
+  return {
+    ...incoming,
+    summary: incoming.summary,
+    nodes: Array.from(mergedNodes.values()),
+  }
+}
+
+function mergeResultPayload(current: ResultPayload, incoming: ResultPayload): ResultPayload {
+  if (current.renderer === 'table' && incoming.renderer === 'table') {
+    return {
+      ...current,
+      columns: current.columns.length ? current.columns : incoming.columns,
+      rows: [...current.rows, ...incoming.rows],
+    }
+  }
+
+  if (current.renderer === 'document' && incoming.renderer === 'document') {
+    return {
+      ...current,
+      documents: [...current.documents, ...incoming.documents],
+    }
+  }
+
+  if (current.renderer === 'keyvalue' && incoming.renderer === 'keyvalue') {
+    return {
+      ...current,
+      entries: {
+        ...current.entries,
+        ...incoming.entries,
+      },
+      ttl: incoming.ttl ?? current.ttl,
+      memoryUsage: incoming.memoryUsage ?? current.memoryUsage,
+    }
+  }
+
+  if (current.renderer === 'schema' && incoming.renderer === 'schema') {
+    return {
+      ...current,
+      items: [...current.items, ...incoming.items],
+    }
+  }
+
+  return incoming
+}
+
+function resultPayloadSize(payload: ResultPayload) {
+  if (payload.renderer === 'table') {
+    return payload.rows.length
+  }
+
+  if (payload.renderer === 'document') {
+    return payload.documents.length
+  }
+
+  if (payload.renderer === 'keyvalue') {
+    return Object.keys(payload.entries).length
+  }
+
+  if (payload.renderer === 'schema') {
+    return payload.items.length
+  }
+
+  return 1
+}
+
 function toUserMessage(error: unknown, fallback: string) {
   if (error instanceof Error) {
     return error.message
@@ -123,6 +277,92 @@ function toUserMessage(error: unknown, fallback: string) {
 function ensureWorkspaceUnlocked(payload: BootstrapPayload | undefined) {
   if (payload?.snapshot.lockState.isLocked) {
     throw new Error('Unlock the workspace before using privileged desktop commands.')
+  }
+}
+
+function secretRefForConnection(profile: ConnectionProfile): SecretRef {
+  return {
+    id: `secret-${profile.id}`,
+    provider: 'os-keyring',
+    service: 'Universality',
+    account: profile.id,
+    label: `${profile.name} password`,
+  }
+}
+
+function iconForEngine(engine: ConnectionProfile['engine']) {
+  return engine
+    .split('')
+    .filter((character) => /[a-z0-9]/i.test(character))
+    .slice(0, 2)
+    .join('')
+    .toUpperCase()
+}
+
+function familyForEngine(engine: ConnectionProfile['engine']): ConnectionProfile['family'] {
+  return datastoreBacklogByEngine(engine)?.family ?? 'sql'
+}
+
+function defaultPortForEngine(engine: ConnectionProfile['engine']) {
+  return datastoreBacklogByEngine(engine)?.defaultPort
+}
+
+function defaultConnectionModeForEngine(engine: ConnectionProfile['engine']) {
+  return datastoreBacklogByEngine(engine)?.connectionModes[0]
+}
+
+function createConnectionProfile(
+  environmentId: string,
+  source?: ConnectionProfile,
+): ConnectionProfile {
+  const timestamp = new Date().toISOString()
+  const id = createId('conn')
+  const engine = source?.engine ?? 'postgresql'
+  const family = source?.family ?? familyForEngine(engine)
+
+  return {
+    id,
+    name: source ? `Copy of ${source.name}` : 'New PostgreSQL connection',
+    engine,
+    family,
+    host: source?.host ?? 'localhost',
+    port: source?.port ?? defaultPortForEngine(engine),
+    database: source?.database ?? '',
+    connectionString: source?.connectionString,
+    connectionMode: source?.connectionMode ?? defaultConnectionModeForEngine(engine),
+    environmentIds: source?.environmentIds?.length ? [...source.environmentIds] : [environmentId],
+    tags: source ? [...source.tags] : [],
+    favorite: false,
+    readOnly: source?.readOnly ?? false,
+    icon: source?.icon ?? iconForEngine(engine),
+    color: source?.color,
+    group: source?.group ?? 'Connections',
+    notes: source?.notes,
+    auth: {
+      ...source?.auth,
+      secretRef: source?.auth.secretRef,
+    },
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  }
+}
+
+function createEnvironmentProfile(source?: Partial<EnvironmentProfile>): EnvironmentProfile {
+  const timestamp = new Date().toISOString()
+
+  return {
+    id: createId('env'),
+    label: source?.label ?? 'Local',
+    color: source?.color ?? '#2dbf9b',
+    risk: source?.risk ?? 'low',
+    inheritsFrom: source?.inheritsFrom,
+    variables: source?.variables ?? {},
+    sensitiveKeys: source?.sensitiveKeys ?? [],
+    requiresConfirmation: source?.requiresConfirmation ?? false,
+    safeMode: source?.safeMode ?? false,
+    exportable: source?.exportable ?? true,
+    createdAt: timestamp,
+    updatedAt: timestamp,
   }
 }
 
@@ -176,7 +416,7 @@ function reducer(state: StateShape, action: Action): StateShape {
       return {
         ...state,
         explorerStatus: 'ready',
-        explorer: action.explorer,
+        explorer: mergeExplorerResponse(state.explorer, action.explorer),
         explorerError: undefined,
         errorMessage: undefined,
       }
@@ -191,6 +431,28 @@ function reducer(state: StateShape, action: Action): StateShape {
       return {
         ...state,
         explorerInspection: action.inspection,
+        errorMessage: undefined,
+      }
+    case 'STRUCTURE_LOADING':
+      return {
+        ...state,
+        structureStatus: 'loading',
+        structureError: undefined,
+        errorMessage: undefined,
+      }
+    case 'STRUCTURE_READY':
+      return {
+        ...state,
+        structureStatus: 'ready',
+        structure: action.structure,
+        structureError: undefined,
+        errorMessage: undefined,
+      }
+    case 'STRUCTURE_ERROR':
+      return {
+        ...state,
+        structureStatus: 'ready',
+        structureError: action.message,
         errorMessage: undefined,
       }
     case 'EXECUTION_LOADING':
@@ -214,6 +476,12 @@ function reducer(state: StateShape, action: Action): StateShape {
             : action.execution.diagnostics[0],
       }
     }
+    case 'RESULT_PAGE_READY':
+      return {
+        ...state,
+        payload: applyResultPageToPayload(state.payload, action.page),
+        errorMessage: undefined,
+      }
     case 'BOOTSTRAP_ERROR':
       return {
         ...state,
@@ -225,6 +493,7 @@ function reducer(state: StateShape, action: Action): StateShape {
         ...state,
         status: state.payload ? 'ready' : 'error',
         explorerStatus: state.explorerStatus === 'loading' ? 'idle' : state.explorerStatus,
+        structureStatus: state.structureStatus === 'loading' ? 'idle' : state.structureStatus,
         executionStatus:
           state.executionStatus === 'loading' ? 'idle' : state.executionStatus,
         errorMessage: action.message,
@@ -254,18 +523,66 @@ function findEnvironment(
   )
 }
 
+function savedWorkItemForTab(
+  snapshot: WorkspaceSnapshot,
+  tabId: string,
+): SavedWorkItem {
+  const tab = snapshot.tabs.find((item) => item.id === tabId)
+  const connection = tab
+    ? snapshot.connections.find((item) => item.id === tab.connectionId)
+    : undefined
+  const environment = tab
+    ? snapshot.environments.find((item) => item.id === tab.environmentId)
+    : undefined
+
+  if (!tab || !connection || !environment) {
+    throw new Error('The active query tab cannot be saved yet.')
+  }
+
+  const existingSavedWork = tab.savedQueryId
+    ? snapshot.savedWork.find((item) => item.id === tab.savedQueryId)
+    : undefined
+
+  return {
+    id: existingSavedWork?.id ?? tab.savedQueryId ?? createId('saved'),
+    kind: 'query',
+    name: tab.title,
+    summary: `${connection.name} / ${environment.label}`,
+    tags:
+      existingSavedWork?.tags ??
+      [connection.engine, environment.label.toLowerCase()],
+    folder: existingSavedWork?.folder ?? 'Saved Queries',
+    favorite: existingSavedWork?.favorite ?? false,
+    updatedAt: new Date().toISOString(),
+    connectionId: connection.id,
+    environmentId: environment.id,
+    language: tab.language,
+    queryText: tab.queryText,
+  }
+}
+
 interface Actions {
   selectConnection(connectionId: string): Promise<void>
   selectTab(tabId: string): Promise<void>
-  saveConnection(profile: ConnectionProfile): Promise<void>
+  selectEnvironment(tabId: string, environmentId: string): Promise<void>
+  createConnection(): Promise<void>
+  duplicateConnection(connectionId: string): Promise<void>
+  deleteConnection(connectionId: string): Promise<void>
+  saveConnection(profile: ConnectionProfile, secret?: string): Promise<void>
+  createEnvironment(): Promise<void>
   saveEnvironment(profile: EnvironmentProfile): Promise<void>
   createTab(connectionId: string): Promise<void>
+  closeTab(tabId: string): Promise<void>
+  reopenClosedTab(closedTabId: string): Promise<void>
   updateQuery(tabId: string, queryText: string): Promise<void>
+  renameTab(tabId: string, title: string): Promise<void>
   saveCurrentQuery(tabId: string): Promise<void>
+  saveAndCloseTab(tabId: string): Promise<void>
   openSavedWork(savedWorkId: string): Promise<void>
   deleteSavedWork(savedWorkId: string): Promise<void>
   testConnection(profile: ConnectionProfile, environmentId: string): Promise<void>
   loadExplorer(request: ExplorerRequest): Promise<void>
+  loadStructureMap(request: StructureRequest): Promise<void>
   inspectExplorer(
     request: Pick<ExplorerRequest, 'connectionId' | 'environmentId'> & { nodeId: string },
   ): Promise<void>
@@ -274,7 +591,12 @@ interface Actions {
     mode?: ExecutionRequest['mode'],
     confirmedGuardrailId?: string,
   ): Promise<void>
+  fetchResultPage(tabId: string, renderer?: string): Promise<void>
   cancelExecution(executionId: string, tabId?: string): Promise<void>
+  pickLocalDatabaseFile(request: LocalDatabasePickRequest): Promise<LocalDatabasePickResult>
+  createLocalDatabase(
+    request: LocalDatabaseCreateRequest,
+  ): Promise<LocalDatabaseCreateResult | undefined>
   setTheme(theme: WorkspaceSnapshot['preferences']['theme']): Promise<void>
   updateUiState(patch: UpdateUiStateRequest): Promise<void>
   setLocked(isLocked: boolean): Promise<void>
@@ -294,18 +616,31 @@ const noop = async () => {}
 const defaultActions: Actions = {
   selectConnection: noop,
   selectTab: noop,
+  selectEnvironment: noop,
+  createConnection: noop,
+  duplicateConnection: noop,
+  deleteConnection: noop,
   saveConnection: noop,
+  createEnvironment: noop,
   saveEnvironment: noop,
   createTab: noop,
+  closeTab: noop,
+  reopenClosedTab: noop,
   updateQuery: noop,
+  renameTab: noop,
   saveCurrentQuery: noop,
+  saveAndCloseTab: noop,
   openSavedWork: noop,
   deleteSavedWork: noop,
   testConnection: noop,
   loadExplorer: noop,
+  loadStructureMap: noop,
   inspectExplorer: noop,
   executeQuery: noop,
+  fetchResultPage: noop,
   cancelExecution: noop,
+  pickLocalDatabaseFile: async () => ({ canceled: true }),
+  createLocalDatabase: async () => undefined,
   setTheme: noop,
   updateUiState: noop,
   setLocked: noop,
@@ -381,15 +716,155 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     [applyPayload, handleError],
   )
 
-  const saveConnection = useCallback<Actions['saveConnection']>(
-    async (profile) => {
+  const selectEnvironment = useCallback<Actions['selectEnvironment']>(
+    async (tabId, environmentId) => {
       try {
-        applyPayload(await desktopClient.upsertConnection(profile))
+        ensureWorkspaceUnlocked(state.payload)
+        applyPayload(await desktopClient.setTabEnvironment(tabId, environmentId))
       } catch (error) {
         handleError(error)
       }
     },
-    [applyPayload, handleError],
+    [applyPayload, handleError, state.payload],
+  )
+
+  const createConnection = useCallback<Actions['createConnection']>(
+    async () => {
+      try {
+        if (!state.payload) {
+          throw new Error('Workspace is not ready for connection creation.')
+        }
+        ensureWorkspaceUnlocked(state.payload)
+        let environmentId =
+          state.payload.snapshot.ui.activeEnvironmentId ||
+          state.payload.snapshot.environments[0]?.id
+
+        if (!environmentId) {
+          const environment = createEnvironmentProfile()
+          environmentId = environment.id
+          await desktopClient.upsertEnvironment(environment)
+        }
+
+        const profile = createConnectionProfile(environmentId)
+
+        await desktopClient.upsertConnection(profile)
+        await desktopClient.createQueryTab(profile.id)
+        applyPayload(
+          await desktopClient.updateUiState({
+            activeActivity: 'connections',
+            activeSidebarPane: 'connections',
+            rightDrawer: 'connection',
+          }),
+        )
+      } catch (error) {
+        handleError(error)
+      }
+    },
+    [applyPayload, handleError, state.payload],
+  )
+
+  const duplicateConnection = useCallback<Actions['duplicateConnection']>(
+    async (connectionId) => {
+      try {
+        if (!state.payload) {
+          throw new Error('Workspace is not ready for connection duplication.')
+        }
+        ensureWorkspaceUnlocked(state.payload)
+        const source = state.payload.snapshot.connections.find(
+          (connection) => connection.id === connectionId,
+        )
+
+        if (!source) {
+          throw new Error('Connection was not found.')
+        }
+
+        const profile = createConnectionProfile(
+          state.payload.snapshot.ui.activeEnvironmentId,
+          source,
+        )
+
+        await desktopClient.upsertConnection(profile)
+        await desktopClient.createQueryTab(profile.id)
+        applyPayload(
+          await desktopClient.updateUiState({
+            activeActivity: 'connections',
+            activeSidebarPane: 'connections',
+            rightDrawer: 'connection',
+          }),
+        )
+      } catch (error) {
+        handleError(error)
+      }
+    },
+    [applyPayload, handleError, state.payload],
+  )
+
+  const deleteConnection = useCallback<Actions['deleteConnection']>(
+    async (connectionId) => {
+      try {
+        ensureWorkspaceUnlocked(state.payload)
+        applyPayload(await desktopClient.deleteConnection(connectionId))
+      } catch (error) {
+        handleError(error)
+      }
+    },
+    [applyPayload, handleError, state.payload],
+  )
+
+  const saveConnection = useCallback<Actions['saveConnection']>(
+    async (profile, secret) => {
+      try {
+        ensureWorkspaceUnlocked(state.payload)
+        let nextProfile = profile
+
+        if (secret?.trim()) {
+          const secretRef = profile.auth.secretRef ?? secretRefForConnection(profile)
+          await desktopClient.storeSecret(secretRef, secret)
+          nextProfile = {
+            ...profile,
+            auth: {
+              ...profile.auth,
+              secretRef,
+            },
+            updatedAt: new Date().toISOString(),
+          }
+        }
+
+        await desktopClient.upsertConnection(nextProfile)
+        applyPayload(await desktopClient.updateUiState({ rightDrawer: 'none' }))
+      } catch (error) {
+        handleError(error)
+      }
+    },
+    [applyPayload, handleError, state.payload],
+  )
+
+  const createEnvironment = useCallback<Actions['createEnvironment']>(
+    async () => {
+      try {
+        if (!state.payload) {
+          throw new Error('Workspace is not ready for environment creation.')
+        }
+        ensureWorkspaceUnlocked(state.payload)
+
+        const environmentCount = state.payload.snapshot.environments.length
+        const environment = createEnvironmentProfile({
+          label: environmentCount === 0 ? 'Local' : `Environment ${environmentCount + 1}`,
+        })
+        await desktopClient.upsertEnvironment(environment)
+        applyPayload(
+          await desktopClient.updateUiState({
+            activeEnvironmentId: environment.id,
+            activeActivity: 'environments',
+            activeSidebarPane: 'environments',
+            sidebarCollapsed: false,
+          }),
+        )
+      } catch (error) {
+        handleError(error)
+      }
+    },
+    [applyPayload, handleError, state.payload],
   )
 
   const saveEnvironment = useCallback<Actions['saveEnvironment']>(
@@ -414,10 +889,43 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     [applyPayload, handleError],
   )
 
+  const closeTab = useCallback<Actions['closeTab']>(
+    async (tabId) => {
+      try {
+        applyPayload(await desktopClient.closeQueryTab(tabId))
+      } catch (error) {
+        handleError(error)
+      }
+    },
+    [applyPayload, handleError],
+  )
+
+  const reopenClosedTab = useCallback<Actions['reopenClosedTab']>(
+    async (closedTabId) => {
+      try {
+        applyPayload(await desktopClient.reopenClosedQueryTab(closedTabId))
+      } catch (error) {
+        handleError(error)
+      }
+    },
+    [applyPayload, handleError],
+  )
+
   const updateQuery = useCallback<Actions['updateQuery']>(
     async (tabId, queryText) => {
       try {
         applyPayload(await desktopClient.updateQueryTab(tabId, queryText))
+      } catch (error) {
+        handleError(error)
+      }
+    },
+    [applyPayload, handleError],
+  )
+
+  const renameTab = useCallback<Actions['renameTab']>(
+    async (tabId, title) => {
+      try {
+        applyPayload(await desktopClient.renameQueryTab(tabId, title))
       } catch (error) {
         handleError(error)
       }
@@ -433,34 +941,27 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         }
         ensureWorkspaceUnlocked(state.payload)
 
-        const tab = state.payload.snapshot.tabs.find((item) => item.id === tabId)
-        const connection = tab
-          ? state.payload.snapshot.connections.find((item) => item.id === tab.connectionId)
-          : undefined
-        const environment = tab
-          ? state.payload.snapshot.environments.find((item) => item.id === tab.environmentId)
-          : undefined
+        const savedWorkItem = savedWorkItemForTab(state.payload.snapshot, tabId)
 
-        if (!tab || !connection || !environment) {
-          throw new Error('The active query tab cannot be saved yet.')
+        applyPayload(await desktopClient.saveQueryTab(tabId, savedWorkItem))
+      } catch (error) {
+        handleError(error)
+      }
+    },
+    [applyPayload, handleError, state.payload],
+  )
+
+  const saveAndCloseTab = useCallback<Actions['saveAndCloseTab']>(
+    async (tabId) => {
+      try {
+        if (!state.payload) {
+          throw new Error('Workspace is not ready for saved work.')
         }
+        ensureWorkspaceUnlocked(state.payload)
 
-        const savedWorkItem: SavedWorkItem = {
-          id: createId('saved'),
-          kind: 'query',
-          name: tab.title,
-          summary: `${connection.name} / ${environment.label}`,
-          tags: [connection.engine, environment.label.toLowerCase()],
-          folder: 'Saved Queries',
-          favorite: false,
-          updatedAt: new Date().toISOString(),
-          connectionId: connection.id,
-          environmentId: environment.id,
-          language: tab.language,
-          queryText: tab.queryText,
-        }
-
-        applyPayload(await desktopClient.upsertSavedWork(savedWorkItem))
+        const savedWorkItem = savedWorkItemForTab(state.payload.snapshot, tabId)
+        await desktopClient.saveQueryTab(tabId, savedWorkItem)
+        applyPayload(await desktopClient.closeQueryTab(tabId))
       } catch (error) {
         handleError(error)
       }
@@ -529,6 +1030,23 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     [state.payload],
   )
 
+  const loadStructureMap = useCallback<Actions['loadStructureMap']>(
+    async (request) => {
+      try {
+        ensureWorkspaceUnlocked(state.payload)
+        dispatch({ type: 'STRUCTURE_LOADING' })
+        const structure = await desktopClient.loadStructureMap(request)
+        dispatch({ type: 'STRUCTURE_READY', structure })
+      } catch (error) {
+        dispatch({
+          type: 'STRUCTURE_ERROR',
+          message: toUserMessage(error, 'Unable to load visual database structure.'),
+        })
+      }
+    },
+    [state.payload],
+  )
+
   const inspectExplorer = useCallback<Actions['inspectExplorer']>(
     async ({ connectionId, environmentId, nodeId }) => {
       try {
@@ -571,13 +1089,53 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           language: tab.language,
           queryText: tab.queryText,
           mode,
-          rowLimit: 200,
+          rowLimit: 500,
           confirmedGuardrailId,
         }
 
         dispatch({ type: 'EXECUTION_LOADING' })
         const execution = await desktopClient.executeQuery(executionRequest)
         dispatch({ type: 'EXECUTION_READY', execution, request: executionRequest })
+      } catch (error) {
+        handleError(error)
+      }
+    },
+    [handleError, state.payload],
+  )
+
+  const fetchResultPage = useCallback<Actions['fetchResultPage']>(
+    async (tabId, renderer) => {
+      try {
+        if (!state.payload) {
+          throw new Error('Workspace is not ready for paged result loading.')
+        }
+        ensureWorkspaceUnlocked(state.payload)
+        const tab = state.payload.snapshot.tabs.find((item) => item.id === tabId)
+
+        if (!tab?.result) {
+          throw new Error('Run a query before loading another result page.')
+        }
+
+        const pageInfo = tab.result.pageInfo
+
+        if (!pageInfo?.hasMore) {
+          return
+        }
+
+        const request: ResultPageRequest = {
+          tabId: tab.id,
+          connectionId: tab.connectionId,
+          environmentId: tab.environmentId,
+          language: tab.language,
+          queryText: tab.queryText,
+          renderer: renderer ?? tab.result.defaultRenderer,
+          pageSize: pageInfo.pageSize,
+          pageIndex: pageInfo.pageIndex + 1,
+          cursor: pageInfo.nextCursor,
+        }
+
+        const page = await desktopClient.fetchResultPage(request)
+        dispatch({ type: 'RESULT_PAGE_READY', page })
       } catch (error) {
         handleError(error)
       }
@@ -599,6 +1157,32 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         }
       } catch (error) {
         handleError(error)
+      }
+    },
+    [handleError, state.payload],
+  )
+
+  const pickLocalDatabaseFile = useCallback<Actions['pickLocalDatabaseFile']>(
+    async (request) => {
+      try {
+        ensureWorkspaceUnlocked(state.payload)
+        return await desktopClient.pickLocalDatabaseFile(request)
+      } catch (error) {
+        handleError(error)
+        return { canceled: true }
+      }
+    },
+    [handleError, state.payload],
+  )
+
+  const createLocalDatabase = useCallback<Actions['createLocalDatabase']>(
+    async (request) => {
+      try {
+        ensureWorkspaceUnlocked(state.payload)
+        return await desktopClient.createLocalDatabase(request)
+      } catch (error) {
+        handleError(error)
+        return undefined
       }
     },
     [handleError, state.payload],
@@ -690,18 +1274,31 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     () => ({
       selectConnection,
       selectTab,
+      selectEnvironment,
+      createConnection,
+      duplicateConnection,
+      deleteConnection,
       saveConnection,
+      createEnvironment,
       saveEnvironment,
       createTab,
+      closeTab,
+      reopenClosedTab,
       updateQuery,
+      renameTab,
       saveCurrentQuery,
+      saveAndCloseTab,
       openSavedWork,
       deleteSavedWork,
       testConnection,
       loadExplorer,
+      loadStructureMap,
       inspectExplorer,
       executeQuery,
+      fetchResultPage,
       cancelExecution,
+      pickLocalDatabaseFile,
+      createLocalDatabase,
       setTheme,
       updateUiState,
       setLocked,
@@ -711,19 +1308,32 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     }),
     [
       cancelExecution,
+      createLocalDatabase,
+      createConnection,
+      createEnvironment,
       createTab,
+      closeTab,
+      deleteConnection,
+      duplicateConnection,
       executeQuery,
       exportWorkspace,
+      fetchResultPage,
       importWorkspace,
       inspectExplorer,
+      pickLocalDatabaseFile,
       loadExplorer,
+      loadStructureMap,
       deleteSavedWork,
       openSavedWork,
+      renameTab,
+      reopenClosedTab,
       refreshDiagnostics,
+      saveAndCloseTab,
       saveCurrentQuery,
       saveConnection,
       saveEnvironment,
       selectConnection,
+      selectEnvironment,
       selectTab,
       setLocked,
       setTheme,

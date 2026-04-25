@@ -1,36 +1,58 @@
 # Universality
 
-Universality is a cross-platform desktop workstation for querying, browsing, inspecting, and managing multiple datastore families through one consistent Tauri-based interface.
+[![CI](https://github.com/GarethMonty/Universality/actions/workflows/ci.yml/badge.svg)](https://github.com/GarethMonty/Universality/actions/workflows/ci.yml)
 
-This repository is intentionally desktop-only. The React layer exists to render the Tauri shell, not to ship a separate website or hosted web app.
+Universality is a cross-platform desktop workbench for exploring, querying, inspecting, and managing multiple datastore families from one consistent interface.
 
-The repo now contains the first desktop-oriented foundation for that product:
+The project is built as a Tauri desktop application with a React and TypeScript workbench, a Rust native host, and shared datastore contracts. It is intentionally desktop-first: the web frontend exists to render the Tauri shell, not to ship a hosted web app.
 
-- a React + TypeScript desktop shell under `apps/desktop`
-- a Tauri native scaffold under `apps/desktop/src-tauri`
-- shared domain contracts under `packages/shared-types`
-- architecture, security, testing, and contributor docs under `docs`
+## Project Status
 
-## MVP focus
+Universality is early-stage software. The repository contains the desktop foundation, shared domain contracts, adapter catalog, native command surface, fixture-backed integration tests, and the first capability-driven datastore adapter work.
 
-The initial implementation is aligned to the blueprint MVP:
+Public docs use two labels:
 
-- PostgreSQL
-- SQL Server
-- MySQL / MariaDB
-- SQLite
-- MongoDB
-- Redis
+- **Current app foundation**: workflows that exist in the repository today, including the desktop workbench, local workspace state, environments, query tabs, adapter manifests, diagnostics, fixtures, and Tauri command wiring.
+- **Adapter roadmap**: datastore support that is represented in contracts, manifests, beta adapters, tests, or roadmap documents. Some adapters are read/diagnostic-oriented or preview-only while the product hardens live execution paths.
 
-## Getting started
+## What Universality Does
+
+Universality is designed for developers and operators who move between different data systems and want one local, safety-aware workstation instead of a stack of disconnected tools.
+
+Current workbench capabilities include:
+
+- connection profiles with engine, family, environment, read-only, tags, notes, and secret reference metadata
+- environment profiles with variables, inheritance, risk levels, safe mode, sensitive-key redaction, and confirmation settings
+- query tabs with datastore-aware editor language selection, saved queries, closed-tab recovery, result history, and dirty-state handling
+- capability-driven adapter manifests so the UI can react to features instead of hardcoding engine branches
+- explorer and structure views for datastore metadata
+- normalized result payloads for tables, JSON, documents, key-value data, schemas, graphs, charts, plans, metrics, series, search hits, profiles, and cost estimates
+- guardrail decisions for read-only connections, risky environments, destructive-looking queries, and unresolved variables
+- workspace lock, diagnostics, encrypted workspace bundle import/export, and local/browser-preview fallback behavior
+- Docker fixture flows and Tauri/WebDriver e2e plumbing for adapter and desktop validation
+
+## Datastore Coverage
+
+The adapter model separates UI capability from engine-specific implementation. Maturity values come from the shared adapter catalog and runtime manifests.
+
+| Maturity | Datastores | Meaning |
+| --- | --- | --- |
+| MVP target / active foundation | PostgreSQL, CockroachDB, SQL Server / Azure SQL, MySQL, MariaDB, SQLite, MongoDB, Redis | Core workbench paths are being built and tested first. Local fixture coverage exists for the primary SQL/document/cache set where practical. |
+| Beta / contract-oriented | Oracle, TimescaleDB, DynamoDB, Cassandra, Cosmos DB, LiteDB, Valkey, Memcached, Neo4j, Amazon Neptune, ArangoDB, JanusGraph, InfluxDB, Prometheus, OpenTSDB, Elasticsearch, OpenSearch, ClickHouse, DuckDB, Snowflake, BigQuery | Adapters and catalog entries expose capability, operation, permission, diagnostics, and preview behavior while live execution and cloud identity paths are hardened. |
+| Roadmap families | SQL, document, key-value, graph, time-series, wide-column, search, warehouse, embedded OLAP | The product direction is broader than the initial MVP, but public docs distinguish roadmap from finished support. |
+
+For the deeper implementation plan, see [Datastore Adapter Roadmap](docs/architecture/datastore-adapter-roadmap.md).
+
+## Quick Start
 
 ### Prerequisites
 
 - Node.js 24+
 - npm 11+
-- Rust stable toolchain for Tauri desktop runs
-- Tauri platform prerequisites from the [official docs](https://tauri.app/start/prerequisites/)
-- On Windows, install the Visual Studio C++ desktop workload and Windows SDK required by Tauri before running native desktop builds
+- Rust stable toolchain
+- Tauri platform prerequisites from the [official Tauri docs](https://tauri.app/start/prerequisites/)
+- Docker, when running database fixtures
+- On Windows, the Visual Studio C++ desktop workload and Windows SDK required by Tauri native builds
 
 ### Install
 
@@ -38,56 +60,140 @@ The initial implementation is aligned to the blueprint MVP:
 npm install
 ```
 
-### Run the desktop UI shell
+### Run the desktop app
 
 ```bash
 npm run tauri:dev
 ```
 
-### Run the fast UI dev server
+### Run the fast frontend preview
 
-This is still the Tauri frontend layer, not a separate website.
+This runs the Tauri frontend layer in Vite at `http://127.0.0.1:1420`. It is useful for UI work, but it is not the full native desktop runtime.
 
 ```bash
 npm run dev
 ```
 
-### Validate the workspace
+### Build
+
+```bash
+npm run build
+npm run tauri:build
+```
+
+### Validate
 
 ```bash
 npm run check
+npm run check:native
+npm run check:all
 ```
 
-For native formatting checks:
+Useful individual checks:
 
 ```bash
-cd apps/desktop/src-tauri
-cargo fmt --check
+npm run lint
+npm run test
+npm run rust:fmt
+npm run rust:check
+npm run rust:test
+npm run rust:clippy
 ```
 
-## Repo layout
+## Fixtures And E2E
+
+Database fixtures live under `tests/fixtures` and are driven by Docker Compose plus seed scripts.
+
+```bash
+npm run fixtures:up
+npm run fixtures:seed
+npm run fixtures:down
+```
+
+Additional fixture helpers:
+
+```bash
+npm run fixtures:up:profile
+npm run fixtures:up:all
+npm run fixtures:seed:all
+```
+
+Desktop end-to-end support uses Tauri driver and WebDriverIO.
+
+```bash
+npm run e2e:desktop
+npm run check:e2e
+```
+
+## Repository Layout
 
 ```text
 Universality/
   apps/
-    desktop/           React desktop shell + Tauri host
+    desktop/           React workbench, Vite app, and Tauri host
   packages/
-    shared-types/      Shared product contracts and capability types
+    shared-types/      Shared contracts, capabilities, runtime models, and datastore catalog
   docs/
-    architecture/      Layering, adapter model, security approach
-    contributing/      Developer workflow and coding guidance
-    testing/           Testing strategy and quality gates
+    architecture/      Architecture, adapter model, safety, roadmap, and investigation notes
+    contributing/      Development workflow and coding expectations
+    testing/           Test strategy
+  tests/
+    fixtures/          Docker Compose fixtures and seed data
 ```
 
-## Key docs
+## Architecture
+
+Universality is organized around a capability-driven desktop architecture:
+
+1. The React UI shell owns layout, navigation, workbench panes, query editors, result surfaces, and user interaction.
+2. The application layer coordinates workspace state, active connection/environment selection, guardrails, query execution, saved work, and diagnostics.
+3. Shared TypeScript contracts define datastore families, engines, capabilities, connections, environments, runtime requests, results, and workspace state.
+4. Rust adapters isolate engine-specific connection validation, metadata exploration, execution, result normalization, operation planning, permissions, and diagnostics.
+5. The Tauri native layer owns privileged desktop commands, persistence, secret storage integration, local file selection, imports/exports, and OS integration.
+
+Key docs:
 
 - [Architecture Overview](docs/architecture/overview.md)
 - [Adapter Model](docs/architecture/adapter-model.md)
 - [Security And Safety](docs/architecture/security-and-safety.md)
+- [Datastore Adapter Roadmap](docs/architecture/datastore-adapter-roadmap.md)
 - [Development Guide](docs/contributing/development.md)
 - [Testing Strategy](docs/testing/strategy.md)
 
-## Release automation
+The public wiki is intended to live at [github.com/GarethMonty/Universality/wiki](https://github.com/GarethMonty/Universality/wiki).
 
-- `.github/workflows/ci.yml` runs frontend checks on every PR and native Tauri smoke builds on `main`, `release/**`, and `app-v*` tags
-- `.github/workflows/release.yml` builds tagged desktop releases with Tauri packaging and signing/notarization secret hooks
+## Security And Safety
+
+Universality is designed for workflows that may touch live credentials and production systems. The safety model is part of the architecture:
+
+- keep secret values in the OS credential store where available and persist only references in regular workspace state
+- redact sensitive values in previews, logs, diagnostics, and exports by default
+- make environment risk visible through the workbench
+- support read-only profiles and safe-mode behavior
+- require confirmation for risky operations in high-risk environments
+- block or warn on destructive-looking queries, unresolved variables, large result sets, costly operations, and preview-only adapter paths
+
+Early-stage users should treat production connections with care, keep profiles read-only by default, and review generated operation plans before running anything against important systems.
+
+## CI And Releases
+
+CI runs on pull requests and pushes to `main`, `release/**`, and `app-v*` tags. It covers frontend checks, TypeScript build, Rust formatting/check/test/clippy, adapter integration fixtures, desktop e2e on Linux, and native smoke builds.
+
+Tagged releases use `.github/workflows/release.yml`. Pushing an `app-v*` tag or running the workflow manually builds draft Tauri desktop release artifacts for Linux, Windows, and macOS, with signing/notarization hooks available through repository secrets.
+
+## Contributing
+
+The project is public and contributions should follow the existing architecture:
+
+- keep shared contracts engine-neutral when possible
+- put datastore-specific logic behind adapters or family-specific modules
+- prefer capability checks over engine-name checks in the UI
+- keep privileged operations behind Tauri commands
+- redact sensitive data in fixtures, tests, logs, diagnostics, screenshots, and docs
+- add tests around new adapter behavior, guardrails, and public contracts
+
+Start with the [Development Guide](docs/contributing/development.md), [Testing Strategy](docs/testing/strategy.md), and [Datastore Adapter Roadmap](docs/architecture/datastore-adapter-roadmap.md).
+
+## License
+
+No license file has been added yet. Until a license is published, all rights are reserved by the repository owner.

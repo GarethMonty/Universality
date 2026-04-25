@@ -10,18 +10,39 @@ export const RESULT_RENDERERS = [
   'raw',
   'schema',
   'diff',
+  'plan',
+  'metrics',
+  'series',
+  'searchHits',
+  'profile',
+  'costEstimate',
 ] as const
 
 export type ResultRenderer = (typeof RESULT_RENDERERS)[number]
 
-export type QueryLanguage =
-  | 'sql'
-  | 'mongodb'
-  | 'redis'
-  | 'cypher'
-  | 'flux'
-  | 'text'
-  | 'json'
+export const QUERY_LANGUAGES = [
+  'sql',
+  'mongodb',
+  'redis',
+  'cypher',
+  'flux',
+  'text',
+  'json',
+  'cql',
+  'aql',
+  'gremlin',
+  'sparql',
+  'promql',
+  'influxql',
+  'opentsdb',
+  'query-dsl',
+  'esql',
+  'google-sql',
+  'snowflake-sql',
+  'clickhouse-sql',
+] as const
+
+export type QueryLanguage = (typeof QUERY_LANGUAGES)[number]
 
 export type QueryExecutionState =
   | 'idle'
@@ -90,6 +111,104 @@ export interface SchemaPayload {
   items: Array<{ label: string; detail: string }>
 }
 
+export interface GraphPayload {
+  renderer: 'graph'
+  nodes: Array<{
+    id: string
+    label: string
+    kind?: string
+    properties?: Record<string, unknown>
+  }>
+  edges: Array<{
+    id: string
+    from: string
+    to: string
+    label?: string
+    kind?: string
+    properties?: Record<string, unknown>
+  }>
+}
+
+export interface ChartPayload {
+  renderer: 'chart'
+  chartType: 'line' | 'bar' | 'area' | 'scatter'
+  xAxis?: string
+  yAxis?: string
+  series: Array<{
+    name: string
+    points: Array<{ x: string | number; y: number }>
+  }>
+}
+
+export interface DiffPayload {
+  renderer: 'diff'
+  before: unknown
+  after: unknown
+  summary?: string
+}
+
+export interface PlanPayload {
+  renderer: 'plan'
+  format: 'json' | 'text' | 'graph'
+  value: unknown
+  summary?: string
+}
+
+export interface MetricsPayload {
+  renderer: 'metrics'
+  metrics: Array<{
+    name: string
+    value: number
+    unit?: string
+    labels?: Record<string, string>
+  }>
+}
+
+export interface SeriesPayload {
+  renderer: 'series'
+  series: Array<{
+    name: string
+    unit?: string
+    points: Array<{
+      timestamp: string
+      value: number
+      labels?: Record<string, string>
+    }>
+  }>
+}
+
+export interface SearchHitsPayload {
+  renderer: 'searchHits'
+  total?: number
+  hits: Array<{
+    id?: string
+    score?: number
+    source: Record<string, unknown>
+    highlights?: Record<string, string[]>
+  }>
+  aggregations?: Record<string, unknown>
+}
+
+export interface ProfilePayload {
+  renderer: 'profile'
+  summary?: string
+  stages: Array<{
+    name: string
+    durationMs?: number
+    rows?: number
+    details?: Record<string, unknown>
+  }>
+}
+
+export interface CostEstimatePayload {
+  renderer: 'costEstimate'
+  currency?: string
+  estimatedBytes?: number
+  estimatedCredits?: number
+  estimatedCost?: number
+  details?: Record<string, unknown>
+}
+
 export type ResultPayload =
   | TabularPayload
   | JsonPayload
@@ -97,6 +216,24 @@ export type ResultPayload =
   | KeyValuePayload
   | RawPayload
   | SchemaPayload
+  | GraphPayload
+  | ChartPayload
+  | DiffPayload
+  | PlanPayload
+  | MetricsPayload
+  | SeriesPayload
+  | SearchHitsPayload
+  | ProfilePayload
+  | CostEstimatePayload
+
+export interface ResultPageInfo {
+  pageSize: number
+  pageIndex: number
+  bufferedRows: number
+  hasMore: boolean
+  nextCursor?: string
+  totalRowsKnown?: number
+}
 
 export interface ExecutionResultEnvelope {
   id: string
@@ -111,6 +248,7 @@ export interface ExecutionResultEnvelope {
   truncated?: boolean
   rowLimit?: number
   continuationToken?: string
+  pageInfo?: ResultPageInfo
   explainPayload?: ResultPayload
 }
 
@@ -135,6 +273,13 @@ export interface QueryTabState extends QueryTabDefinition {
   result?: ExecutionResultEnvelope
   history: QueryHistoryEntry[]
   error?: UserFacingError
+}
+
+export type ClosedQueryTabReason = 'user' | 'connection-deleted' | 'replaced'
+
+export interface ClosedQueryTabSnapshot extends QueryTabState {
+  closedAt: string
+  closeReason: ClosedQueryTabReason
 }
 
 export interface SavedWorkItem {
@@ -163,6 +308,48 @@ export interface ExplorerNode {
   path?: string[]
   queryTemplate?: string
   expandable?: boolean
+}
+
+export interface StructureMetric {
+  label: string
+  value: string
+}
+
+export interface StructureField {
+  name: string
+  dataType: string
+  detail?: string
+  nullable?: boolean
+  primary?: boolean
+}
+
+export interface StructureGroup {
+  id: string
+  label: string
+  kind: string
+  detail?: string
+  color?: string
+}
+
+export interface StructureNode {
+  id: string
+  family: DatastoreFamily | 'shared'
+  label: string
+  kind: string
+  groupId?: string
+  detail?: string
+  metrics?: StructureMetric[]
+  fields?: StructureField[]
+  sample?: unknown
+}
+
+export interface StructureEdge {
+  id: string
+  from: string
+  to: string
+  label: string
+  kind: string
+  inferred?: boolean
 }
 
 export interface DiagnosticsReport {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createSeedSnapshot } from '../data/seed'
+import { createSeedSnapshot } from '../../test/fixtures/seed-workspace'
 import {
   evaluateGuardrails,
   migrateWorkspaceSnapshot,
@@ -78,12 +78,30 @@ describe('migrateWorkspaceSnapshot', () => {
 
     const migrated = migrateWorkspaceSnapshot(legacy)
 
-    expect(migrated.schemaVersion).toBe(3)
+    expect(migrated.schemaVersion).toBe(6)
     expect(migrated.ui.activeActivity).toBe('connections')
     expect(migrated.ui.activeSidebarPane).toBe('connections')
-    expect(migrated.ui.bottomPanelVisible).toBe(true)
+    expect(migrated.ui.sidebarWidth).toBe(280)
+    expect(migrated.ui.bottomPanelVisible).toBe(false)
     expect(migrated.ui.activeBottomPanelTab).toBe('results')
     expect(migrated.ui.rightDrawer).toBe('none')
+    expect(migrated.ui.rightDrawerWidth).toBe(360)
     expect(migrated.ui.explorerFilter).toBe('orders')
+  })
+
+  it('strips known demo records from untouched seeded snapshots', () => {
+    const migrated = migrateWorkspaceSnapshot(createSeedSnapshot())
+
+    expect(migrated.connections).toHaveLength(0)
+    expect(migrated.environments).toHaveLength(0)
+    expect(migrated.tabs).toHaveLength(0)
+    expect(migrated.closedTabs).toHaveLength(0)
+    expect(migrated.savedWork).toHaveLength(0)
+    expect(migrated.explorerNodes).toHaveLength(0)
+    expect(migrated.guardrails).toHaveLength(0)
+    expect(migrated.ui.activeConnectionId).toBe('')
+    expect(migrated.ui.activeEnvironmentId).toBe('')
+    expect(migrated.ui.activeTabId).toBe('')
+    expect(migrated.ui.bottomPanelVisible).toBe(false)
   })
 })

@@ -5,11 +5,10 @@ create table if not exists inventory_items (
   updated_at timestamp not null default current_timestamp
 );
 
+delete from inventory_items where sku in ('luna-lamp', 'aurora-desk', 'nova-chair');
+
 insert into inventory_items (sku, inventory_available, updated_at)
 values
   ('luna-lamp', 18, now()),
   ('aurora-desk', 8, now()),
-  ('nova-chair', 24, now())
-on duplicate key update
-  inventory_available = values(inventory_available),
-  updated_at = values(updated_at);
+  ('nova-chair', 24, now());

@@ -1,0 +1,73 @@
+use super::super::*;
+
+pub(super) fn cockroach_manifest() -> AdapterManifest {
+    manifest(
+        "adapter-cockroachdb",
+        "cockroachdb",
+        "sql",
+        "CockroachDB adapter",
+        "sql",
+        &[
+            "supports_sql_editor",
+            "supports_schema_browser",
+            "supports_admin_operations",
+            "supports_index_management",
+            "supports_user_role_browser",
+            "supports_permission_inspection",
+            "supports_explain_plan",
+            "supports_plan_visualization",
+            "supports_query_profile",
+            "supports_metrics_collection",
+            "supports_cloud_iam",
+            "supports_import_export",
+            "supports_backup_restore",
+            "supports_transactions",
+            "supports_result_snapshots",
+            "supports_query_cancellation",
+            "supports_streaming_results",
+            "supports_structure_visualization",
+        ],
+    )
+}
+
+pub(super) fn cockroach_operation_manifests(
+    manifest: &AdapterManifest,
+) -> Vec<DatastoreOperationManifest> {
+    let mut operations = operation_manifests_for_manifest(manifest);
+    operations.extend([
+        operation_manifest(
+            manifest,
+            "cockroach.jobs",
+            "Browse Jobs",
+            "cluster",
+            "diagnostic",
+            &["supports_metrics_collection"],
+            &["table", "metrics", "json"],
+            "Read SHOW JOBS output for schema changes, backups, imports, and other cluster work.",
+            false,
+        ),
+        operation_manifest(
+            manifest,
+            "cockroach.contention",
+            "Analyze Contention",
+            "cluster",
+            "diagnostic",
+            &["supports_metrics_collection", "supports_query_profile"],
+            &["metrics", "series", "table", "json"],
+            "Inspect supported contention and session signals for hot ranges or blocking workloads.",
+            false,
+        ),
+        operation_manifest(
+            manifest,
+            "cockroach.roles-grants",
+            "Inspect Roles And Grants",
+            "role",
+            "read",
+            &["supports_user_role_browser", "supports_permission_inspection"],
+            &["table", "json"],
+            "Read SHOW ROLES, SHOW GRANTS, and default privilege metadata.",
+            false,
+        ),
+    ]);
+    operations
+}

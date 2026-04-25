@@ -4,7 +4,6 @@ import type {
   ExecutionCapabilities,
 } from '@universality/shared-types'
 import {
-  DatabaseIcon,
   ExplainIcon,
   PanelIcon,
   PlayIcon,
@@ -14,6 +13,7 @@ import {
 
 interface EditorToolbarProps {
   connections: ConnectionProfile[]
+  environments: EnvironmentProfile[]
   activeConnection: ConnectionProfile
   activeEnvironment: EnvironmentProfile
   executionStatus: 'idle' | 'loading' | 'ready'
@@ -24,12 +24,14 @@ interface EditorToolbarProps {
   onExplain(): void
   onCancel(): void
   onSelectConnection(connectionId: string): void
+  onSelectEnvironment(environmentId: string): void
   onOpenConnectionDrawer(): void
   onToggleBottomPanel(): void
 }
 
 export function EditorToolbar({
   connections,
+  environments,
   activeConnection,
   activeEnvironment,
   executionStatus,
@@ -40,6 +42,7 @@ export function EditorToolbar({
   onExplain,
   onCancel,
   onSelectConnection,
+  onSelectEnvironment,
   onOpenConnectionDrawer,
   onToggleBottomPanel,
 }: EditorToolbarProps) {
@@ -50,7 +53,7 @@ export function EditorToolbar({
           type="button"
           className="toolbar-action toolbar-action--run"
           aria-label="Run query"
-          title="Run query (Ctrl+Enter)"
+          title="Run the current query against the selected connection and environment. Shortcut: Ctrl+Enter."
           disabled={executionStatus === 'loading'}
           onClick={onExecute}
         >
@@ -62,7 +65,11 @@ export function EditorToolbar({
           type="button"
           className="toolbar-icon-action"
           aria-label="Cancel query"
-          title="Cancel query"
+          title={
+            canCancelExecution
+              ? 'Cancel the currently running query for this tab.'
+              : 'Cancel is unavailable until a cancellable query is running on a supported adapter.'
+          }
           disabled={!canCancelExecution}
           onClick={onCancel}
         >
@@ -73,7 +80,11 @@ export function EditorToolbar({
           type="button"
           className="toolbar-icon-action"
           aria-label="Explain query"
-          title="Explain query (Ctrl+Shift+E)"
+          title={
+            capabilities.canExplain
+              ? 'Run an explain/plan request for the current query. Shortcut: Ctrl+Shift+E.'
+              : 'Explain is not implemented for this datastore adapter yet.'
+          }
           disabled={!capabilities.canExplain}
           onClick={onExplain}
         >
@@ -81,12 +92,14 @@ export function EditorToolbar({
         </button>
       </div>
 
+      <div className="toolbar-spacer" />
+
       <div className="toolbar-group toolbar-group--context" aria-label="Execution context">
         <button
           type="button"
           className="toolbar-icon-action"
           aria-label="Change connection"
-          title="Change connection"
+          title="Open the connection drawer to edit this profile, test it, or switch context."
           onClick={onOpenConnectionDrawer}
         >
           <SettingsIcon className="toolbar-icon" />
@@ -96,6 +109,7 @@ export function EditorToolbar({
           <span className="sr-only">Active connection</span>
           <select
             value={activeConnection.id}
+            title="Select which saved connection this query tab should use."
             onChange={(event) => onSelectConnection(event.target.value)}
           >
             {connections.map((connection) => (
@@ -106,29 +120,29 @@ export function EditorToolbar({
           </select>
         </label>
 
-        <span
-          className={`toolbar-environment toolbar-environment--${activeEnvironment.risk}`}
-          title={`${activeEnvironment.label} environment`}
+        <label
+          className={`toolbar-select toolbar-select--environment toolbar-environment--${activeEnvironment.risk}`}
         >
-          {activeEnvironment.label}
-        </span>
-
-        <span
-          className="toolbar-database"
-          title={activeConnection.database ?? activeConnection.host}
-        >
-          <DatabaseIcon className="toolbar-icon" />
-          {activeConnection.database ?? activeConnection.host}
-        </span>
+          <span className="sr-only">Active environment</span>
+          <select
+            value={activeEnvironment.id}
+            onChange={(event) => onSelectEnvironment(event.target.value)}
+            title={`Run this tab using the ${activeEnvironment.label} environment variables and guardrails.`}
+          >
+            {environments.map((environment) => (
+              <option key={environment.id} value={environment.id}>
+                {environment.label}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
-
-      <div className="toolbar-spacer" />
 
       <button
         type="button"
         className={`toolbar-icon-action${bottomPanelVisible ? ' is-active' : ''}`}
         aria-label="Toggle results panel"
-        title="Toggle results panel (Ctrl+J)"
+        title="Show or hide the Results, Messages, and Details panel. Shortcut: Ctrl+J."
         onClick={onToggleBottomPanel}
       >
         <PanelIcon className="toolbar-icon" />

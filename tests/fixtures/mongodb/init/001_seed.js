@@ -1,10 +1,12 @@
 db = db.getSiblingDB('catalog');
 
-db.createUser({
-  user: 'universality',
-  pwd: 'universality',
-  roles: [{ role: 'readWrite', db: 'catalog' }],
-});
+if (!db.getUser('universality')) {
+  db.createUser({
+    user: 'universality',
+    pwd: 'universality',
+    roles: [{ role: 'readWrite', db: 'catalog' }],
+  });
+}
 
 db.products.updateOne(
   { sku: 'luna-lamp' },

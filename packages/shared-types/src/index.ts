@@ -1,6 +1,7 @@
 export * from './app'
 export * from './capabilities'
 export * from './connection'
+export * from './datastore-roadmap'
 export * from './runtime'
 export * from './security'
 export * from './workspace'

@@ -1,4 +1,7 @@
-use std::{collections::HashMap, sync::Mutex};
+use std::{
+    collections::{BTreeMap, HashMap},
+    sync::Mutex,
+};
 
 use sha2::{Digest, Sha256};
 use tauri::AppHandle;
@@ -8,18 +11,20 @@ use crate::{
     domain::{
         error::CommandError,
         models::{
-            AppHealth, AppPreferences, BootstrapPayload, CancelExecutionRequest,
-            CancelExecutionResult, ConnectionAuth, ConnectionProfile, ConnectionTestRequest,
-            ConnectionTestResult, DiagnosticsCounts, DiagnosticsReport, EnvironmentProfile,
-            ExecutionRequest, ExecutionResponse, ExplorerInspectRequest, ExplorerInspectResponse,
-            ExplorerNode, ExplorerRequest, ExplorerResponse, ExportBundle, GuardrailDecision,
-            LockState, QueryExecutionNotice, QueryHistoryEntry, QueryTabState,
-            ResolvedConnectionProfile, ResolvedEnvironment, SavedWorkItem, SecretRef, UiState,
-            UpdateUiStateRequest, UserFacingError, WorkspaceSnapshot,
+            AdapterDiagnosticsRequest, AdapterDiagnosticsResponse, AppHealth, AppPreferences,
+            BootstrapPayload, CancelExecutionRequest, CancelExecutionResult,
+            ClosedQueryTabSnapshot, ConnectionProfile, ConnectionTestRequest, ConnectionTestResult,
+            DiagnosticsCounts, DiagnosticsReport, EnvironmentProfile, ExecutionRequest,
+            ExecutionResponse, ExplorerInspectRequest, ExplorerInspectResponse, ExplorerRequest,
+            ExplorerResponse, ExportBundle, LockState, OperationManifestRequest,
+            OperationManifestResponse, OperationPlanRequest, OperationPlanResponse,
+            PermissionInspectionRequest, PermissionInspectionResponse, QueryExecutionNotice,
+            QueryHistoryEntry, QueryTabState, ResolvedConnectionProfile, ResolvedEnvironment,
+            ResultPageRequest, ResultPageResponse, SavedWorkItem, StructureRequest,
+            StructureResponse, UiState, UpdateUiStateRequest, UserFacingError, WorkspaceSnapshot,
         },
     },
-    persistence,
-    security::{self, KeyringSecretStore, SecretStore},
+    persistence, security,
 };
 
 pub struct ManagedAppState {
@@ -35,14 +40,20 @@ impl ManagedAppState {
             .ok()
             .flatten()
             .map(migrate_snapshot)
-            .unwrap_or_else(seed_snapshot);
+            .unwrap_or_else(blank_workspace_snapshot);
         let managed = Self { app, snapshot };
         let _ = persistence::save_snapshot(&managed.app, &sanitize_snapshot(&managed.snapshot));
         managed
     }
 
     pub fn health(&self) -> AppHealth {
-        AppHealth::desktop("keyring")
+        let secret_storage = if security::using_file_secret_store() {
+            "file"
+        } else {
+            "keyring"
+        };
+
+        AppHealth::desktop(secret_storage)
     }
 
     pub fn diagnostics(&self) -> DiagnosticsReport {
@@ -84,6 +95,19 @@ impl ManagedAppState {
         resolve_environment(&self.snapshot.environments, environment_id)
     }
 
+    fn next_query_tab_title(&self, connection: &ConnectionProfile) -> String {
+        let (prefix, extension) = query_tab_title_parts(connection);
+        let mut index = 1;
+        let mut title = format!("{prefix}_{index}.{extension}");
+
+        while self.snapshot.tabs.iter().any(|tab| tab.title == title) {
+            index += 1;
+            title = format!("{prefix}_{index}.{extension}");
+        }
+
+        title
+    }
+
     pub fn bootstrap_payload(&self) -> BootstrapPayload {
         BootstrapPayload {
             health: self.health(),
@@ -119,14 +143,23 @@ impl ManagedAppState {
             .find(|item| item.id == connection_id)
             .cloned()
             .ok_or_else(|| CommandError::new("connection-missing", "Connection was not found."))?;
-        let tab = self
+        let tab = match self
             .snapshot
             .tabs
             .iter()
             .find(|item| item.connection_id == connection.id)
             .cloned()
-            .ok_or_else(|| CommandError::new("tab-missing", "No tab exists for the connection."))?;
-        self.snapshot.ui.active_connection_id = connection.id;
+        {
+            Some(tab) => tab,
+            None => {
+                let title = self.next_query_tab_title(&connection);
+                let tab = build_query_tab(&connection, true, title);
+                self.snapshot.tabs.push(tab.clone());
+                tab
+            }
+        };
+
+        self.snapshot.ui.active_connection_id = tab.connection_id;
         self.snapshot.ui.active_environment_id = tab.environment_id;
         self.snapshot.ui.active_tab_id = tab.id;
         self.snapshot.updated_at = timestamp_now();
@@ -150,6 +183,44 @@ impl ManagedAppState {
         Ok(self.bootstrap_payload())
     }
 
+    pub fn set_tab_environment(
+        &mut self,
+        tab_id: &str,
+        environment_id: &str,
+    ) -> Result<BootstrapPayload, CommandError> {
+        let environment_exists = self
+            .snapshot
+            .environments
+            .iter()
+            .any(|item| item.id == environment_id);
+
+        if !environment_exists {
+            return Err(CommandError::new(
+                "environment-missing",
+                "Environment was not found.",
+            ));
+        }
+
+        let tab = self
+            .snapshot
+            .tabs
+            .iter_mut()
+            .find(|item| item.id == tab_id)
+            .ok_or_else(|| CommandError::new("tab-missing", "Tab was not found."))?;
+        tab.environment_id = environment_id.into();
+        tab.status = "idle".into();
+        tab.result = None;
+        tab.error = None;
+        tab.last_run_at = None;
+
+        self.snapshot.ui.active_tab_id = tab.id.clone();
+        self.snapshot.ui.active_connection_id = tab.connection_id.clone();
+        self.snapshot.ui.active_environment_id = tab.environment_id.clone();
+        self.snapshot.updated_at = timestamp_now();
+        self.persist()?;
+        Ok(self.bootstrap_payload())
+    }
+
     pub fn upsert_connection(
         &mut self,
         profile: ConnectionProfile,
@@ -165,6 +236,64 @@ impl ManagedAppState {
             self.snapshot.connections.push(profile);
         }
 
+        self.snapshot.updated_at = timestamp_now();
+        self.persist()?;
+        Ok(self.bootstrap_payload())
+    }
+
+    pub fn delete_connection(
+        &mut self,
+        connection_id: &str,
+    ) -> Result<BootstrapPayload, CommandError> {
+        self.ensure_unlocked()?;
+
+        let deleted = self
+            .snapshot
+            .connections
+            .iter()
+            .any(|connection| connection.id == connection_id);
+
+        if !deleted {
+            return Err(CommandError::new(
+                "connection-missing",
+                "Connection was not found.",
+            ));
+        }
+
+        self.snapshot
+            .connections
+            .retain(|connection| connection.id != connection_id);
+        self.snapshot
+            .tabs
+            .retain(|tab| tab.connection_id != connection_id);
+
+        if self.snapshot.tabs.is_empty() {
+            if let Some(connection) = self.snapshot.connections.first().cloned() {
+                let title = self.next_query_tab_title(&connection);
+                self.snapshot
+                    .tabs
+                    .push(build_query_tab(&connection, false, title));
+            }
+        }
+
+        if let Some(active_tab) = self
+            .snapshot
+            .tabs
+            .iter()
+            .find(|tab| tab.id == self.snapshot.ui.active_tab_id)
+            .cloned()
+            .or_else(|| self.snapshot.tabs.first().cloned())
+        {
+            self.snapshot.ui.active_connection_id = active_tab.connection_id;
+            self.snapshot.ui.active_environment_id = active_tab.environment_id;
+            self.snapshot.ui.active_tab_id = active_tab.id;
+        } else {
+            self.snapshot.ui.active_connection_id = String::new();
+            self.snapshot.ui.active_environment_id = String::new();
+            self.snapshot.ui.active_tab_id = String::new();
+            self.snapshot.ui.bottom_panel_visible = false;
+            self.snapshot.ui.right_drawer = "none".into();
+        }
         self.snapshot.updated_at = timestamp_now();
         self.persist()?;
         Ok(self.bootstrap_payload())
@@ -201,44 +330,95 @@ impl ManagedAppState {
             .find(|item| item.id == connection_id)
             .cloned()
             .ok_or_else(|| CommandError::new("connection-missing", "Connection was not found."))?;
-        let tab = QueryTabState {
-            id: generate_id("tab"),
-            title: format!("{} scratch", connection.name),
-            connection_id: connection.id.clone(),
-            environment_id: connection
-                .environment_ids
-                .first()
-                .cloned()
-                .unwrap_or_else(|| "env-dev".into()),
-            family: connection.family.clone(),
-            language: if connection.family == "document" {
-                "mongodb".into()
-            } else if connection.family == "keyvalue" {
-                "redis".into()
-            } else {
-                "sql".into()
-            },
-            pinned: None,
-            saved_query_id: None,
-            editor_label: if connection.family == "document" {
-                "Document query".into()
-            } else if connection.family == "keyvalue" {
-                "Redis console".into()
-            } else {
-                "SQL editor".into()
-            },
-            query_text: default_query_text(&connection),
-            status: "idle".into(),
-            dirty: true,
-            last_run_at: None,
-            result: None,
-            history: Vec::new(),
-            error: None,
-        };
+        let title = self.next_query_tab_title(&connection);
+        let tab = build_query_tab(&connection, true, title);
         self.snapshot.tabs.push(tab.clone());
         self.snapshot.ui.active_connection_id = tab.connection_id;
         self.snapshot.ui.active_environment_id = tab.environment_id;
         self.snapshot.ui.active_tab_id = tab.id;
+        self.snapshot.updated_at = timestamp_now();
+        self.persist()?;
+        Ok(self.bootstrap_payload())
+    }
+
+    pub fn close_query_tab(&mut self, tab_id: &str) -> Result<BootstrapPayload, CommandError> {
+        let tab_index = self
+            .snapshot
+            .tabs
+            .iter()
+            .position(|item| item.id == tab_id)
+            .ok_or_else(|| CommandError::new("tab-missing", "Tab was not found."))?;
+        let closed_tab = self.snapshot.tabs.remove(tab_index);
+
+        archive_closed_tab(&mut self.snapshot, closed_tab.clone(), "user");
+
+        if let Some(active_tab) = self
+            .snapshot
+            .tabs
+            .get(tab_index)
+            .cloned()
+            .or_else(|| {
+                tab_index
+                    .checked_sub(1)
+                    .and_then(|index| self.snapshot.tabs.get(index).cloned())
+            })
+            .or_else(|| self.snapshot.tabs.first().cloned())
+        {
+            self.snapshot.ui.active_tab_id = active_tab.id;
+            self.snapshot.ui.active_connection_id = active_tab.connection_id;
+            self.snapshot.ui.active_environment_id = active_tab.environment_id;
+        } else {
+            let fallback_connection = self
+                .snapshot
+                .connections
+                .iter()
+                .find(|connection| connection.id == closed_tab.connection_id)
+                .cloned()
+                .or_else(|| self.snapshot.connections.first().cloned());
+            self.snapshot.ui.active_tab_id = String::new();
+            self.snapshot.ui.active_connection_id = fallback_connection
+                .as_ref()
+                .map(|connection| connection.id.clone())
+                .unwrap_or_default();
+            self.snapshot.ui.active_environment_id = if closed_tab.environment_id.is_empty() {
+                fallback_connection
+                    .and_then(|connection| connection.environment_ids.first().cloned())
+                    .unwrap_or_default()
+            } else {
+                closed_tab.environment_id
+            };
+            self.snapshot.ui.bottom_panel_visible = false;
+        }
+
+        self.snapshot.updated_at = timestamp_now();
+        self.persist()?;
+        Ok(self.bootstrap_payload())
+    }
+
+    pub fn reopen_closed_query_tab(
+        &mut self,
+        closed_tab_id: &str,
+    ) -> Result<BootstrapPayload, CommandError> {
+        let closed_tab_index = self
+            .snapshot
+            .closed_tabs
+            .iter()
+            .position(|item| item.tab.id == closed_tab_id)
+            .ok_or_else(|| CommandError::new("closed-tab-missing", "Closed tab was not found."))?;
+        let closed_tab = self.snapshot.closed_tabs.remove(closed_tab_index);
+        let mut tab = closed_tab.tab;
+
+        tab.id = generate_id("tab");
+        tab.result = None;
+
+        if tab.status == "running" || tab.status == "queued" {
+            tab.status = "idle".into();
+        }
+
+        self.snapshot.tabs.push(tab.clone());
+        self.snapshot.ui.active_tab_id = tab.id;
+        self.snapshot.ui.active_connection_id = tab.connection_id;
+        self.snapshot.ui.active_environment_id = tab.environment_id;
         self.snapshot.updated_at = timestamp_now();
         self.persist()?;
         Ok(self.bootstrap_payload())
@@ -266,22 +446,97 @@ impl ManagedAppState {
         Ok(self.bootstrap_payload())
     }
 
+    pub fn rename_query_tab(
+        &mut self,
+        tab_id: &str,
+        title: &str,
+    ) -> Result<BootstrapPayload, CommandError> {
+        let tab = self
+            .snapshot
+            .tabs
+            .iter_mut()
+            .find(|item| item.id == tab_id)
+            .ok_or_else(|| CommandError::new("tab-missing", "Tab was not found."))?;
+        let title = normalize_tab_title(title, &tab.title);
+
+        tab.title = title;
+        if tab.saved_query_id.is_some() {
+            tab.dirty = true;
+        }
+
+        self.snapshot.updated_at = timestamp_now();
+        self.persist()?;
+        Ok(self.bootstrap_payload())
+    }
+
+    pub fn save_query_tab(
+        &mut self,
+        tab_id: &str,
+        mut item: SavedWorkItem,
+    ) -> Result<BootstrapPayload, CommandError> {
+        self.ensure_unlocked()?;
+
+        let tab_index = self
+            .snapshot
+            .tabs
+            .iter()
+            .position(|tab| tab.id == tab_id)
+            .ok_or_else(|| CommandError::new("tab-missing", "Tab was not found."))?;
+
+        if item.id.trim().is_empty() {
+            item.id = generate_id("saved");
+        }
+
+        if item.name.trim().is_empty() {
+            item.name = self.snapshot.tabs[tab_index].title.clone();
+        }
+
+        item.updated_at = timestamp_now();
+        let saved_work_id = item.id.clone();
+        let saved_query_name = item.name.clone();
+        let saved_query_text = item.query_text.clone();
+
+        upsert_saved_work_item(&mut self.snapshot.saved_work, item);
+
+        let tab = &mut self.snapshot.tabs[tab_index];
+        tab.saved_query_id = Some(saved_work_id);
+        tab.title = saved_query_name;
+        if let Some(query_text) = saved_query_text {
+            tab.query_text = query_text;
+        }
+        tab.dirty = false;
+        tab.result = None;
+        tab.error = None;
+        tab.status = "idle".into();
+
+        self.snapshot.updated_at = timestamp_now();
+        self.persist()?;
+        Ok(self.bootstrap_payload())
+    }
+
     pub fn upsert_saved_work(
         &mut self,
         mut item: SavedWorkItem,
     ) -> Result<BootstrapPayload, CommandError> {
         self.ensure_unlocked()?;
         item.updated_at = timestamp_now();
+        let saved_work_id = item.id.clone();
+        let saved_query_name = item.name.clone();
+        let saved_query_text = item.query_text.clone();
 
-        if let Some(index) = self
-            .snapshot
-            .saved_work
-            .iter()
-            .position(|existing| existing.id == item.id)
-        {
-            self.snapshot.saved_work[index] = item;
-        } else {
-            self.snapshot.saved_work.push(item);
+        upsert_saved_work_item(&mut self.snapshot.saved_work, item);
+
+        for tab in &mut self.snapshot.tabs {
+            if tab.saved_query_id.as_deref() == Some(saved_work_id.as_str()) {
+                if let Some(query_text) = &saved_query_text {
+                    tab.query_text = query_text.clone();
+                }
+                tab.title = saved_query_name.clone();
+                tab.dirty = false;
+                tab.result = None;
+                tab.error = None;
+                tab.status = "idle".into();
+            }
         }
 
         self.snapshot.updated_at = timestamp_now();
@@ -412,10 +667,9 @@ impl ManagedAppState {
         environment_id: &str,
     ) -> Result<(ResolvedConnectionProfile, ResolvedEnvironment, Vec<String>), CommandError> {
         let resolved_environment = self.resolve_environment(environment_id);
-        let store = KeyringSecretStore;
         let interpolate = |value: &str| interpolate_value(value, &resolved_environment.variables);
         let password = match &profile.auth.secret_ref {
-            Some(secret_ref) => store.resolve_secret(secret_ref).ok(),
+            Some(secret_ref) => security::resolve_secret_value(secret_ref).ok(),
             None => None,
         };
 
@@ -493,6 +747,99 @@ impl ManagedAppState {
         let (resolved, _, _) =
             self.resolve_connection_profile(&profile, &request.environment_id)?;
         adapters::inspect_explorer_node(&resolved, &request).await
+    }
+
+    pub async fn load_structure_map(
+        &self,
+        request: StructureRequest,
+    ) -> Result<StructureResponse, CommandError> {
+        self.ensure_unlocked()?;
+        let profile = self.connection_by_id(&request.connection_id)?;
+        let (resolved, _, _) =
+            self.resolve_connection_profile(&profile, &request.environment_id)?;
+        adapters::load_structure_map(&resolved, &request).await
+    }
+
+    pub async fn list_operation_manifests(
+        &self,
+        request: OperationManifestRequest,
+    ) -> Result<OperationManifestResponse, CommandError> {
+        self.ensure_unlocked()?;
+        let profile = self.connection_by_id(&request.connection_id)?;
+        let (resolved, _, _) =
+            self.resolve_connection_profile(&profile, &request.environment_id)?;
+        let operations = adapters::operation_manifests(&resolved)?;
+
+        Ok(OperationManifestResponse {
+            connection_id: request.connection_id,
+            environment_id: request.environment_id,
+            engine: resolved.engine,
+            operations,
+        })
+    }
+
+    pub async fn plan_operation(
+        &self,
+        request: OperationPlanRequest,
+    ) -> Result<OperationPlanResponse, CommandError> {
+        self.ensure_unlocked()?;
+        let profile = self.connection_by_id(&request.connection_id)?;
+        let (resolved, _, _) =
+            self.resolve_connection_profile(&profile, &request.environment_id)?;
+        let parameters = request.parameters.as_ref().map(|items| {
+            items
+                .iter()
+                .map(|(key, value)| (key.clone(), value.clone()))
+                .collect::<BTreeMap<_, _>>()
+        });
+        let plan = adapters::plan_operation(
+            &resolved,
+            &request.operation_id,
+            request.object_name.as_deref(),
+            parameters.as_ref(),
+        )
+        .await?;
+
+        Ok(OperationPlanResponse {
+            connection_id: request.connection_id,
+            environment_id: request.environment_id,
+            plan,
+        })
+    }
+
+    pub async fn inspect_permissions(
+        &self,
+        request: PermissionInspectionRequest,
+    ) -> Result<PermissionInspectionResponse, CommandError> {
+        self.ensure_unlocked()?;
+        let profile = self.connection_by_id(&request.connection_id)?;
+        let (resolved, _, _) =
+            self.resolve_connection_profile(&profile, &request.environment_id)?;
+        let inspection = adapters::inspect_permissions(&resolved).await?;
+
+        Ok(PermissionInspectionResponse {
+            connection_id: request.connection_id,
+            environment_id: request.environment_id,
+            inspection,
+        })
+    }
+
+    pub async fn collect_adapter_diagnostics(
+        &self,
+        request: AdapterDiagnosticsRequest,
+    ) -> Result<AdapterDiagnosticsResponse, CommandError> {
+        self.ensure_unlocked()?;
+        let profile = self.connection_by_id(&request.connection_id)?;
+        let (resolved, _, _) =
+            self.resolve_connection_profile(&profile, &request.environment_id)?;
+        let diagnostics =
+            adapters::collect_diagnostics(&resolved, request.scope.as_deref()).await?;
+
+        Ok(AdapterDiagnosticsResponse {
+            connection_id: request.connection_id,
+            environment_id: request.environment_id,
+            diagnostics,
+        })
     }
 
     pub async fn execute_query(
@@ -678,6 +1025,17 @@ impl ManagedAppState {
         adapters::cancel(&resolved, &request).await
     }
 
+    pub async fn fetch_result_page(
+        &self,
+        request: ResultPageRequest,
+    ) -> Result<ResultPageResponse, CommandError> {
+        self.ensure_unlocked()?;
+        let profile = self.connection_by_id(&request.connection_id)?;
+        let (resolved, _, _) =
+            self.resolve_connection_profile(&profile, &request.environment_id)?;
+        adapters::fetch_result_page(&resolved, &request).await
+    }
+
     pub fn set_theme(&mut self, theme: &str) -> Result<BootstrapPayload, CommandError> {
         self.snapshot.preferences.theme = theme.into();
         self.snapshot.updated_at = timestamp_now();
@@ -689,6 +1047,18 @@ impl ManagedAppState {
         &mut self,
         patch: UpdateUiStateRequest,
     ) -> Result<BootstrapPayload, CommandError> {
+        if let Some(active_environment_id) = patch.active_environment_id {
+            if active_environment_id.is_empty()
+                || self
+                    .snapshot
+                    .environments
+                    .iter()
+                    .any(|item| item.id == active_environment_id)
+            {
+                self.snapshot.ui.active_environment_id = active_environment_id;
+            }
+        }
+
         if let Some(active_activity) = patch.active_activity.filter(|value| is_activity(value)) {
             self.snapshot.ui.active_activity = active_activity;
         }
@@ -704,8 +1074,16 @@ impl ManagedAppState {
             self.snapshot.ui.active_sidebar_pane = active_sidebar_pane;
         }
 
+        if let Some(sidebar_width) = patch.sidebar_width {
+            self.snapshot.ui.sidebar_width = clamp_sidebar_width(sidebar_width);
+        }
+
         if let Some(explorer_filter) = patch.explorer_filter {
             self.snapshot.ui.explorer_filter = explorer_filter;
+        }
+
+        if let Some(explorer_view) = patch.explorer_view.filter(|value| is_explorer_view(value)) {
+            self.snapshot.ui.explorer_view = explorer_view;
         }
 
         if let Some(bottom_panel_visible) = patch.bottom_panel_visible {
@@ -725,6 +1103,10 @@ impl ManagedAppState {
 
         if let Some(right_drawer) = patch.right_drawer.filter(|value| is_right_drawer(value)) {
             self.snapshot.ui.right_drawer = right_drawer;
+        }
+
+        if let Some(right_drawer_width) = patch.right_drawer_width {
+            self.snapshot.ui.right_drawer_width = clamp_right_drawer_width(right_drawer_width);
         }
 
         self.snapshot.updated_at = timestamp_now();
@@ -775,7 +1157,29 @@ fn sanitize_snapshot(snapshot: &WorkspaceSnapshot) -> WorkspaceSnapshot {
         tab.result = None;
     }
 
+    for closed_tab in &mut sanitized.closed_tabs {
+        closed_tab.tab.result = None;
+    }
+
     sanitized
+}
+
+fn archive_closed_tab(snapshot: &mut WorkspaceSnapshot, mut tab: QueryTabState, reason: &str) {
+    const MAX_CLOSED_TABS: usize = 25;
+
+    tab.result = None;
+    snapshot
+        .closed_tabs
+        .retain(|closed_tab| closed_tab.tab.id != tab.id);
+    snapshot.closed_tabs.insert(
+        0,
+        ClosedQueryTabSnapshot {
+            tab,
+            closed_at: timestamp_now(),
+            close_reason: reason.into(),
+        },
+    );
+    snapshot.closed_tabs.truncate(MAX_CLOSED_TABS);
 }
 
 fn interpolate_value(value: &str, variables: &HashMap<String, String>) -> String {
@@ -813,26 +1217,120 @@ fn build_resolution_warnings(
 }
 
 fn default_query_text(connection: &ConnectionProfile) -> String {
-    match connection.family.as_str() {
-        "document" => "{\n  \"collection\": \"products\",\n  \"pipeline\": [\n    { \"$match\": {} },\n    { \"$limit\": 50 }\n  ]\n}".to_string(),
-        "keyvalue" => "SCAN 0 MATCH session:* COUNT 25".into(),
+    match connection.engine.as_str() {
+        "mongodb" | "litedb" => "{\n  \"collection\": \"products\",\n  \"filter\": {},\n  \"limit\": 50\n}".into(),
+        "dynamodb" => "{\n  \"table\": \"Orders\",\n  \"keyCondition\": \"pk = :pk\",\n  \"values\": { \":pk\": \"CUSTOMER#123\" },\n  \"limit\": 25\n}".into(),
+        "cosmosdb" => "select top 50 * from c".into(),
+        "redis" | "valkey" => "SCAN 0 MATCH session:* COUNT 25".into(),
+        "memcached" => "stats".into(),
+        "cassandra" => "select * from keyspace.table limit 25;".into(),
+        "neo4j" => "MATCH (n) RETURN n LIMIT 25".into(),
+        "neptune" | "janusgraph" => "g.V().limit(25)".into(),
+        "arango" => "FOR doc IN collection LIMIT 25 RETURN doc".into(),
+        "influxdb" => "SELECT * FROM measurement LIMIT 25".into(),
+        "prometheus" => "up".into(),
+        "opentsdb" => "{\n  \"start\": \"1h-ago\",\n  \"queries\": [\n    { \"metric\": \"sys.cpu.user\", \"aggregator\": \"avg\" }\n  ]\n}".into(),
+        "elasticsearch" | "opensearch" => "{\n  \"query\": { \"match_all\": {} },\n  \"size\": 25\n}".into(),
         _ => "select 1;".into(),
     }
 }
 
 fn language_for_connection(connection: &ConnectionProfile) -> String {
-    match connection.family.as_str() {
-        "document" => "mongodb".into(),
-        "keyvalue" => "redis".into(),
+    match connection.engine.as_str() {
+        "mongodb" => "mongodb".into(),
+        "redis" | "valkey" => "redis".into(),
+        "cassandra" => "cql".into(),
+        "neo4j" => "cypher".into(),
+        "neptune" | "janusgraph" => "gremlin".into(),
+        "arango" => "aql".into(),
+        "prometheus" => "promql".into(),
+        "influxdb" => "influxql".into(),
+        "opentsdb" => "opentsdb".into(),
+        "elasticsearch" | "opensearch" => "query-dsl".into(),
+        "bigquery" => "google-sql".into(),
+        "snowflake" => "snowflake-sql".into(),
+        "clickhouse" => "clickhouse-sql".into(),
+        "dynamodb" | "litedb" => "json".into(),
         _ => "sql".into(),
     }
 }
 
 fn editor_label_for_connection(connection: &ConnectionProfile) -> String {
-    match connection.family.as_str() {
-        "document" => "Document query".into(),
-        "keyvalue" => "Redis console".into(),
+    match language_for_connection(connection).as_str() {
+        "mongodb" | "json" => "Document query".into(),
+        "redis" => {
+            if connection.engine == "valkey" {
+                "Valkey console".into()
+            } else {
+                "Redis console".into()
+            }
+        }
+        "cypher" => "Cypher editor".into(),
+        "gremlin" => "Gremlin editor".into(),
+        "sparql" => "SPARQL editor".into(),
+        "aql" => "AQL editor".into(),
+        "promql" => "PromQL editor".into(),
+        "influxql" | "flux" | "opentsdb" => "Time-series query".into(),
+        "query-dsl" => "Search DSL editor".into(),
+        "google-sql" => "GoogleSQL editor".into(),
+        "snowflake-sql" => "Snowflake SQL editor".into(),
+        "clickhouse-sql" => "ClickHouse SQL editor".into(),
+        "cql" => "CQL editor".into(),
         _ => "SQL editor".into(),
+    }
+}
+
+fn query_tab_title_parts(connection: &ConnectionProfile) -> (&'static str, &'static str) {
+    match connection.family.as_str() {
+        "document" => ("MongoQuery", "json"),
+        "keyvalue" => ("RedisConsole", "redis"),
+        _ => ("SQLQuery", "sql"),
+    }
+}
+
+fn normalize_tab_title(title: &str, fallback: &str) -> String {
+    let trimmed = title.trim();
+
+    if trimmed.is_empty() {
+        fallback.into()
+    } else {
+        trimmed.chars().take(80).collect()
+    }
+}
+
+fn upsert_saved_work_item(saved_work: &mut Vec<SavedWorkItem>, item: SavedWorkItem) {
+    if let Some(index) = saved_work
+        .iter()
+        .position(|existing| existing.id == item.id)
+    {
+        saved_work[index] = item;
+    } else {
+        saved_work.push(item);
+    }
+}
+
+fn build_query_tab(connection: &ConnectionProfile, dirty: bool, title: String) -> QueryTabState {
+    QueryTabState {
+        id: generate_id("tab"),
+        title,
+        connection_id: connection.id.clone(),
+        environment_id: connection
+            .environment_ids
+            .first()
+            .cloned()
+            .unwrap_or_else(|| "env-dev".into()),
+        family: connection.family.clone(),
+        language: language_for_connection(connection),
+        pinned: None,
+        saved_query_id: None,
+        editor_label: editor_label_for_connection(connection),
+        query_text: default_query_text(connection),
+        status: "idle".into(),
+        dirty,
+        last_run_at: None,
+        result: None,
+        history: Vec::new(),
+        error: None,
     }
 }
 
@@ -859,16 +1357,23 @@ pub fn generate_id(prefix: &str) -> String {
 fn is_activity(value: &str) -> bool {
     matches!(
         value,
-        "connections" | "explorer" | "saved-work" | "search" | "settings"
+        "connections" | "environments" | "explorer" | "saved-work" | "search" | "settings"
     )
 }
 
 fn is_sidebar_pane(value: &str) -> bool {
-    matches!(value, "connections" | "explorer" | "saved-work" | "search")
+    matches!(
+        value,
+        "connections" | "environments" | "explorer" | "saved-work" | "search"
+    )
 }
 
 fn is_bottom_panel_tab(value: &str) -> bool {
     matches!(value, "results" | "messages" | "details")
+}
+
+fn is_explorer_view(value: &str) -> bool {
+    matches!(value, "tree" | "structure")
 }
 
 fn is_right_drawer(value: &str) -> bool {
@@ -876,7 +1381,15 @@ fn is_right_drawer(value: &str) -> bool {
 }
 
 fn clamp_bottom_panel_height(value: u32) -> u32 {
-    value.clamp(180, 420)
+    value.clamp(120, 900)
+}
+
+fn clamp_sidebar_width(value: u32) -> u32 {
+    value.clamp(220, 420)
+}
+
+fn clamp_right_drawer_width(value: u32) -> u32 {
+    value.clamp(320, 560)
 }
 
 fn normalize_ui_state(snapshot: &WorkspaceSnapshot) -> UiState {
@@ -932,16 +1445,23 @@ fn normalize_ui_state(snapshot: &WorkspaceSnapshot) -> UiState {
     } else {
         active_activity.clone()
     };
+    let has_active_tab = active_tab.is_some();
 
     UiState {
         active_connection_id: active_connection.map(|item| item.id).unwrap_or_default(),
         active_environment_id: active_environment.map(|item| item.id).unwrap_or_default(),
         active_tab_id: active_tab.map(|item| item.id).unwrap_or_default(),
         explorer_filter: snapshot.ui.explorer_filter.clone(),
+        explorer_view: if is_explorer_view(&snapshot.ui.explorer_view) {
+            snapshot.ui.explorer_view.clone()
+        } else {
+            "structure".into()
+        },
         active_activity,
         sidebar_collapsed: snapshot.ui.sidebar_collapsed,
         active_sidebar_pane,
-        bottom_panel_visible: snapshot.ui.bottom_panel_visible,
+        sidebar_width: clamp_sidebar_width(snapshot.ui.sidebar_width),
+        bottom_panel_visible: snapshot.ui.bottom_panel_visible && has_active_tab,
         active_bottom_panel_tab: if is_bottom_panel_tab(&snapshot.ui.active_bottom_panel_tab) {
             snapshot.ui.active_bottom_panel_tab.clone()
         } else {
@@ -953,31 +1473,90 @@ fn normalize_ui_state(snapshot: &WorkspaceSnapshot) -> UiState {
         } else {
             "none".into()
         },
+        right_drawer_width: clamp_right_drawer_width(snapshot.ui.right_drawer_width),
     }
 }
 
 fn migrate_snapshot(mut snapshot: WorkspaceSnapshot) -> WorkspaceSnapshot {
     snapshot.schema_version = persistence::SCHEMA_VERSION;
     snapshot.adapter_manifests = adapters::manifests();
-
-    if snapshot.explorer_nodes.is_empty() {
-        snapshot.explorer_nodes = seed_snapshot().explorer_nodes;
-    }
+    strip_demo_records(&mut snapshot);
 
     for tab in &mut snapshot.tabs {
         tab.result = None;
     }
 
-    if snapshot.connections.is_empty()
-        || snapshot.environments.is_empty()
-        || snapshot.tabs.is_empty()
-    {
-        return seed_snapshot();
+    for closed_tab in &mut snapshot.closed_tabs {
+        closed_tab.tab.result = None;
     }
 
     snapshot.ui = normalize_ui_state(&snapshot);
 
     snapshot
+}
+
+fn strip_demo_records(snapshot: &mut WorkspaceSnapshot) {
+    const DEMO_CONNECTIONS: &[&str] = &[
+        "conn-analytics",
+        "conn-orders",
+        "conn-catalog",
+        "conn-commerce",
+        "conn-local-sqlite",
+        "conn-cache",
+    ];
+    const DEMO_TABS: &[&str] = &[
+        "tab-sql-ops",
+        "tab-orders-audit",
+        "tab-mongo-catalog",
+        "tab-commerce-mysql",
+        "tab-local-sqlite",
+        "tab-redis-session",
+    ];
+    const DEMO_SAVED_WORK: &[&str] = &["saved-locks", "saved-hotkeys", "saved-catalog"];
+    const DEMO_ENVIRONMENTS: &[&str] = &["env-dev", "env-uat", "env-prod"];
+
+    snapshot
+        .connections
+        .retain(|connection| !DEMO_CONNECTIONS.contains(&connection.id.as_str()));
+    snapshot
+        .tabs
+        .retain(|tab| !DEMO_TABS.contains(&tab.id.as_str()));
+    snapshot
+        .closed_tabs
+        .retain(|tab| !DEMO_TABS.contains(&tab.tab.id.as_str()));
+    snapshot
+        .saved_work
+        .retain(|item| !DEMO_SAVED_WORK.contains(&item.id.as_str()));
+    snapshot
+        .explorer_nodes
+        .retain(|node| !node.id.starts_with("explorer-"));
+    snapshot.guardrails.clear();
+
+    let mut referenced_environments: Vec<String> = snapshot
+        .connections
+        .iter()
+        .flat_map(|connection| connection.environment_ids.clone())
+        .collect();
+    referenced_environments.extend(snapshot.tabs.iter().map(|tab| tab.environment_id.clone()));
+    referenced_environments.extend(
+        snapshot
+            .closed_tabs
+            .iter()
+            .map(|tab| tab.tab.environment_id.clone()),
+    );
+    referenced_environments.extend(
+        snapshot
+            .saved_work
+            .iter()
+            .filter_map(|item| item.environment_id.clone()),
+    );
+
+    snapshot.environments.retain(|environment| {
+        !DEMO_ENVIRONMENTS.contains(&environment.id.as_str())
+            || referenced_environments
+                .iter()
+                .any(|environment_id| environment_id == &environment.id)
+    });
 }
 
 pub fn resolve_environment(
@@ -1067,457 +1646,17 @@ pub fn resolve_environment(
     }
 }
 
-pub fn seed_snapshot() -> WorkspaceSnapshot {
-    let created_at = "2026-04-23T18:30:00.000Z".to_string();
-    let connections = vec![
-        ConnectionProfile {
-            id: "conn-analytics".into(),
-            name: "Analytics Postgres".into(),
-            engine: "postgresql".into(),
-            family: "sql".into(),
-            host: "${DB_HOST}".into(),
-            port: Some(5432),
-            database: Some("${DB_NAME}".into()),
-            connection_string: None,
-            environment_ids: vec!["env-dev".into(), "env-prod".into()],
-            tags: vec!["analytics".into(), "primary".into()],
-            favorite: true,
-            read_only: false,
-            icon: "PG".into(),
-            color: None,
-            group: Some("Platform".into()),
-            notes: None,
-            auth: ConnectionAuth {
-                username: Some("${USERNAME}".into()),
-                auth_mechanism: None,
-                ssl_mode: Some("require".into()),
-                secret_ref: Some(SecretRef {
-                    id: "secret-postgres-prod".into(),
-                    provider: "os-keyring".into(),
-                    service: "Universality".into(),
-                    account: "analytics-prod".into(),
-                    label: "Analytics prod credential".into(),
-                }),
-            },
-            created_at: created_at.clone(),
-            updated_at: created_at.clone(),
-        },
-        ConnectionProfile {
-            id: "conn-orders".into(),
-            name: "Orders SQL Server".into(),
-            engine: "sqlserver".into(),
-            family: "sql".into(),
-            host: "${ORDERS_HOST}".into(),
-            port: Some(1433),
-            database: Some("orders".into()),
-            connection_string: None,
-            environment_ids: vec!["env-uat".into()],
-            tags: vec!["orders".into(), "support".into()],
-            favorite: false,
-            read_only: true,
-            icon: "MS".into(),
-            color: None,
-            group: Some("Operations".into()),
-            notes: None,
-            auth: ConnectionAuth {
-                username: Some("${USERNAME}".into()),
-                auth_mechanism: None,
-                ssl_mode: Some("require".into()),
-                secret_ref: Some(SecretRef {
-                    id: "secret-orders-uat".into(),
-                    provider: "os-keyring".into(),
-                    service: "Universality".into(),
-                    account: "orders-uat".into(),
-                    label: "Orders UAT credential".into(),
-                }),
-            },
-            created_at: created_at.clone(),
-            updated_at: created_at.clone(),
-        },
-        ConnectionProfile {
-            id: "conn-commerce".into(),
-            name: "Commerce MySQL".into(),
-            engine: "mysql".into(),
-            family: "sql".into(),
-            host: "${MYSQL_HOST}".into(),
-            port: Some(3306),
-            database: Some("commerce".into()),
-            connection_string: None,
-            environment_ids: vec!["env-dev".into()],
-            tags: vec!["commerce".into(), "mysql".into()],
-            favorite: false,
-            read_only: false,
-            icon: "MY".into(),
-            color: None,
-            group: Some("Applications".into()),
-            notes: None,
-            auth: ConnectionAuth {
-                username: Some("${USERNAME}".into()),
-                auth_mechanism: None,
-                ssl_mode: Some("prefer".into()),
-                secret_ref: Some(SecretRef {
-                    id: "secret-mysql-dev".into(),
-                    provider: "os-keyring".into(),
-                    service: "Universality".into(),
-                    account: "commerce-dev".into(),
-                    label: "Commerce dev credential".into(),
-                }),
-            },
-            created_at: created_at.clone(),
-            updated_at: created_at.clone(),
-        },
-        ConnectionProfile {
-            id: "conn-local-sqlite".into(),
-            name: "Local SQLite".into(),
-            engine: "sqlite".into(),
-            family: "sql".into(),
-            host: "${SQLITE_PATH}".into(),
-            port: None,
-            database: Some("${SQLITE_PATH}".into()),
-            connection_string: None,
-            environment_ids: vec!["env-dev".into()],
-            tags: vec!["local".into(), "sqlite".into()],
-            favorite: true,
-            read_only: false,
-            icon: "SQ".into(),
-            color: None,
-            group: Some("Local".into()),
-            notes: None,
-            auth: ConnectionAuth::default(),
-            created_at: created_at.clone(),
-            updated_at: created_at.clone(),
-        },
-        ConnectionProfile {
-            id: "conn-catalog".into(),
-            name: "Catalog Mongo".into(),
-            engine: "mongodb".into(),
-            family: "document".into(),
-            host: "${MONGO_HOST}".into(),
-            port: Some(27017),
-            database: Some("catalog".into()),
-            connection_string: None,
-            environment_ids: vec!["env-dev".into()],
-            tags: vec!["catalog".into(), "documents".into()],
-            favorite: true,
-            read_only: false,
-            icon: "MG".into(),
-            color: None,
-            group: Some("Applications".into()),
-            notes: None,
-            auth: ConnectionAuth {
-                username: Some("${USERNAME}".into()),
-                auth_mechanism: Some("SCRAM-SHA-256".into()),
-                ssl_mode: None,
-                secret_ref: Some(SecretRef {
-                    id: "secret-mongo-dev".into(),
-                    provider: "os-keyring".into(),
-                    service: "Universality".into(),
-                    account: "catalog-dev".into(),
-                    label: "Catalog dev credential".into(),
-                }),
-            },
-            created_at: created_at.clone(),
-            updated_at: created_at.clone(),
-        },
-        ConnectionProfile {
-            id: "conn-cache".into(),
-            name: "Session Redis".into(),
-            engine: "redis".into(),
-            family: "keyvalue".into(),
-            host: "${REDIS_HOST}".into(),
-            port: Some(6379),
-            database: Some("0".into()),
-            connection_string: None,
-            environment_ids: vec!["env-prod".into()],
-            tags: vec!["cache".into(), "sessions".into()],
-            favorite: true,
-            read_only: true,
-            icon: "RD".into(),
-            color: None,
-            group: Some("Platform".into()),
-            notes: None,
-            auth: ConnectionAuth {
-                username: Some("default".into()),
-                auth_mechanism: None,
-                ssl_mode: None,
-                secret_ref: Some(SecretRef {
-                    id: "secret-redis-prod".into(),
-                    provider: "os-keyring".into(),
-                    service: "Universality".into(),
-                    account: "redis-prod".into(),
-                    label: "Redis prod credential".into(),
-                }),
-            },
-            created_at: created_at.clone(),
-            updated_at: created_at.clone(),
-        },
-    ];
-
-    let mut dev_vars = HashMap::new();
-    dev_vars.insert("DB_HOST".into(), "analytics-dev.internal".into());
-    dev_vars.insert("DB_NAME".into(), "universality_dev".into());
-    dev_vars.insert("USERNAME".into(), "developer".into());
-    dev_vars.insert("MONGO_HOST".into(), "catalog-dev.internal".into());
-    dev_vars.insert("MYSQL_HOST".into(), "commerce-dev.internal".into());
-    dev_vars.insert(
-        "SQLITE_PATH".into(),
-        "C:\\Users\\gmont\\source\\repos\\Universality\\tests\\fixtures\\sqlite\\universality.db"
-            .into(),
-    );
-
-    let mut uat_vars = HashMap::new();
-    uat_vars.insert("ORDERS_HOST".into(), "orders-uat.internal".into());
-
-    let mut prod_vars = HashMap::new();
-    prod_vars.insert("DB_HOST".into(), "analytics-prod.internal".into());
-    prod_vars.insert("REDIS_HOST".into(), "session-prod.internal".into());
-    prod_vars.insert("PASSWORD_REF".into(), "keyring://universality/prod".into());
-
-    let environments = vec![
-        EnvironmentProfile {
-            id: "env-dev".into(),
-            label: "Dev".into(),
-            color: "#2dbf9b".into(),
-            risk: "low".into(),
-            inherits_from: None,
-            variables: dev_vars,
-            sensitive_keys: Vec::new(),
-            requires_confirmation: false,
-            safe_mode: false,
-            exportable: true,
-            created_at: created_at.clone(),
-            updated_at: created_at.clone(),
-        },
-        EnvironmentProfile {
-            id: "env-uat".into(),
-            label: "UAT".into(),
-            color: "#f3a952".into(),
-            risk: "medium".into(),
-            inherits_from: Some("env-dev".into()),
-            variables: uat_vars,
-            sensitive_keys: Vec::new(),
-            requires_confirmation: true,
-            safe_mode: true,
-            exportable: true,
-            created_at: created_at.clone(),
-            updated_at: created_at.clone(),
-        },
-        EnvironmentProfile {
-            id: "env-prod".into(),
-            label: "Prod".into(),
-            color: "#ec7b7b".into(),
-            risk: "critical".into(),
-            inherits_from: Some("env-dev".into()),
-            variables: prod_vars,
-            sensitive_keys: vec!["PASSWORD_REF".into()],
-            requires_confirmation: true,
-            safe_mode: true,
-            exportable: false,
-            created_at: created_at.clone(),
-            updated_at: created_at.clone(),
-        },
-    ];
+pub fn blank_workspace_snapshot() -> WorkspaceSnapshot {
+    let created_at = timestamp_now();
 
     WorkspaceSnapshot {
         schema_version: persistence::SCHEMA_VERSION,
-        connections,
-        environments,
-        tabs: vec![
-            QueryTabState {
-                id: "tab-sql-ops".into(),
-                title: "Ops dashboard".into(),
-                connection_id: "conn-analytics".into(),
-                environment_id: "env-prod".into(),
-                family: "sql".into(),
-                language: "sql".into(),
-                pinned: Some(true),
-                saved_query_id: None,
-                editor_label: "SQL editor".into(),
-                query_text: "select table_name, rows_estimate, last_vacuum from observability.table_health order by rows_estimate desc limit 20;".into(),
-                status: "idle".into(),
-                dirty: false,
-                last_run_at: None,
-                result: None,
-                history: Vec::new(),
-                error: None,
-            },
-            QueryTabState {
-                id: "tab-orders-audit".into(),
-                title: "Orders audit".into(),
-                connection_id: "conn-orders".into(),
-                environment_id: "env-uat".into(),
-                family: "sql".into(),
-                language: "sql".into(),
-                pinned: None,
-                saved_query_id: None,
-                editor_label: "SQL editor".into(),
-                query_text: "select top 50 order_id, status, updated_at from dbo.orders where updated_at >= dateadd(hour, -12, sysutcdatetime()) order by updated_at desc;".into(),
-                status: "idle".into(),
-                dirty: false,
-                last_run_at: None,
-                result: None,
-                history: Vec::new(),
-                error: None,
-            },
-            QueryTabState {
-                id: "tab-commerce-mysql".into(),
-                title: "Commerce inventory".into(),
-                connection_id: "conn-commerce".into(),
-                environment_id: "env-dev".into(),
-                family: "sql".into(),
-                language: "sql".into(),
-                pinned: None,
-                saved_query_id: None,
-                editor_label: "SQL editor".into(),
-                query_text: "select sku, inventory_available, updated_at from inventory_items order by updated_at desc limit 50;".into(),
-                status: "idle".into(),
-                dirty: false,
-                last_run_at: None,
-                result: None,
-                history: Vec::new(),
-                error: None,
-            },
-            QueryTabState {
-                id: "tab-local-sqlite".into(),
-                title: "SQLite scratch".into(),
-                connection_id: "conn-local-sqlite".into(),
-                environment_id: "env-dev".into(),
-                family: "sql".into(),
-                language: "sql".into(),
-                pinned: None,
-                saved_query_id: None,
-                editor_label: "SQL editor".into(),
-                query_text: "select name from sqlite_master where type = 'table' order by name;".into(),
-                status: "idle".into(),
-                dirty: false,
-                last_run_at: None,
-                result: None,
-                history: Vec::new(),
-                error: None,
-            },
-            QueryTabState {
-                id: "tab-mongo-catalog".into(),
-                title: "Catalog inventory".into(),
-                connection_id: "conn-catalog".into(),
-                environment_id: "env-dev".into(),
-                family: "document".into(),
-                language: "mongodb".into(),
-                pinned: None,
-                saved_query_id: None,
-                editor_label: "Document query".into(),
-                query_text: "{\n  \"collection\": \"products\",\n  \"pipeline\": [\n    { \"$match\": { \"channels\": \"web\" } },\n    { \"$project\": { \"sku\": 1, \"inventory\": 1, \"channels\": 1 } },\n    { \"$limit\": 50 }\n  ]\n}".into(),
-                status: "idle".into(),
-                dirty: false,
-                last_run_at: None,
-                result: None,
-                history: Vec::new(),
-                error: None,
-            },
-            QueryTabState {
-                id: "tab-redis-session".into(),
-                title: "Session inspector".into(),
-                connection_id: "conn-cache".into(),
-                environment_id: "env-prod".into(),
-                family: "keyvalue".into(),
-                language: "redis".into(),
-                pinned: None,
-                saved_query_id: None,
-                editor_label: "Redis console".into(),
-                query_text: "SCAN 0 MATCH session:* COUNT 25\nHGETALL session:9f2d7e1a\nTTL session:9f2d7e1a".into(),
-                status: "idle".into(),
-                dirty: false,
-                last_run_at: None,
-                result: None,
-                history: Vec::new(),
-                error: None,
-            },
-        ],
-        saved_work: vec![
-            SavedWorkItem {
-                id: "saved-locks".into(),
-                kind: "query".into(),
-                name: "Prod lock sweep".into(),
-                summary: "Checks blocking sessions with environment-resolved variables.".into(),
-                tags: vec!["postgresql".into(), "ops".into()],
-                updated_at: created_at.clone(),
-                folder: Some("Runbooks".into()),
-                favorite: Some(true),
-                connection_id: Some("conn-analytics".into()),
-                environment_id: Some("env-prod".into()),
-                language: Some("sql".into()),
-                query_text: Some(
-                    "select pid, usename, wait_event_type, wait_event, query from pg_stat_activity where state <> 'idle' order by query_start asc limit 100;".into(),
-                ),
-                snapshot_result_id: None,
-            },
-            SavedWorkItem {
-                id: "saved-hotkeys".into(),
-                kind: "template".into(),
-                name: "Redis hot key pack".into(),
-                summary: "Reusable prefix, TTL, and memory inspection workflow.".into(),
-                tags: vec!["redis".into(), "incident".into()],
-                updated_at: created_at.clone(),
-                folder: Some("Cache".into()),
-                favorite: None,
-                connection_id: Some("conn-cache".into()),
-                environment_id: Some("env-prod".into()),
-                language: Some("redis".into()),
-                query_text: Some("SCAN 0 MATCH session:* COUNT 50".into()),
-                snapshot_result_id: None,
-            },
-            SavedWorkItem {
-                id: "saved-catalog".into(),
-                kind: "investigation-pack".into(),
-                name: "Catalog variance".into(),
-                summary: "Saved filters, notes, and snapshots for inventory drift.".into(),
-                tags: vec!["mongodb".into(), "support".into()],
-                updated_at: created_at.clone(),
-                folder: Some("Applications".into()),
-                favorite: None,
-                connection_id: Some("conn-catalog".into()),
-                environment_id: Some("env-dev".into()),
-                language: Some("mongodb".into()),
-                query_text: Some(
-                    "{\n  \"collection\": \"products\",\n  \"filter\": { \"status\": \"active\" },\n  \"limit\": 50\n}".into(),
-                ),
-                snapshot_result_id: None,
-            },
-        ],
-        explorer_nodes: vec![
-            ExplorerNode {
-                id: "explorer-postgres-schema".into(),
-                family: "sql".into(),
-                label: "public".into(),
-                kind: "schema".into(),
-                detail: "Core application objects".into(),
-                scope: Some("schema:public".into()),
-                path: Some(vec!["Analytics Postgres".into()]),
-                query_template: Some("select table_name from information_schema.tables where table_schema = 'public';".into()),
-                expandable: Some(true),
-            },
-            ExplorerNode {
-                id: "explorer-mongo-products".into(),
-                family: "document".into(),
-                label: "products".into(),
-                kind: "collection".into(),
-                detail: "Documents, indexes, and samples".into(),
-                scope: Some("collection:products".into()),
-                path: Some(vec!["Catalog Mongo".into()]),
-                query_template: Some("{\n  \"collection\": \"products\",\n  \"filter\": {},\n  \"limit\": 50\n}".into()),
-                expandable: Some(true),
-            },
-            ExplorerNode {
-                id: "explorer-redis-sessions".into(),
-                family: "keyvalue".into(),
-                label: "session:*".into(),
-                kind: "prefix".into(),
-                detail: "Read-heavy session hashes".into(),
-                scope: Some("prefix:session:".into()),
-                path: Some(vec!["Session Redis".into()]),
-                query_template: Some("SCAN 0 MATCH session:* COUNT 50".into()),
-                expandable: Some(true),
-            },
-        ],
+        connections: Vec::new(),
+        environments: Vec::new(),
+        tabs: Vec::new(),
+        closed_tabs: Vec::new(),
+        saved_work: Vec::new(),
+        explorer_nodes: Vec::new(),
         adapter_manifests: adapters::manifests(),
         preferences: AppPreferences {
             theme: "dark".into(),
@@ -1526,29 +1665,26 @@ pub fn seed_snapshot() -> WorkspaceSnapshot {
             safe_mode_enabled: true,
             command_palette_enabled: true,
         },
-        guardrails: vec![GuardrailDecision {
-            id: None,
-            status: "confirm".into(),
-            reasons: vec!["Prod sessions require explicit confirmation before writes.".into()],
-            safe_mode_applied: true,
-            required_confirmation_text: Some("CONFIRM Prod".into()),
-        }],
+        guardrails: Vec::new(),
         lock_state: LockState {
             is_locked: false,
             locked_at: None,
         },
         ui: UiState {
-            active_connection_id: "conn-analytics".into(),
-            active_environment_id: "env-prod".into(),
-            active_tab_id: "tab-sql-ops".into(),
+            active_connection_id: String::new(),
+            active_environment_id: String::new(),
+            active_tab_id: String::new(),
             explorer_filter: String::new(),
+            explorer_view: "structure".into(),
             active_activity: "connections".into(),
             sidebar_collapsed: false,
             active_sidebar_pane: "connections".into(),
-            bottom_panel_visible: true,
+            sidebar_width: 280,
+            bottom_panel_visible: false,
             active_bottom_panel_tab: "results".into(),
             bottom_panel_height: 260,
             right_drawer: "none".into(),
+            right_drawer_width: 360,
         },
         updated_at: created_at,
     }

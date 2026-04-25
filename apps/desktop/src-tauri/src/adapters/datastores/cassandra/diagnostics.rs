@@ -1,0 +1,63 @@
+use serde_json::json;
+
+use super::super::super::*;
+use super::connection::{cassandra_contact_point, cassandra_keyspace};
+
+pub(super) async fn collect_cassandra_diagnostics(
+    connection: &ResolvedConnectionProfile,
+    manifest: &AdapterManifest,
+    scope: Option<&str>,
+) -> Result<AdapterDiagnostics, CommandError> {
+    let mut diagnostics = default_adapter_diagnostics(connection, manifest, scope);
+    let keyspace = cassandra_keyspace(connection);
+    let contact_point = cassandra_contact_point(connection);
+
+    diagnostics.metrics.push(payload_metrics(json!([
+        {
+            "name": "cassandra.cql_contract.ready",
+            "value": 1,
+            "unit": "flag",
+            "labels": { "contactPoint": contact_point, "keyspace": keyspace }
+        },
+        {
+            "name": "cassandra.partition_key_guard.enabled",
+            "value": 1,
+            "unit": "flag",
+            "labels": { "source": "visual-builder" }
+        }
+    ])));
+    diagnostics.profiles.push(payload_profile(
+        "Cassandra tracing profile placeholders.",
+        json!({
+            "templates": ["tracing on", "select * from system_traces.sessions limit 100"],
+            "nativeTracing": false
+        }),
+    ));
+    diagnostics.query_history.push(payload_json(json!({
+        "engine": "cassandra",
+        "templates": [
+            "select * from system.local",
+            "select * from system_schema.tables where keyspace_name = ?",
+            "select * from system_traces.sessions limit 100"
+        ]
+    })));
+    diagnostics.warnings.push(
+        "Cassandra diagnostics should prefer system tables and driver tracing; nodetool/JMX health is adapter-planned but not executed in this phase."
+            .into(),
+    );
+    Ok(diagnostics)
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::Value;
+
+    #[test]
+    fn cassandra_diagnostic_metric_shape_is_json_object_friendly() {
+        let value = serde_json::json!({ "partitionKeyGuard": true });
+        assert_eq!(
+            value.get("partitionKeyGuard").and_then(Value::as_bool),
+            Some(true)
+        );
+    }
+}

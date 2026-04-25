@@ -1,5 +1,4 @@
 import type {
-  AdapterManifest,
   AppHealth,
   AppPreferences,
   BootstrapPayload,
@@ -13,104 +12,10 @@ import type {
   SavedWorkItem,
   WorkspaceSnapshot,
 } from '@universality/shared-types'
-import { buildDiagnosticsReport, resolveEnvironment } from '../state/helpers'
+import { UNIVERSALITY_ADAPTER_MANIFESTS } from '@universality/shared-types'
+import { buildDiagnosticsReport, resolveEnvironment } from '../../app/state/helpers'
 
-const adapterManifests: AdapterManifest[] = [
-  {
-    id: 'adapter-postgresql',
-    engine: 'postgresql',
-    family: 'sql',
-    label: 'PostgreSQL adapter',
-    maturity: 'mvp',
-    defaultLanguage: 'sql',
-    capabilities: [
-      'supports_sql_editor',
-      'supports_schema_browser',
-      'supports_explain_plan',
-      'supports_transactions',
-      'supports_result_snapshots',
-      'supports_streaming_results',
-    ],
-  },
-  {
-    id: 'adapter-sqlserver',
-    engine: 'sqlserver',
-    family: 'sql',
-    label: 'SQL Server adapter',
-    maturity: 'mvp',
-    defaultLanguage: 'sql',
-    capabilities: [
-      'supports_sql_editor',
-      'supports_schema_browser',
-      'supports_explain_plan',
-      'supports_transactions',
-      'supports_result_snapshots',
-    ],
-  },
-  {
-    id: 'adapter-mysql',
-    engine: 'mysql',
-    family: 'sql',
-    label: 'MySQL adapter',
-    maturity: 'mvp',
-    defaultLanguage: 'sql',
-    capabilities: [
-      'supports_sql_editor',
-      'supports_schema_browser',
-      'supports_transactions',
-      'supports_result_snapshots',
-    ],
-  },
-  {
-    id: 'adapter-sqlite',
-    engine: 'sqlite',
-    family: 'sql',
-    label: 'SQLite adapter',
-    maturity: 'mvp',
-    defaultLanguage: 'sql',
-    capabilities: [
-      'supports_sql_editor',
-      'supports_schema_browser',
-      'supports_result_snapshots',
-    ],
-  },
-  {
-    id: 'adapter-mariadb',
-    engine: 'mariadb',
-    family: 'sql',
-    label: 'MariaDB adapter',
-    maturity: 'mvp',
-    defaultLanguage: 'sql',
-    capabilities: [
-      'supports_sql_editor',
-      'supports_schema_browser',
-      'supports_transactions',
-      'supports_result_snapshots',
-    ],
-  },
-  {
-    id: 'adapter-mongodb',
-    engine: 'mongodb',
-    family: 'document',
-    label: 'MongoDB adapter',
-    maturity: 'mvp',
-    defaultLanguage: 'mongodb',
-    capabilities: ['supports_document_view', 'supports_result_snapshots'],
-  },
-  {
-    id: 'adapter-redis',
-    engine: 'redis',
-    family: 'keyvalue',
-    label: 'Redis adapter',
-    maturity: 'mvp',
-    defaultLanguage: 'redis',
-    capabilities: [
-      'supports_key_browser',
-      'supports_ttl_management',
-      'supports_result_snapshots',
-    ],
-  },
-]
+const adapterManifests = UNIVERSALITY_ADAPTER_MANIFESTS
 
 const timestamp = '2026-04-23T18:30:00.000Z'
 
@@ -593,6 +498,7 @@ export function createSeedSnapshot(): WorkspaceSnapshot {
     connections,
     environments,
     tabs,
+    closedTabs: [],
     savedWork,
     explorerNodes,
     adapterManifests,
@@ -606,13 +512,16 @@ export function createSeedSnapshot(): WorkspaceSnapshot {
       activeEnvironmentId: 'env-prod',
       activeTabId: 'tab-sql-ops',
       explorerFilter: '',
+      explorerView: 'structure',
       activeActivity: 'connections',
       sidebarCollapsed: false,
       activeSidebarPane: 'connections',
+      sidebarWidth: 280,
       bottomPanelVisible: true,
       activeBottomPanelTab: 'results',
       bottomPanelHeight: 260,
       rightDrawer: 'none',
+      rightDrawerWidth: 360,
     },
     updatedAt: timestamp,
   }

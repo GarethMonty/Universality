@@ -1,0 +1,321 @@
+use serde_json::{json, Map, Value};
+
+use super::super::super::*;
+use super::connection::{
+    cosmosdb_default_database, cosmosdb_get, cosmosdb_post_query, parse_cosmosdb_json,
+};
+use super::CosmosDbAdapter;
+
+const READ_OPERATIONS: &[&str] = &[
+    "ListDatabases",
+    "ListContainers",
+    "ReadContainer",
+    "QueryDocuments",
+    "ReadDocument",
+];
+
+pub(super) async fn execute_cosmosdb_query(
+    adapter: &CosmosDbAdapter,
+    connection: &ResolvedConnectionProfile,
+    request: &ExecutionRequest,
+    notices: Vec<QueryExecutionNotice>,
+) -> Result<ExecutionResultEnvelope, CommandError> {
+    let started = Instant::now();
+    let query_text = selected_query(request).trim();
+    if query_text.is_empty() {
+        return Err(CommandError::new(
+            "cosmosdb-request-missing",
+            "No Cosmos DB SQL API request was provided.",
+        ));
+    }
+
+    let request_value = parse_request(query_text)?;
+    let operation = cosmosdb_operation(&request_value)?;
+    if !READ_OPERATIONS.contains(&operation.as_str()) {
+        return Err(CommandError::new(
+            "cosmosdb-write-preview-only",
+            format!(
+                "Cosmos DB operation `{operation}` is planned as a guarded operation preview; this adapter executes read and metadata operations only."
+            ),
+        ));
+    }
+
+    let row_limit = bounded_page_size(
+        request
+            .row_limit
+            .or(Some(adapter.execution_capabilities().default_row_limit)),
+    );
+    let response =
+        execute_read_operation(connection, &operation, &request_value, row_limit).await?;
+    let (columns, rows, documents) = normalize_cosmosdb_response(&operation, &response, row_limit);
+    let row_count = rows.len() as u32;
+    let payloads = vec![
+        payload_document(documents),
+        payload_table(columns, rows),
+        payload_json(response.clone()),
+        payload_raw(query_text.into()),
+    ];
+    let (default_renderer, renderer_modes_owned) = renderer_modes_for_payloads(&payloads);
+    let renderer_modes = renderer_modes_owned
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<&str>>();
+
+    Ok(build_result(ResultEnvelopeInput {
+        engine: &connection.engine,
+        summary: format!("Cosmos DB {operation} returned {row_count} row(s)."),
+        default_renderer: &default_renderer,
+        renderer_modes,
+        payloads,
+        notices,
+        duration_ms: duration_ms(started),
+        row_limit: Some(row_limit),
+        truncated: false,
+        explain_payload: None,
+    }))
+}
+
+async fn execute_read_operation(
+    connection: &ResolvedConnectionProfile,
+    operation: &str,
+    request: &Value,
+    row_limit: u32,
+) -> Result<Value, CommandError> {
+    let database = request
+        .get("database")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_else(|| cosmosdb_default_database(connection));
+    match operation {
+        "ListDatabases" => {
+            let response = cosmosdb_get(connection, "/dbs").await?;
+            parse_cosmosdb_json(&response.body)
+        }
+        "ListContainers" => {
+            let response = cosmosdb_get(connection, &format!("/dbs/{database}/colls")).await?;
+            parse_cosmosdb_json(&response.body)
+        }
+        "ReadContainer" => {
+            let container = required_string(request, "container")?;
+            let response =
+                cosmosdb_get(connection, &format!("/dbs/{database}/colls/{container}")).await?;
+            parse_cosmosdb_json(&response.body)
+        }
+        "ReadDocument" => {
+            let container = required_string(request, "container")?;
+            let id = required_string(request, "id")?;
+            let response = cosmosdb_get(
+                connection,
+                &format!("/dbs/{database}/colls/{container}/docs/{id}"),
+            )
+            .await?;
+            parse_cosmosdb_json(&response.body)
+        }
+        "QueryDocuments" => {
+            let container = required_string(request, "container")?;
+            let query = request
+                .get("query")
+                .and_then(Value::as_str)
+                .unwrap_or("SELECT * FROM c");
+            let body = cosmosdb_query_body(query, request.get("parameters"), row_limit);
+            let response = cosmosdb_post_query(
+                connection,
+                &format!("/dbs/{database}/colls/{container}/docs"),
+                &body,
+            )
+            .await?;
+            parse_cosmosdb_json(&response.body)
+        }
+        _ => Err(CommandError::new(
+            "cosmosdb-operation-unsupported",
+            format!("Cosmos DB operation `{operation}` is not supported by this adapter."),
+        )),
+    }
+}
+
+pub(crate) fn parse_request(query_text: &str) -> Result<Value, CommandError> {
+    if query_text.trim_start().starts_with('{') {
+        return serde_json::from_str(query_text).map_err(|error| {
+            CommandError::new(
+                "cosmosdb-request-invalid",
+                format!("Cosmos DB request JSON is invalid: {error}"),
+            )
+        });
+    }
+    Ok(json!({
+        "operation": "QueryDocuments",
+        "query": query_text,
+    }))
+}
+
+pub(crate) fn cosmosdb_operation(value: &Value) -> Result<String, CommandError> {
+    let operation = value
+        .get("operation")
+        .or_else(|| value.get("Operation"))
+        .or_else(|| value.get("action"))
+        .or_else(|| value.get("Action"))
+        .and_then(Value::as_str)
+        .ok_or_else(|| {
+            CommandError::new(
+                "cosmosdb-operation-missing",
+                "Cosmos DB request must include operation, such as ListDatabases, ListContainers, QueryDocuments, or ReadDocument.",
+            )
+        })?;
+    Ok(normalize_operation_name(operation))
+}
+
+pub(crate) fn cosmosdb_query_body(
+    query: &str,
+    parameters: Option<&Value>,
+    row_limit: u32,
+) -> String {
+    serde_json::to_string(&json!({
+        "query": query,
+        "parameters": parameters.cloned().unwrap_or_else(|| json!([])),
+        "maxItemCount": row_limit,
+    }))
+    .unwrap_or_default()
+}
+
+pub(crate) fn normalize_cosmosdb_response(
+    operation: &str,
+    response: &Value,
+    row_limit: u32,
+) -> (Vec<String>, Vec<Vec<String>>, Value) {
+    let documents = match operation {
+        "ListDatabases" => response.get("Databases"),
+        "ListContainers" => response.get("DocumentCollections"),
+        "QueryDocuments" => response.get("Documents"),
+        _ => None,
+    }
+    .cloned()
+    .unwrap_or_else(|| json!([response.clone()]));
+    let items = documents.as_array().cloned().unwrap_or_default();
+    let (columns, rows) = document_rows(&items, row_limit);
+    (columns, rows, documents)
+}
+
+fn document_rows(items: &[Value], row_limit: u32) -> (Vec<String>, Vec<Vec<String>>) {
+    let mut columns = items
+        .iter()
+        .filter_map(Value::as_object)
+        .flat_map(|item| item.keys().cloned())
+        .collect::<Vec<_>>();
+    columns.sort();
+    columns.dedup();
+    if columns.is_empty() {
+        columns.push("document".into());
+    }
+
+    let rows = items
+        .iter()
+        .take(row_limit as usize)
+        .map(|item| {
+            if let Some(object) = item.as_object() {
+                columns
+                    .iter()
+                    .map(|column| object.get(column).map(value_to_string).unwrap_or_default())
+                    .collect()
+            } else {
+                vec![value_to_string(item)]
+            }
+        })
+        .collect();
+    (columns, rows)
+}
+
+fn required_string<'a>(value: &'a Value, key: &str) -> Result<&'a str, CommandError> {
+    value.get(key).and_then(Value::as_str).ok_or_else(|| {
+        CommandError::new(
+            "cosmosdb-request-invalid",
+            format!("Cosmos DB operation requires `{key}`."),
+        )
+    })
+}
+
+fn normalize_operation_name(value: &str) -> String {
+    match value
+        .to_ascii_lowercase()
+        .replace(['_', '-', ' '], "")
+        .as_str()
+    {
+        "listdatabases" => "ListDatabases",
+        "listcontainers" => "ListContainers",
+        "readcontainer" => "ReadContainer",
+        "querydocuments" | "query" => "QueryDocuments",
+        "readdocument" => "ReadDocument",
+        "createdatabase" => "CreateDatabase",
+        "createcontainer" => "CreateContainer",
+        "deletedatabase" => "DeleteDatabase",
+        "deletecontainer" => "DeleteContainer",
+        "createdocument" => "CreateDocument",
+        "replacedocument" => "ReplaceDocument",
+        "deletedocument" => "DeleteDocument",
+        other => other,
+    }
+    .into()
+}
+
+fn value_to_string(value: &Value) -> String {
+    value
+        .as_str()
+        .map(str::to_string)
+        .unwrap_or_else(|| value.to_string())
+}
+
+#[allow(dead_code)]
+fn sorted_keys(object: &Map<String, Value>) -> Vec<String> {
+    let mut keys = object.keys().cloned().collect::<Vec<_>>();
+    keys.sort();
+    keys
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::{
+        cosmosdb_operation, cosmosdb_query_body, normalize_cosmosdb_response, parse_request,
+    };
+
+    #[test]
+    fn cosmosdb_plain_sql_becomes_query_documents_request() {
+        let value = parse_request("SELECT * FROM c").unwrap();
+        assert_eq!(value["operation"], "QueryDocuments");
+        assert_eq!(value["query"], "SELECT * FROM c");
+    }
+
+    #[test]
+    fn cosmosdb_operation_normalizes_action() {
+        assert_eq!(
+            cosmosdb_operation(&json!({ "action": "list-containers" })).unwrap(),
+            "ListContainers"
+        );
+    }
+
+    #[test]
+    fn cosmosdb_query_body_includes_parameters_and_limit() {
+        let body = cosmosdb_query_body(
+            "SELECT * FROM c WHERE c.id = @id",
+            Some(&json!([{ "name": "@id", "value": "1" }])),
+            25,
+        );
+        let value: serde_json::Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(value["maxItemCount"], 25);
+        assert_eq!(value["parameters"][0]["name"], "@id");
+    }
+
+    #[test]
+    fn cosmosdb_documents_normalize_to_rows_and_documents() {
+        let value = json!({
+            "Documents": [
+                { "id": "1", "name": "Ada" }
+            ]
+        });
+        let (columns, rows, documents) = normalize_cosmosdb_response("QueryDocuments", &value, 100);
+
+        assert_eq!(columns, vec!["id", "name"]);
+        assert_eq!(rows, vec![vec!["1", "Ada"]]);
+        assert_eq!(documents.as_array().unwrap().len(), 1);
+    }
+}

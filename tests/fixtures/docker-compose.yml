@@ -26,7 +26,6 @@ services:
       MYSQL_ROOT_PASSWORD: universality-root
     ports:
       - '33060:3306'
-    command: ['mysqld', '--default-authentication-plugin=mysql_native_password']
     healthcheck:
       test: ['CMD', 'mysqladmin', 'ping', '-h', '127.0.0.1', '-u', 'root', '-puniversality-root']
       interval: 5s
@@ -86,3 +85,275 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+
+  valkey:
+    image: valkey/valkey:8
+    container_name: universality-valkey
+    profiles: ['cache']
+    ports:
+      - '6381:6379'
+    healthcheck:
+      test: ['CMD', 'valkey-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  memcached:
+    image: memcached:1.6
+    container_name: universality-memcached
+    profiles: ['cache']
+    command: ['memcached', '-m', '64', '-vv']
+    ports:
+      - '11212:11211'
+
+  mariadb:
+    image: mariadb:11
+    container_name: universality-mariadb
+    profiles: ['sqlplus']
+    environment:
+      MARIADB_DATABASE: commerce
+      MARIADB_USER: universality
+      MARIADB_PASSWORD: universality
+      MARIADB_ROOT_PASSWORD: universality-root
+    ports:
+      - '33061:3306'
+    healthcheck:
+      test: ['CMD', 'healthcheck.sh', '--connect', '--innodb_initialized']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    volumes:
+      - ./mariadb/init:/docker-entrypoint-initdb.d:ro
+
+  cockroachdb:
+    image: cockroachdb/cockroach:v24.3.3
+    container_name: universality-cockroachdb
+    profiles: ['sqlplus']
+    command: ['start-single-node', '--insecure', '--store=type=mem,size=1GiB']
+    ports:
+      - '26257:26257'
+      - '8080:8080'
+    healthcheck:
+      test: ['CMD', '/cockroach/cockroach', 'sql', '--insecure', '--execute=select 1']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    volumes:
+      - ./cockroach/init:/docker-entrypoint-initdb.d:ro
+
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    container_name: universality-timescaledb
+    profiles: ['sqlplus']
+    environment:
+      POSTGRES_DB: metrics
+      POSTGRES_USER: universality
+      POSTGRES_PASSWORD: universality
+    ports:
+      - '54330:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U universality -d metrics']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - ./timescaledb/init:/docker-entrypoint-initdb.d:ro
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8
+    container_name: universality-clickhouse
+    profiles: ['analytics']
+    environment:
+      CLICKHOUSE_DB: analytics
+      CLICKHOUSE_USER: universality
+      CLICKHOUSE_PASSWORD: universality
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    ports:
+      - '8124:8123'
+      - '9001:9000'
+    healthcheck:
+      test: ['CMD', 'wget', '--spider', '-q', 'http://127.0.0.1:8123/ping']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    volumes:
+      - ./clickhouse/init:/docker-entrypoint-initdb.d:ro
+
+  influxdb:
+    image: influxdb:1.8
+    container_name: universality-influxdb
+    profiles: ['analytics']
+    environment:
+      INFLUXDB_DB: metrics
+      INFLUXDB_HTTP_AUTH_ENABLED: 'false'
+    ports:
+      - '8087:8086'
+    healthcheck:
+      test: ['CMD', 'influx', '-execute', 'SHOW DATABASES']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    volumes:
+      - ./influxdb/init:/docker-entrypoint-initdb.d:ro
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    container_name: universality-prometheus
+    profiles: ['analytics']
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-lifecycle'
+    ports:
+      - '9091:9090'
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'wget --spider -q http://127.0.0.1:9090/-/ready',
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
+  opensearch:
+    image: opensearchproject/opensearch:2.17.1
+    container_name: universality-opensearch
+    profiles: ['search']
+    environment:
+      discovery.type: single-node
+      plugins.security.disabled: 'true'
+      OPENSEARCH_INITIAL_ADMIN_PASSWORD: Universality_pwd_123
+      OPENSEARCH_JAVA_OPTS: -Xms512m -Xmx512m
+    ports:
+      - '9201:9200'
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -fsS http://127.0.0.1:9200 >/dev/null']
+      interval: 10s
+      timeout: 10s
+      retries: 40
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.3
+    container_name: universality-elasticsearch
+    profiles: ['search']
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: 'false'
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+    ports:
+      - '9202:9200'
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -fsS http://127.0.0.1:9200 >/dev/null']
+      interval: 10s
+      timeout: 10s
+      retries: 40
+
+  neo4j:
+    image: neo4j:5
+    container_name: universality-neo4j
+    profiles: ['graph']
+    environment:
+      NEO4J_AUTH: neo4j/universality
+      NEO4J_server_memory_heap_initial__size: 512m
+      NEO4J_server_memory_heap_max__size: 512m
+    ports:
+      - '7475:7474'
+      - '7688:7687'
+    healthcheck:
+      test: ['CMD-SHELL', "cypher-shell -u neo4j -p universality 'RETURN 1'"]
+      interval: 10s
+      timeout: 10s
+      retries: 40
+
+  arangodb:
+    image: arangodb:3.12
+    container_name: universality-arangodb
+    profiles: ['graph']
+    environment:
+      ARANGO_ROOT_PASSWORD: universality
+    ports:
+      - '8529:8529'
+    healthcheck:
+      test: ['CMD-SHELL', "arangosh --server.password universality --javascript.execute-string 'db._version()'"]
+      interval: 10s
+      timeout: 10s
+      retries: 40
+
+  janusgraph:
+    image: janusgraph/janusgraph:1.1.0
+    container_name: universality-janusgraph
+    profiles: ['graph']
+    ports:
+      - '8183:8182'
+
+  cassandra:
+    image: cassandra:5
+    container_name: universality-cassandra
+    profiles: ['widecolumn']
+    environment:
+      CASSANDRA_CLUSTER_NAME: Universality
+      CASSANDRA_DC: datacenter1
+      CASSANDRA_ENDPOINT_SNITCH: GossipingPropertyFileSnitch
+      MAX_HEAP_SIZE: 768M
+      HEAP_NEWSIZE: 256M
+    ports:
+      - '9043:9042'
+    healthcheck:
+      test: ['CMD-SHELL', 'cqlsh -e "describe keyspaces"']
+      interval: 15s
+      timeout: 15s
+      retries: 40
+    volumes:
+      - ./cassandra/init:/work:ro
+
+  oracle:
+    image: gvenzl/oracle-free:23-slim
+    container_name: universality-oracle
+    profiles: ['oracle']
+    environment:
+      ORACLE_PASSWORD: universality
+      APP_USER: universality
+      APP_USER_PASSWORD: universality
+    ports:
+      - '1522:1521'
+    healthcheck:
+      test: ['CMD-SHELL', 'healthcheck.sh']
+      interval: 15s
+      timeout: 15s
+      retries: 40
+    volumes:
+      - ./oracle/init:/container-entrypoint-initdb.d:ro
+
+  dynamodb:
+    image: amazon/dynamodb-local:2.5.2
+    container_name: universality-dynamodb
+    profiles: ['cloud-contract']
+    command: ['-jar', 'DynamoDBLocal.jar', '-sharedDb', '-inMemory']
+    ports:
+      - '8001:8000'
+
+  cloud-contract:
+    image: node:24-alpine
+    container_name: universality-cloud-contract
+    profiles: ['cloud-contract']
+    working_dir: /work
+    command: ['node', '/work/server.mjs']
+    ports:
+      - '19050:19050'
+      - '19060:19060'
+      - '19070:19070'
+      - '19080:19080'
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'wget --spider -q http://127.0.0.1:19050/health && wget --spider -q http://127.0.0.1:19060/health && wget --spider -q http://127.0.0.1:19070/health && wget --spider -q http://127.0.0.1:19080/health',
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - ./cloud-contract:/work:ro

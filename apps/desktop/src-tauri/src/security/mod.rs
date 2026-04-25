@@ -1,3 +1,5 @@
+use std::{collections::HashMap, fs, path::PathBuf};
+
 use aes_gcm::{
     aead::{Aead, KeyInit},
     Aes256Gcm, Nonce,
@@ -27,6 +29,8 @@ pub trait SecretStore {
 
 pub struct KeyringSecretStore;
 
+pub struct FileSecretStore;
+
 impl SecretStore for KeyringSecretStore {
     fn store_secret(&self, secret_ref: &SecretRef, secret: &str) -> Result<(), CommandError> {
         let entry = Entry::new(&secret_ref.service, &secret_ref.account)
@@ -43,6 +47,78 @@ impl SecretStore for KeyringSecretStore {
             .get_password()
             .map_err(|error| CommandError::new("secret-store", error.to_string()))
     }
+}
+
+impl SecretStore for FileSecretStore {
+    fn store_secret(&self, secret_ref: &SecretRef, secret: &str) -> Result<(), CommandError> {
+        let path = file_secret_path();
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
+        let mut secrets = read_file_secrets(&path)?;
+        secrets.insert(file_secret_key(secret_ref), secret.to_string());
+        fs::write(path, serde_json::to_string_pretty(&secrets)?)?;
+        Ok(())
+    }
+
+    fn resolve_secret(&self, secret_ref: &SecretRef) -> Result<String, CommandError> {
+        let path = file_secret_path();
+        let secrets = read_file_secrets(&path)?;
+        secrets
+            .get(&file_secret_key(secret_ref))
+            .cloned()
+            .ok_or_else(|| CommandError::new("secret-store", "Secret was not found."))
+    }
+}
+
+pub fn using_file_secret_store() -> bool {
+    std::env::var("UNIVERSALITY_SECRET_STORE")
+        .map(|value| value.eq_ignore_ascii_case("file"))
+        .unwrap_or(false)
+}
+
+pub fn store_secret_value(secret_ref: &SecretRef, secret: &str) -> Result<(), CommandError> {
+    if using_file_secret_store() {
+        FileSecretStore.store_secret(secret_ref, secret)
+    } else {
+        KeyringSecretStore.store_secret(secret_ref, secret)
+    }
+}
+
+pub fn resolve_secret_value(secret_ref: &SecretRef) -> Result<String, CommandError> {
+    if using_file_secret_store() {
+        FileSecretStore.resolve_secret(secret_ref)
+    } else {
+        KeyringSecretStore.resolve_secret(secret_ref)
+    }
+}
+
+fn file_secret_path() -> PathBuf {
+    if let Ok(path) = std::env::var("UNIVERSALITY_SECRET_FILE") {
+        return PathBuf::from(path);
+    }
+
+    if let Ok(workspace_dir) = std::env::var("UNIVERSALITY_WORKSPACE_DIR") {
+        return PathBuf::from(workspace_dir).join("secrets.json");
+    }
+
+    std::env::temp_dir()
+        .join("universality")
+        .join("secrets.json")
+}
+
+fn read_file_secrets(path: &PathBuf) -> Result<HashMap<String, String>, CommandError> {
+    if !path.exists() {
+        return Ok(HashMap::new());
+    }
+
+    let content = fs::read_to_string(path)?;
+    Ok(serde_json::from_str(&content)?)
+}
+
+fn file_secret_key(secret_ref: &SecretRef) -> String {
+    format!("{}:{}", secret_ref.service, secret_ref.account)
 }
 
 pub fn evaluate_guardrails(

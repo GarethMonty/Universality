@@ -7,7 +7,7 @@ use crate::{
         health::AppHealth,
         models::{BootstrapPayload, DiagnosticsReport, SecretRef},
     },
-    security::{KeyringSecretStore, SecretStore},
+    security,
 };
 
 #[tauri::command]
@@ -38,7 +38,6 @@ pub fn store_secret(
 ) -> Result<bool, CommandError> {
     let state = state.lock().unwrap();
     state.ensure_unlocked()?;
-    let store = KeyringSecretStore;
-    store.store_secret(&secret_ref, &secret)?;
+    security::store_secret_value(&secret_ref, &secret)?;
     Ok(true)
 }

@@ -1,0 +1,135 @@
+use futures_util::TryStreamExt;
+use mongodb::bson::{self, doc, Document};
+use serde_json::json;
+
+use super::super::super::*;
+use super::connection::mongodb_client;
+
+pub(crate) async fn load_mongodb_structure(
+    connection: &ResolvedConnectionProfile,
+    request: &StructureRequest,
+) -> Result<StructureResponse, CommandError> {
+    let limit = request.limit.unwrap_or(80);
+    let client = mongodb_client(connection).await?;
+    let database_name = connection
+        .database
+        .clone()
+        .unwrap_or_else(|| "admin".into());
+    let database = client.database(&database_name);
+    let collections = database.list_collection_names().await?;
+    let mut nodes = Vec::new();
+    let mut edges = Vec::new();
+    let mut collection_names = Vec::new();
+    for collection_name in collections.iter().take(limit as usize) {
+        collection_names.push(collection_name.clone());
+        let collection = database.collection::<Document>(collection_name);
+        let index_names = collection.list_index_names().await.unwrap_or_default();
+        let sample = match collection.find(doc! {}).limit(1).await {
+            Ok(cursor) => cursor
+                .try_collect::<Vec<Document>>()
+                .await
+                .ok()
+                .and_then(|mut docs| docs.pop()),
+            Err(_) => None,
+        };
+        let fields = sample
+            .as_ref()
+            .map(|document| {
+                document
+                    .iter()
+                    .map(|(name, value)| {
+                        structure_field(name, bson_type_name(value), None, None, None)
+                    })
+                    .collect::<Vec<StructureField>>()
+            })
+            .unwrap_or_default();
+        let count = collection
+            .estimated_document_count()
+            .await
+            .unwrap_or_default();
+        nodes.push(StructureNode {
+            id: collection_name.clone(),
+            family: "document".into(),
+            label: collection_name.clone(),
+            kind: "collection".into(),
+            group_id: Some(database_name.clone()),
+            detail: Some(format!("{} index(es)", index_names.len())),
+            metrics: vec![
+                structure_metric("Documents", count.to_string()),
+                structure_metric("Indexes", index_names.len().to_string()),
+            ],
+            fields,
+            sample: sample.map(|document| json!(document)),
+        });
+    }
+    for node in &nodes {
+        for field in &node.fields {
+            if let Some(target) = inferred_mongo_target(&field.name, &collection_names) {
+                edges.push(StructureEdge {
+                    id: format!("{}:{}->{}", node.id, field.name, target),
+                    from: node.id.clone(),
+                    to: target.clone(),
+                    label: format!("{} may reference {}", field.name, target),
+                    kind: "inferred-reference".into(),
+                    inferred: Some(true),
+                });
+            }
+        }
+    }
+
+    Ok(make_structure_response(
+        request,
+        connection,
+        StructureResponseInput {
+            summary: format!("Loaded {} MongoDB collection(s).", nodes.len()),
+            groups: vec![StructureGroup {
+                id: database_name.clone(),
+                label: database_name,
+                kind: "database".into(),
+                detail: Some("MongoDB database".into()),
+                color: None,
+            }],
+            nodes,
+            edges,
+            metrics: vec![structure_metric(
+                "Collections",
+                nodes_count_hint(limit, collections.len()),
+            )],
+            truncated: collections.len() > limit as usize,
+        },
+    ))
+}
+
+fn bson_type_name(value: &bson::Bson) -> String {
+    match value {
+        bson::Bson::Double(_) => "double",
+        bson::Bson::String(_) => "string",
+        bson::Bson::Array(_) => "array",
+        bson::Bson::Document(_) => "document",
+        bson::Bson::Boolean(_) => "boolean",
+        bson::Bson::Null => "null",
+        bson::Bson::Int32(_) => "int32",
+        bson::Bson::Int64(_) => "int64",
+        bson::Bson::ObjectId(_) => "objectId",
+        bson::Bson::DateTime(_) => "dateTime",
+        _ => "value",
+    }
+    .into()
+}
+
+fn inferred_mongo_target(field_name: &str, collections: &[String]) -> Option<String> {
+    let normalized = field_name
+        .trim_end_matches("_id")
+        .trim_end_matches("Id")
+        .trim_end_matches("ID")
+        .to_lowercase();
+
+    collections.iter().find_map(|collection| {
+        let singular = collection.trim_end_matches('s').to_lowercase();
+        if normalized == singular || normalized == collection.to_lowercase() {
+            Some(collection.clone())
+        } else {
+            None
+        }
+    })
+}

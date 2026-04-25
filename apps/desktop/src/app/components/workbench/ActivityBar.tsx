@@ -2,7 +2,7 @@ import type { ComponentType, SVGProps } from 'react'
 import type { UiActivity, WorkspaceSnapshot } from '@universality/shared-types'
 import {
   ConnectionsIcon,
-  ExplorerIcon,
+  EnvironmentsIcon,
   LightThemeIcon,
   LockIcon,
   SavedWorkIcon,
@@ -24,13 +24,34 @@ interface ActivityBarProps {
 }
 
 const activityItems = [
-  { id: 'connections', label: 'Connections', icon: ConnectionsIcon },
-  { id: 'explorer', label: 'Explorer', icon: ExplorerIcon },
-  { id: 'saved-work', label: 'Saved Work', icon: SavedWorkIcon },
-  { id: 'search', label: 'Search', icon: SearchIcon },
+  {
+    id: 'connections',
+    label: 'Connections',
+    tooltip: 'Connections: create, edit, test, and organize datastore profiles.',
+    icon: ConnectionsIcon,
+  },
+  {
+    id: 'saved-work',
+    label: 'Saved Work',
+    tooltip: 'Saved Work: reopen saved queries, snippets, snapshots, and recovered tabs.',
+    icon: SavedWorkIcon,
+  },
+  {
+    id: 'search',
+    label: 'Search',
+    tooltip: 'Search: open the command palette and quickly jump to workbench actions.',
+    icon: SearchIcon,
+  },
+  {
+    id: 'environments',
+    label: 'Environments',
+    tooltip: 'Environments: manage variables, secrets, colors, and risk levels.',
+    icon: EnvironmentsIcon,
+  },
 ] satisfies Array<{
   id: UiActivity
   label: string
+  tooltip: string
   icon: ComponentType<SVGProps<SVGSVGElement>>
 }>
 
@@ -71,7 +92,7 @@ export function ActivityBar({
                 type="button"
                 className={`activity-button${active ? ' is-active' : ''}`}
                 aria-label={`${item.label} view`}
-                title={item.label}
+                title={item.tooltip}
                 onClick={() => selectActivity(item.id)}
               >
                 <Icon className="activity-icon" />
@@ -87,7 +108,7 @@ export function ActivityBar({
           type="button"
           className={`activity-button${activeActivity === 'settings' ? ' is-active' : ''}`}
           aria-label="Settings view"
-          title="Settings"
+          title="Settings: diagnostics, import/export, shortcuts, and desktop preferences."
           onClick={() => onSelectActivity('settings')}
         >
           <SettingsIcon className="activity-icon" />
@@ -96,7 +117,11 @@ export function ActivityBar({
           type="button"
           className="activity-button"
           aria-label="Toggle theme"
-          title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+          title={
+            theme === 'dark'
+              ? 'Switch to light theme for the entire desktop workbench.'
+              : 'Switch to dark theme for the entire desktop workbench.'
+          }
           onClick={onToggleTheme}
         >
           <ThemeGlyph className="activity-icon" />
@@ -105,7 +130,11 @@ export function ActivityBar({
           type="button"
           className={`activity-button${isLocked ? ' is-alert' : ''}`}
           aria-label={isLocked ? 'Unlock workspace' : 'Lock workspace'}
-          title={isLocked ? 'Unlock workspace' : 'Lock workspace'}
+          title={
+            isLocked
+              ? 'Unlock workspace to test connections, run queries, and export data.'
+              : 'Lock workspace and pause privileged actions that may touch secrets or data.'
+          }
           onClick={onToggleLock}
         >
           <LockIcon className="activity-icon" />
