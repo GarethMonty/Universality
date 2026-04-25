@@ -209,7 +209,9 @@ mod tests {
     #[test]
     fn oracle_read_only_guard_detects_mutations() {
         assert!(is_read_only_oracle_statement("select * from dual"));
-        assert!(is_read_only_oracle_statement("with q as (select 1 from dual) select * from q"));
+        assert!(is_read_only_oracle_statement(
+            "with q as (select 1 from dual) select * from q"
+        ));
         assert!(!is_read_only_oracle_statement("insert into t values (1)"));
         assert!(!is_read_only_oracle_statement("begin delete from t; end;"));
     }

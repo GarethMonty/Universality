@@ -18,7 +18,6 @@ import { RightDrawer } from './components/workbench/RightDrawer'
 import { SideBar } from './components/workbench/SideBar'
 import { StatusBar } from './components/workbench/StatusBar'
 import { StructureWorkspace } from './components/workbench/StructureWorkspace'
-import { WarningIcon } from './components/workbench/icons'
 import { AppStateProvider, useAppState } from './state/app-state'
 import {
   defaultRowLimitForConnection,
@@ -52,7 +51,8 @@ function DesktopWorkspace() {
     lastExecution,
     lastExecutionRequest,
     connectionTests,
-    errorMessage,
+    startupErrorMessage,
+    workbenchMessages,
     actions,
   } = useAppState()
   const [exportPassphrase, setExportPassphrase] = useState('universality-desktop')
@@ -63,7 +63,16 @@ function DesktopWorkspace() {
     renderer?: string
     tabId?: string
   }>({})
-  const [pendingTabClose, setPendingTabClose] = useState<QueryTabState | undefined>()
+  const [pendingTabClose, setPendingTabClose] = useState<
+    | {
+        tab: QueryTabState
+        remainingTabIds: string[]
+      }
+    | undefined
+  >()
+  const [pendingConnectionDelete, setPendingConnectionDelete] = useState<
+    ConnectionProfile | undefined
+  >()
   const deferredCommandQuery = useDeferredValue(commandQuery)
 
   const openCommandPalette = () => {
@@ -221,7 +230,7 @@ function DesktopWorkspace() {
     return (
       <BootSurface
         title="Unable to load workspace."
-        copy={errorMessage ?? 'Unexpected desktop startup failure.'}
+        copy={startupErrorMessage ?? 'Unexpected desktop startup failure.'}
       />
     )
   }
@@ -245,7 +254,13 @@ function DesktopWorkspace() {
     'Open command palette',
     'Open connections',
     'New connection',
-    ...(activeConnection ? ['Duplicate active connection', 'Delete active connection'] : []),
+    ...(activeConnection
+      ? [
+          'Duplicate active connection',
+          'Open connection operations',
+          'Delete active connection',
+        ]
+      : []),
     'Open explorer',
     'Open saved work',
     ...(activeConnection ? ['Create query tab', 'Open connection drawer', 'Refresh explorer'] : []),
@@ -274,20 +289,51 @@ function DesktopWorkspace() {
   )
   const showingEnvironmentWorkspace = snapshot.ui.activeActivity === 'environments'
   const showingExplorerWorkspace = snapshot.ui.activeActivity === 'explorer'
+  const hasWorkbenchMessages = workbenchMessages.length > 0
+  const hasActiveQueryContext = Boolean(activeTab && activeConnection && activeEnvironment)
+  const isMessagePanelRequested = snapshot.ui.activeBottomPanelTab === 'messages'
+  const shouldShowBottomPanel =
+    snapshot.ui.bottomPanelVisible &&
+    (hasWorkbenchMessages ||
+      isMessagePanelRequested ||
+      (!showingEnvironmentWorkspace &&
+        !showingExplorerWorkspace &&
+        hasActiveQueryContext))
 
-  const requestCloseTab = (tabId: string) => {
+  const requestCloseTabQueue = (tabIds: string[]) => {
+    const [tabId, ...remainingTabIds] = tabIds
+
+    if (!tabId) {
+      return
+    }
+
     const tab = snapshot.tabs.find((item) => item.id === tabId)
 
     if (!tab) {
+      requestCloseTabQueue(remainingTabIds)
       return
     }
 
     if (tab.savedQueryId && tab.dirty) {
-      setPendingTabClose(tab)
+      setPendingTabClose({ tab, remainingTabIds })
       return
     }
 
-    void actions.closeTab(tab.id)
+    void actions.closeTab(tab.id).then(() => requestCloseTabQueue(remainingTabIds))
+  }
+
+  const requestCloseTab = (tabId: string) => {
+    requestCloseTabQueue([tabId])
+  }
+
+  const requestCloseTabs = (tabIds: string[]) => {
+    requestCloseTabQueue(tabIds)
+  }
+
+  const continuePendingTabClose = (remainingTabIds: string[]) => {
+    if (remainingTabIds.length > 0) {
+      requestCloseTabQueue(remainingTabIds)
+    }
   }
 
   const setActivity = (activity: WorkspaceSnapshot['ui']['activeActivity']) => {
@@ -315,6 +361,26 @@ function DesktopWorkspace() {
       sidebarCollapsed: false,
       rightDrawer: 'connection',
     })
+  }
+
+  const openOperationsDrawer = (connectionId: string) => {
+    void (async () => {
+      await actions.selectConnection(connectionId)
+      await actions.updateUiState({
+        activeActivity: 'connections',
+        activeSidebarPane: 'connections',
+        sidebarCollapsed: false,
+        rightDrawer: 'operations',
+      })
+    })()
+  }
+
+  const requestDeleteConnection = (connectionId: string) => {
+    const connection = snapshot.connections.find((item) => item.id === connectionId)
+
+    if (connection) {
+      setPendingConnectionDelete(connection)
+    }
   }
 
   const openDiagnosticsDrawer = () => {
@@ -412,7 +478,14 @@ function DesktopWorkspace() {
 
     if (command === 'Delete active connection') {
       if (activeConnection) {
-        void actions.deleteConnection(activeConnection.id)
+        requestDeleteConnection(activeConnection.id)
+      }
+      return
+    }
+
+    if (command === 'Open connection operations') {
+      if (activeConnection) {
+        openOperationsDrawer(activeConnection.id)
       }
       return
     }
@@ -521,13 +594,6 @@ function DesktopWorkspace() {
 
   return (
     <div className="ads-shell">
-      {errorMessage ? (
-        <div className="workbench-alert" role="status">
-          <WarningIcon className="alert-icon" />
-          <span>{errorMessage}</span>
-        </div>
-      ) : null}
-
       {snapshot.preferences.commandPaletteEnabled && commandPaletteOpen ? (
         <CommandPalette
           commands={commandItems}
@@ -557,17 +623,33 @@ function DesktopWorkspace() {
 
       {pendingTabClose ? (
         <CloseSavedTabDialog
-          tab={pendingTabClose}
+          tab={pendingTabClose.tab}
           onCancel={() => setPendingTabClose(undefined)}
           onDiscard={() => {
-            const tabId = pendingTabClose.id
+            const tabId = pendingTabClose.tab.id
+            const remainingTabIds = pendingTabClose.remainingTabIds
             setPendingTabClose(undefined)
-            void actions.closeTab(tabId)
+            void actions.closeTab(tabId).then(() => continuePendingTabClose(remainingTabIds))
           }}
           onSaveAndClose={() => {
-            const tabId = pendingTabClose.id
+            const tabId = pendingTabClose.tab.id
+            const remainingTabIds = pendingTabClose.remainingTabIds
             setPendingTabClose(undefined)
-            void actions.saveAndCloseTab(tabId)
+            void actions
+              .saveAndCloseTab(tabId)
+              .then(() => continuePendingTabClose(remainingTabIds))
+          }}
+        />
+      ) : null}
+
+      {pendingConnectionDelete ? (
+        <DeleteConnectionDialog
+          connection={pendingConnectionDelete}
+          onCancel={() => setPendingConnectionDelete(undefined)}
+          onConfirm={() => {
+            const connectionId = pendingConnectionDelete.id
+            setPendingConnectionDelete(undefined)
+            void actions.deleteConnection(connectionId)
           }}
         />
       ) : null}
@@ -631,10 +713,13 @@ function DesktopWorkspace() {
             onDuplicateConnection={(connectionId) =>
               void actions.duplicateConnection(connectionId)
             }
-            onDeleteConnection={(connectionId) => void actions.deleteConnection(connectionId)}
+            onDeleteConnection={requestDeleteConnection}
+            onOpenConnectionOperations={openOperationsDrawer}
             onOpenConnectionExplorer={openConnectionExplorer}
-            onCreateTab={() =>
-              activeConnection ? void actions.createTab(activeConnection.id) : undefined
+            onCreateTab={(connectionId) =>
+              connectionId || activeConnection
+                ? void actions.createTab(connectionId ?? activeConnection?.id ?? '')
+                : undefined
             }
             onSaveCurrentQuery={() =>
               activeTab ? void actions.saveCurrentQuery(activeTab.id) : undefined
@@ -716,11 +801,15 @@ function DesktopWorkspace() {
                   canCreateTab={Boolean(activeConnection)}
                   onSelectTab={(tabId) => void actions.selectTab(tabId)}
                   onCloseTab={requestCloseTab}
+                  onCloseTabs={requestCloseTabs}
                   onCreateTab={() =>
                     activeConnection ? void actions.createTab(activeConnection.id) : undefined
                   }
                   onRenameTab={(tabId, title) => void actions.renameTab(tabId, title)}
                   onSaveTab={(tabId) => void actions.saveCurrentQuery(tabId)}
+                  onReorderTabs={(orderedTabIds) =>
+                    void actions.reorderTabs(orderedTabIds)
+                  }
                 />
 
                 {activeConnection && activeEnvironment && activeTab ? (
@@ -781,7 +870,7 @@ function DesktopWorkspace() {
             )}
           </main>
 
-          {!showingEnvironmentWorkspace && !showingExplorerWorkspace && snapshot.ui.bottomPanelVisible && activeTab && activeConnection && activeEnvironment ? (
+          {shouldShowBottomPanel ? (
             <BottomPanel
               activeTab={activeTab}
               activeConnection={activeConnection}
@@ -795,6 +884,7 @@ function DesktopWorkspace() {
               lastExecution={lastExecution}
               lastExecutionRequest={lastExecutionRequest}
               capabilities={runtimeCapabilities}
+              workbenchMessages={workbenchMessages}
               onSelectPanelTab={(tab) =>
                 void actions.updateUiState({
                   activeBottomPanelTab: tab,
@@ -802,25 +892,35 @@ function DesktopWorkspace() {
                 })
               }
               onSelectRenderer={(renderer) =>
-                setRendererPreference({ renderer, tabId: activeTab.id })
+                activeTab
+                  ? setRendererPreference({ renderer, tabId: activeTab.id })
+                  : undefined
               }
-              onLoadNextPage={() => void actions.fetchResultPage(activeTab.id, activeRenderer)}
-                onResize={(nextHeight) =>
-                  void actions.updateUiState({
-                    bottomPanelHeight: nextHeight,
-                  })
-                }
+              onLoadNextPage={() =>
+                activeTab
+                  ? void actions.fetchResultPage(activeTab.id, activeRenderer)
+                  : undefined
+              }
+              onResize={(nextHeight) =>
+                void actions.updateUiState({
+                  bottomPanelHeight: nextHeight,
+                })
+              }
               onClose={() =>
                 void actions.updateUiState({
                   bottomPanelVisible: false,
                 })
               }
               onConfirmExecution={(guardrailId, mode) =>
-                void actions.executeQuery(activeTab.id, mode, guardrailId)
+                activeTab
+                  ? void actions.executeQuery(activeTab.id, mode, guardrailId)
+                  : undefined
               }
               onRestoreHistory={(queryText) =>
-                void actions.updateQuery(activeTab.id, queryText)
+                activeTab ? void actions.updateQuery(activeTab.id, queryText) : undefined
               }
+              onDismissWorkbenchMessage={actions.dismissWorkbenchMessage}
+              onClearWorkbenchMessages={actions.clearWorkbenchMessages}
             />
           ) : null}
         </div>
@@ -839,6 +939,7 @@ function DesktopWorkspace() {
             health={payload.health}
             theme={snapshot.preferences.theme}
             activeConnection={activeConnection}
+            activeEnvironment={activeEnvironment}
             environments={snapshot.environments}
             connectionTest={connectionTest}
             diagnostics={diagnostics}
@@ -869,6 +970,9 @@ function DesktopWorkspace() {
                 ? void actions.updateQuery(activeTab.id, queryTemplate)
                 : undefined
             }
+            onListOperations={actions.listDatastoreOperations}
+            onPlanOperation={actions.planDatastoreOperation}
+            onExecuteOperation={actions.executeDatastoreOperation}
             onToggleTheme={() =>
               void actions.setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')
             }
@@ -890,11 +994,13 @@ function DesktopWorkspace() {
         activeEnvironment={activeEnvironment}
         activeTab={activeTab}
         bottomPanelVisible={snapshot.ui.bottomPanelVisible}
+        messageCount={workbenchMessages.length}
         onToggleBottomPanel={() =>
           void actions.updateUiState({
             bottomPanelVisible: !snapshot.ui.bottomPanelVisible,
           })
         }
+        onOpenMessages={actions.openWorkbenchMessages}
         onOpenDiagnostics={openDiagnosticsDrawer}
       />
     </div>
@@ -939,6 +1045,46 @@ function CloseSavedTabDialog({
             onClick={onSaveAndClose}
           >
             Save and Close
+          </button>
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function DeleteConnectionDialog({
+  connection,
+  onCancel,
+  onConfirm,
+}: {
+  connection: ConnectionProfile
+  onCancel(): void
+  onConfirm(): void
+}) {
+  return (
+    <div className="workbench-modal-overlay" role="presentation">
+      <section
+        className="workbench-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="delete-connection-dialog-title"
+      >
+        <p className="sidebar-eyebrow">Delete Connection</p>
+        <h2 id="delete-connection-dialog-title">Remove {connection.name}?</h2>
+        <p>
+          This removes the local connection profile from this workspace. Secrets
+          referenced by the profile are not shown or exported by this action.
+        </p>
+        <div className="workbench-dialog-actions">
+          <button type="button" className="drawer-button" onClick={onCancel}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="drawer-button drawer-button--danger"
+            onClick={onConfirm}
+          >
+            Delete Connection
           </button>
         </div>
       </section>

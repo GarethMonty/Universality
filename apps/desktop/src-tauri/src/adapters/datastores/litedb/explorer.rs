@@ -117,7 +117,10 @@ fn collection_nodes(connection: &ResolvedConnectionProfile) -> Vec<ExplorerNode>
     }]
 }
 
-fn collection_child_nodes(connection: &ResolvedConnectionProfile, scope: &str) -> Vec<ExplorerNode> {
+fn collection_child_nodes(
+    connection: &ResolvedConnectionProfile,
+    scope: &str,
+) -> Vec<ExplorerNode> {
     let collection = scope.trim_start_matches("litedb:collection:");
     [
         (
@@ -139,7 +142,8 @@ fn collection_child_nodes(connection: &ResolvedConnectionProfile, scope: &str) -
             "Schema Sample",
             "schema",
             "Sample documents for inferred field structure",
-            json!({ "operation": "SampleSchema", "collection": collection, "limit": 100 }).to_string(),
+            json!({ "operation": "SampleSchema", "collection": collection, "limit": 100 })
+                .to_string(),
         ),
     ]
     .into_iter()

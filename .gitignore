@@ -4,6 +4,7 @@ coverage/
 .DS_Store
 Thumbs.db
 .vscode/ui-dev.log
+.universality/
 
 apps/desktop/dist/
 apps/desktop/coverage/

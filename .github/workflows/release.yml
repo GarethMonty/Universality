@@ -1,29 +1,113 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - 'app-v*'
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Semantic version to release, matching checked-in app versions.'
+        required: true
+        type: string
 
 permissions:
   contents: write
 
+concurrency:
+  group: release-${{ inputs.version }}
+  cancel-in-progress: false
+
 jobs:
+  validate:
+    name: Validate release request
+    runs-on: ubuntu-latest
+    outputs:
+      tag-name: ${{ steps.release.outputs.tag_name }}
+      prerelease: ${{ steps.release.outputs.prerelease }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Validate release version
+        run: npm run release:validate -- "${{ inputs.version }}"
+
+      - name: Validate release workflow
+        run: npm run release:workflow:validate
+
+      - name: Create or validate release tag
+        id: release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          tag="app-v${RELEASE_VERSION}"
+          prerelease="false"
+          if [[ "${RELEASE_VERSION}" == *-* ]]; then
+            prerelease="true"
+          fi
+
+          echo "tag_name=${tag}" >> "${GITHUB_OUTPUT}"
+          echo "prerelease=${prerelease}" >> "${GITHUB_OUTPUT}"
+
+          if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
+            tag_sha="$(git rev-list -n 1 "${tag}")"
+            if [[ "${tag_sha}" != "${GITHUB_SHA}" ]]; then
+              echo "::error title=Release tag points elsewhere::${tag} points to ${tag_sha}, not ${GITHUB_SHA}."
+              exit 1
+            fi
+          else
+            git tag "${tag}" "${GITHUB_SHA}"
+            git push origin "refs/tags/${tag}"
+          fi
+
+          if gh release view "${tag}" --json isDraft --jq '.isDraft' >/tmp/release-is-draft 2>/dev/null; then
+            if [[ "$(cat /tmp/release-is-draft)" != "true" ]]; then
+              echo "::error title=Release already published::${tag} already exists and is not a draft."
+              exit 1
+            fi
+          fi
+
   publish:
+    name: Build ${{ matrix.label }}
+    needs: validate
     strategy:
       fail-fast: false
       matrix:
-        platform:
-          - ubuntu-22.04
-          - windows-latest
-          - macos-latest
+        include:
+          - label: Linux x64
+            platform: ubuntu-22.04
+            args: ''
+            rust-targets: ''
+          - label: Windows x64
+            platform: windows-latest
+            args: ''
+            rust-targets: ''
+          - label: macOS Intel
+            platform: macos-13
+            args: '--target x86_64-apple-darwin'
+            rust-targets: x86_64-apple-darwin
+          - label: macOS Apple Silicon
+            platform: macos-latest
+            args: '--target aarch64-apple-darwin'
+            rust-targets: aarch64-apple-darwin
 
     runs-on: ${{ matrix.platform }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Install Linux desktop dependencies
         if: matrix.platform == 'ubuntu-22.04'
@@ -38,7 +122,14 @@ jobs:
           cache: npm
 
       - name: Install Rust
+        if: matrix.rust-targets == ''
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Rust with target
+        if: matrix.rust-targets != ''
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-targets }}
 
       - name: Cache Rust artifacts
         uses: swatinem/rust-cache@v2
@@ -49,7 +140,7 @@ jobs:
         run: npm ci
 
       - name: Build and publish Tauri release
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -62,8 +153,14 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
           projectPath: apps/desktop
-          tagName: app-v__VERSION__
-          releaseName: 'Universality v__VERSION__'
-          releaseBody: 'Desktop release artifacts for Universality.'
+          tagName: app-v${{ inputs.version }}
+          releaseName: Universality v${{ inputs.version }}
+          releaseBody: |
+            Desktop release artifacts for Universality.
+
+            This release is created as a draft for manual installer smoke testing before publication.
+            Release checklist: docs/release-checklist.md
           releaseDraft: true
-          prerelease: false
+          prerelease: ${{ contains(inputs.version, '-') }}
+          releaseCommitish: ${{ github.sha }}
+          args: ${{ matrix.args }}

@@ -44,6 +44,8 @@ export const DATASTORE_OPERATION_SCOPES = [
 
 export type DatastoreOperationScope = (typeof DATASTORE_OPERATION_SCOPES)[number]
 
+export type DatastoreOperationExecutionSupport = 'live' | 'plan-only' | 'unsupported'
+
 export interface DatastoreOperationManifest {
   id: string
   engine: DatastoreEngine
@@ -55,6 +57,8 @@ export interface DatastoreOperationManifest {
   supportedRenderers: ResultRenderer[]
   description: string
   requiresConfirmation: boolean
+  executionSupport: DatastoreOperationExecutionSupport
+  disabledReason?: string
   previewOnly?: boolean
 }
 
@@ -120,6 +124,32 @@ export interface OperationPlanResponse {
   connectionId: string
   environmentId: string
   plan: OperationPlan
+}
+
+export interface OperationExecutionRequest {
+  connectionId: string
+  environmentId: string
+  operationId: string
+  objectName?: string
+  parameters?: Record<string, unknown>
+  confirmationText?: string
+  rowLimit?: number
+  tabId?: string
+}
+
+export interface OperationExecutionResponse {
+  connectionId: string
+  environmentId: string
+  operationId: string
+  executionSupport: DatastoreOperationExecutionSupport
+  executed: boolean
+  plan: OperationPlan
+  result?: ExecutionResultEnvelope
+  permissionInspection?: PermissionInspection
+  diagnostics?: AdapterDiagnostics
+  metadata?: unknown
+  messages: string[]
+  warnings: string[]
 }
 
 export interface PermissionInspectionRequest {
@@ -260,6 +290,10 @@ export interface CancelExecutionResult {
   ok: boolean
   supported: boolean
   message: string
+}
+
+export interface QueryTabReorderRequest {
+  orderedTabIds: string[]
 }
 
 export type LocalDatabaseCreateMode = 'empty' | 'starter'

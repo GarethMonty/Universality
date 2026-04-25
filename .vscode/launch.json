@@ -24,12 +24,208 @@
       "preLaunchTask": "universality:ui:dev"
     },
     {
+      "name": "Universality: Tauri Debug + Core Fixtures (LLDB)",
+      "type": "lldb",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/apps/desktop",
+      "cargo": {
+        "args": [
+          "build",
+          "--manifest-path",
+          "${workspaceFolder}/apps/desktop/src-tauri/Cargo.toml",
+          "--no-default-features"
+        ],
+        "filter": {
+          "name": "universality-desktop",
+          "kind": "bin"
+        }
+      },
+      "env": {
+        "UNIVERSALITY_FIXTURE_RUN": "1",
+        "UNIVERSALITY_WORKSPACE_DIR": "${workspaceFolder}/.universality/fixture-workspaces/core",
+        "UNIVERSALITY_SECRET_STORE": "file",
+        "UNIVERSALITY_SECRET_FILE": "${workspaceFolder}/.universality/fixture-workspaces/core/secrets.json",
+        "UNIVERSALITY_SQLITE_FIXTURE": "${workspaceFolder}/tests/fixtures/sqlite/universality.sqlite3"
+      },
+      "preLaunchTask": "universality:ui:fixtures:core"
+    },
+    {
+      "name": "Universality: Tauri Debug + Fixture Profile (LLDB)",
+      "type": "lldb",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/apps/desktop",
+      "cargo": {
+        "args": [
+          "build",
+          "--manifest-path",
+          "${workspaceFolder}/apps/desktop/src-tauri/Cargo.toml",
+          "--no-default-features"
+        ],
+        "filter": {
+          "name": "universality-desktop",
+          "kind": "bin"
+        }
+      },
+      "env": {
+        "UNIVERSALITY_FIXTURE_RUN": "1",
+        "UNIVERSALITY_FIXTURE_PROFILE": "${input:universalityFixtureProfile}",
+        "UNIVERSALITY_WORKSPACE_DIR": "${workspaceFolder}/.universality/fixture-workspaces/profile-${input:universalityFixtureProfile}",
+        "UNIVERSALITY_SECRET_STORE": "file",
+        "UNIVERSALITY_SECRET_FILE": "${workspaceFolder}/.universality/fixture-workspaces/profile-${input:universalityFixtureProfile}/secrets.json",
+        "UNIVERSALITY_SQLITE_FIXTURE": "${workspaceFolder}/tests/fixtures/sqlite/universality.sqlite3"
+      },
+      "preLaunchTask": "universality:ui:fixtures:profile"
+    },
+    {
+      "name": "Universality: Tauri Debug + All Fixtures (LLDB)",
+      "type": "lldb",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/apps/desktop",
+      "cargo": {
+        "args": [
+          "build",
+          "--manifest-path",
+          "${workspaceFolder}/apps/desktop/src-tauri/Cargo.toml",
+          "--no-default-features"
+        ],
+        "filter": {
+          "name": "universality-desktop",
+          "kind": "bin"
+        }
+      },
+      "env": {
+        "UNIVERSALITY_FIXTURE_RUN": "1",
+        "UNIVERSALITY_FIXTURE_PROFILE": "all",
+        "UNIVERSALITY_WORKSPACE_DIR": "${workspaceFolder}/.universality/fixture-workspaces/all",
+        "UNIVERSALITY_SECRET_STORE": "file",
+        "UNIVERSALITY_SECRET_FILE": "${workspaceFolder}/.universality/fixture-workspaces/all/secrets.json",
+        "UNIVERSALITY_SQLITE_FIXTURE": "${workspaceFolder}/tests/fixtures/sqlite/universality.sqlite3"
+      },
+      "preLaunchTask": "universality:ui:fixtures:all"
+    },
+    {
       "name": "Universality: Tauri Debug (Windows)",
       "type": "cppvsdbg",
       "request": "launch",
       "program": "${workspaceFolder}/apps/desktop/src-tauri/target/debug/universality-desktop.exe",
       "cwd": "${workspaceFolder}/apps/desktop",
       "preLaunchTask": "universality:dev"
+    },
+    {
+      "name": "Universality: Tauri Debug + Core Fixtures (Windows)",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/apps/desktop/src-tauri/target/debug/universality-desktop.exe",
+      "cwd": "${workspaceFolder}/apps/desktop",
+      "environment": [
+        {
+          "name": "UNIVERSALITY_FIXTURE_RUN",
+          "value": "1"
+        },
+        {
+          "name": "UNIVERSALITY_WORKSPACE_DIR",
+          "value": "${workspaceFolder}/.universality/fixture-workspaces/core"
+        },
+        {
+          "name": "UNIVERSALITY_SECRET_STORE",
+          "value": "file"
+        },
+        {
+          "name": "UNIVERSALITY_SECRET_FILE",
+          "value": "${workspaceFolder}/.universality/fixture-workspaces/core/secrets.json"
+        },
+        {
+          "name": "UNIVERSALITY_SQLITE_FIXTURE",
+          "value": "${workspaceFolder}/tests/fixtures/sqlite/universality.sqlite3"
+        }
+      ],
+      "preLaunchTask": "universality:dev:fixtures:core"
+    },
+    {
+      "name": "Universality: Tauri Debug + Fixture Profile (Windows)",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/apps/desktop/src-tauri/target/debug/universality-desktop.exe",
+      "cwd": "${workspaceFolder}/apps/desktop",
+      "environment": [
+        {
+          "name": "UNIVERSALITY_FIXTURE_RUN",
+          "value": "1"
+        },
+        {
+          "name": "UNIVERSALITY_FIXTURE_PROFILE",
+          "value": "${input:universalityFixtureProfile}"
+        },
+        {
+          "name": "UNIVERSALITY_WORKSPACE_DIR",
+          "value": "${workspaceFolder}/.universality/fixture-workspaces/profile-${input:universalityFixtureProfile}"
+        },
+        {
+          "name": "UNIVERSALITY_SECRET_STORE",
+          "value": "file"
+        },
+        {
+          "name": "UNIVERSALITY_SECRET_FILE",
+          "value": "${workspaceFolder}/.universality/fixture-workspaces/profile-${input:universalityFixtureProfile}/secrets.json"
+        },
+        {
+          "name": "UNIVERSALITY_SQLITE_FIXTURE",
+          "value": "${workspaceFolder}/tests/fixtures/sqlite/universality.sqlite3"
+        }
+      ],
+      "preLaunchTask": "universality:dev:fixtures:profile"
+    },
+    {
+      "name": "Universality: Tauri Debug + All Fixtures (Windows)",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/apps/desktop/src-tauri/target/debug/universality-desktop.exe",
+      "cwd": "${workspaceFolder}/apps/desktop",
+      "environment": [
+        {
+          "name": "UNIVERSALITY_FIXTURE_RUN",
+          "value": "1"
+        },
+        {
+          "name": "UNIVERSALITY_FIXTURE_PROFILE",
+          "value": "all"
+        },
+        {
+          "name": "UNIVERSALITY_WORKSPACE_DIR",
+          "value": "${workspaceFolder}/.universality/fixture-workspaces/all"
+        },
+        {
+          "name": "UNIVERSALITY_SECRET_STORE",
+          "value": "file"
+        },
+        {
+          "name": "UNIVERSALITY_SECRET_FILE",
+          "value": "${workspaceFolder}/.universality/fixture-workspaces/all/secrets.json"
+        },
+        {
+          "name": "UNIVERSALITY_SQLITE_FIXTURE",
+          "value": "${workspaceFolder}/tests/fixtures/sqlite/universality.sqlite3"
+        }
+      ],
+      "preLaunchTask": "universality:dev:fixtures:all"
+    }
+  ],
+  "inputs": [
+    {
+      "id": "universalityFixtureProfile",
+      "type": "pickString",
+      "description": "Fixture profile to start before debugging",
+      "options": [
+        "cache",
+        "sqlplus",
+        "analytics",
+        "search",
+        "graph",
+        "widecolumn",
+        "oracle",
+        "cloud-contract"
+      ],
+      "default": "sqlplus"
     }
   ]
 }

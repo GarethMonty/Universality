@@ -48,7 +48,11 @@ pub(super) fn inspect_snowflake_explorer_node(
         .strip_prefix("snowflake-table:")
         .and_then(|rest| {
             let mut parts = rest.split(':');
-            Some(snowflake_table_query(parts.next()?, parts.next()?, parts.next()?))
+            Some(snowflake_table_query(
+                parts.next()?,
+                parts.next()?,
+                parts.next()?,
+            ))
         })
         .unwrap_or_else(|| match request.node_id.as_str() {
             "snowflake-databases" => "show databases limit 100".into(),
@@ -286,7 +290,11 @@ fn named_nodes_from_snowflake_rows(
         .into_iter()
         .flatten()
         .take(limit)
-        .filter_map(|row| row.as_array().and_then(|row| row.first()).and_then(Value::as_str))
+        .filter_map(|row| {
+            row.as_array()
+                .and_then(|row| row.first())
+                .and_then(Value::as_str)
+        })
         .map(|name| ExplorerNode {
             id: format!("snowflake-{kind}:{name}"),
             family: "warehouse".into(),
@@ -295,7 +303,10 @@ fn named_nodes_from_snowflake_rows(
             detail: detail.into(),
             scope: Some(format!("{scope_prefix}:{name}")),
             path: Some(vec![connection.name.clone(), path_label.into()]),
-            query_template: Some(format!("show schemas in database {}", quote_identifier(name))),
+            query_template: Some(format!(
+                "show schemas in database {}",
+                quote_identifier(name)
+            )),
             expandable: Some(true),
         })
         .collect()
@@ -314,7 +325,11 @@ pub(crate) fn snowflake_schema_nodes_from_value(
         .into_iter()
         .flatten()
         .take(limit)
-        .filter_map(|row| row.as_array().and_then(|row| row.first()).and_then(Value::as_str))
+        .filter_map(|row| {
+            row.as_array()
+                .and_then(|row| row.first())
+                .and_then(Value::as_str)
+        })
         .map(|schema| ExplorerNode {
             id: format!("snowflake-schema:{database}:{schema}"),
             family: "warehouse".into(),
@@ -351,7 +366,11 @@ fn snowflake_table_nodes_from_value(
         .into_iter()
         .flatten()
         .take(limit)
-        .filter_map(|row| row.as_array().and_then(|row| row.first()).and_then(Value::as_str))
+        .filter_map(|row| {
+            row.as_array()
+                .and_then(|row| row.first())
+                .and_then(Value::as_str)
+        })
         .map(|table| ExplorerNode {
             id: format!("snowflake-table:{database}:{schema}:{table}"),
             family: "warehouse".into(),
@@ -423,6 +442,9 @@ mod tests {
 
         assert_eq!(nodes.len(), 2);
         assert_eq!(nodes[0].label, "PUBLIC");
-        assert_eq!(nodes[0].scope.as_deref(), Some("snowflake:schema:ANALYTICS:PUBLIC"));
+        assert_eq!(
+            nodes[0].scope.as_deref(),
+            Some("snowflake:schema:ANALYTICS:PUBLIC")
+        );
     }
 }

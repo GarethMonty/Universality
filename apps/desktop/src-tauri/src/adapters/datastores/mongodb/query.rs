@@ -62,6 +62,8 @@ pub(super) async fn execute_mongodb_query(
             .take(row_limit as usize)
             .collect::<Vec<&Document>>(),
     )?;
+    let raw_documents =
+        serde_json::to_string_pretty(&documents_json).unwrap_or_else(|_| "[]".into());
 
     Ok(build_result(ResultEnvelopeInput {
         engine: &connection.engine,
@@ -74,12 +76,7 @@ pub(super) async fn execute_mongodb_query(
         renderer_modes: vec!["document", "json", "table", "raw"],
         payloads: vec![
             payload_document(documents_json.clone()),
-            payload_json(json!({
-                "engine": connection.engine,
-                "collection": collection_name,
-                "rowCount": documents.len(),
-                "rowLimit": row_limit,
-            })),
+            payload_json(documents_json.clone()),
             payload_table(
                 vec!["document".into()],
                 documents
@@ -88,7 +85,7 @@ pub(super) async fn execute_mongodb_query(
                     .map(|item| vec![serde_json::to_string(item).unwrap_or_else(|_| "{}".into())])
                     .collect(),
             ),
-            payload_raw(selected_query(request).to_string()),
+            payload_raw(raw_documents),
         ],
         notices,
         duration_ms: duration_ms(started),

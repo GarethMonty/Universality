@@ -336,6 +336,8 @@ pub struct DatastoreOperationManifest {
     pub supported_renderers: Vec<String>,
     pub description: String,
     pub requires_confirmation: bool,
+    pub execution_support: String,
+    pub disabled_reason: Option<String>,
     pub preview_only: Option<bool>,
 }
 
@@ -655,6 +657,12 @@ pub struct CancelExecutionResult {
     pub message: String,
 }
 
+#[derive(Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct QueryTabReorderRequest {
+    pub ordered_tab_ids: Vec<String>,
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OperationManifestRequest {
@@ -688,6 +696,36 @@ pub struct OperationPlanResponse {
     pub connection_id: String,
     pub environment_id: String,
     pub plan: OperationPlan,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OperationExecutionRequest {
+    pub connection_id: String,
+    pub environment_id: String,
+    pub operation_id: String,
+    pub object_name: Option<String>,
+    pub parameters: Option<HashMap<String, Value>>,
+    pub confirmation_text: Option<String>,
+    pub row_limit: Option<u32>,
+    pub tab_id: Option<String>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OperationExecutionResponse {
+    pub connection_id: String,
+    pub environment_id: String,
+    pub operation_id: String,
+    pub execution_support: String,
+    pub executed: bool,
+    pub plan: OperationPlan,
+    pub result: Option<ExecutionResultEnvelope>,
+    pub permission_inspection: Option<PermissionInspection>,
+    pub diagnostics: Option<AdapterDiagnostics>,
+    pub metadata: Option<Value>,
+    pub messages: Vec<String>,
+    pub warnings: Vec<String>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]

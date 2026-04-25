@@ -83,6 +83,15 @@ pub async fn plan_operation(
         .await
 }
 
+pub async fn execute_operation(
+    connection: &ResolvedConnectionProfile,
+    request: &OperationExecutionRequest,
+) -> Result<OperationExecutionResponse, CommandError> {
+    adapter_for_engine(&connection.engine)?
+        .execute_operation(connection, request)
+        .await
+}
+
 pub async fn inspect_permissions(
     connection: &ResolvedConnectionProfile,
 ) -> Result<PermissionInspection, CommandError> {

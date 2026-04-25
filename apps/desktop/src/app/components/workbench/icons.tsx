@@ -1,6 +1,10 @@
 import type { ComponentType, SVGProps } from 'react'
 import {
   AlertTriangle,
+  ArrowDownToLine,
+  ArrowLeft,
+  ArrowRight,
+  ArrowUpToLine,
   BookMarked,
   Boxes,
   Braces,
@@ -19,6 +23,7 @@ import {
   Layers3,
   Lock,
   Moon,
+  MoreVertical,
   Palette,
   PanelBottom,
   PencilLine,
@@ -32,6 +37,7 @@ import {
   Star,
   Sun,
   Table2,
+  Trash2,
   X,
 } from 'lucide-react'
 import type { LucideProps } from 'lucide-react'
@@ -65,6 +71,10 @@ export const CloseIcon = adapt(X)
 export const PlusIcon = adapt(FilePlus2)
 export const DatabaseIcon = adapt(Database)
 export const WarningIcon = adapt(AlertTriangle)
+export const ArrowLeftIcon = adapt(ArrowLeft)
+export const ArrowRightIcon = adapt(ArrowRight)
+export const MoveFirstIcon = adapt(ArrowUpToLine)
+export const MoveLastIcon = adapt(ArrowDownToLine)
 export const ExplainIcon = adapt(Gauge)
 export const FavoriteIcon = adapt(Star)
 export const ReadOnlyIcon = adapt(ShieldCheck)
@@ -78,3 +88,5 @@ export const DownloadIcon = adapt(Download)
 export const SaveIcon = adapt(Save)
 export const HistoryIcon = adapt(History)
 export const ColorIcon = adapt(Palette)
+export const MoreIcon = adapt(MoreVertical)
+export const TrashIcon = adapt(Trash2)

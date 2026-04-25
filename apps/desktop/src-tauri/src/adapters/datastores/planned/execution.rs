@@ -46,9 +46,7 @@ pub(super) fn beta_execution_result(
 #[cfg(test)]
 mod tests {
     use super::beta_execution_result;
-    use crate::{
-        domain::models::{ExecutionRequest, ResolvedConnectionProfile},
-    };
+    use crate::domain::models::{ExecutionRequest, ResolvedConnectionProfile};
 
     #[test]
     fn beta_execution_clamps_large_requested_row_limits() {

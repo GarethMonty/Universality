@@ -38,7 +38,12 @@ export type SidebarPane =
 
 export type BottomPanelTab = 'results' | 'messages' | 'details'
 
-export type RightDrawerView = 'none' | 'connection' | 'inspection' | 'diagnostics'
+export type RightDrawerView =
+  | 'none'
+  | 'connection'
+  | 'inspection'
+  | 'diagnostics'
+  | 'operations'
 
 export interface UiState {
   activeConnectionId: string

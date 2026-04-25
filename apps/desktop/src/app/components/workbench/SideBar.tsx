@@ -19,6 +19,7 @@ import {
   FavoriteIcon,
   JsonIcon,
   KeyValueIcon,
+  MoreIcon,
   PlayIcon,
   PlusIcon,
   RefreshIcon,
@@ -26,6 +27,7 @@ import {
   SearchIcon,
   SettingsIcon,
   TableIcon,
+  TrashIcon,
 } from './icons'
 
 type ConnectionGroupMode = 'environment' | 'database-type' | 'none'
@@ -93,8 +95,9 @@ interface SideBarProps {
   onCreateEnvironment(): void
   onDuplicateConnection(connectionId: string): void
   onDeleteConnection(connectionId: string): void
+  onOpenConnectionOperations(connectionId: string): void
   onOpenConnectionExplorer(connectionId: string): void
-  onCreateTab(): void
+  onCreateTab(connectionId?: string): void
   onSaveCurrentQuery(): void
   onOpenSavedWork(savedWorkId: string): void
   onDeleteSavedWork(savedWorkId: string): void
@@ -128,6 +131,7 @@ export function SideBar({
   onCreateEnvironment,
   onDuplicateConnection,
   onDeleteConnection,
+  onOpenConnectionOperations,
   onOpenConnectionExplorer,
   onCreateTab,
   onSaveCurrentQuery,
@@ -233,6 +237,7 @@ export function SideBar({
           onConnectionGroupModeChange={setConnectionGroupMode}
           onCreateConnection={onCreateConnection}
           onDeleteConnection={onDeleteConnection}
+          onOpenConnectionOperations={onOpenConnectionOperations}
           onDuplicateConnection={onDuplicateConnection}
           onOpenConnectionExplorer={onOpenConnectionExplorer}
           onCreateTab={onCreateTab}
@@ -307,6 +312,7 @@ function ConnectionsPane({
   onConnectionGroupModeChange,
   onCreateConnection,
   onDeleteConnection,
+  onOpenConnectionOperations,
   onDuplicateConnection,
   onOpenConnectionExplorer,
   onCreateTab,
@@ -321,9 +327,10 @@ function ConnectionsPane({
   onConnectionGroupModeChange(value: ConnectionGroupMode): void
   onCreateConnection(): void
   onDeleteConnection(connectionId: string): void
+  onOpenConnectionOperations(connectionId: string): void
   onDuplicateConnection(connectionId: string): void
   onOpenConnectionExplorer(connectionId: string): void
-  onCreateTab(): void
+  onCreateTab(connectionId?: string): void
   onSelectConnection(connectionId: string): void
 }) {
   const totalConnections = connectionsCount(connectionGroups)
@@ -372,7 +379,7 @@ function ConnectionsPane({
   }, [contextMenu])
 
   const openContextMenu = (
-    event: MouseEvent<HTMLDivElement>,
+    event: MouseEvent<HTMLElement>,
     connection: ConnectionProfile,
   ) => {
     event.preventDefault()
@@ -395,7 +402,7 @@ function ConnectionsPane({
             aria-label="New query tab"
             title="Open a new scratch query tab for the selected connection."
             disabled={totalConnections === 0}
-            onClick={onCreateTab}
+            onClick={() => onCreateTab()}
           >
             <PlusIcon className="sidebar-icon" />
           </button>
@@ -570,14 +577,11 @@ function ConnectionsPane({
                       <button
                         type="button"
                         className="sidebar-icon-button sidebar-icon-button--inline"
-                        aria-label={`Delete connection ${connection.name}`}
-                        title={`Delete ${connection.name} from this local workspace.`}
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          onDeleteConnection(connection.id)
-                        }}
+                        aria-label={`Open connection menu for ${connection.name}`}
+                        title={`Open actions for ${connection.name}.`}
+                        onClick={(event) => openContextMenu(event, connection)}
                       >
-                        <CloseIcon className="sidebar-icon" />
+                        <MoreIcon className="sidebar-icon" />
                       </button>
                     </span>
                   </div>
@@ -614,6 +618,59 @@ function ConnectionsPane({
           >
             <ExplorerIcon className="connection-context-menu-icon" />
             <span>Open Explorer</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="connection-context-menu-item"
+            aria-label={`Create query tab for ${contextConnection.name}`}
+            onClick={() => {
+              setContextMenu(undefined)
+              onCreateTab(contextConnection.id)
+            }}
+          >
+            <PlayIcon className="connection-context-menu-icon" />
+            <span>New Query</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="connection-context-menu-item"
+            aria-label={`Duplicate connection ${contextConnection.name}`}
+            onClick={() => {
+              setContextMenu(undefined)
+              onDuplicateConnection(contextConnection.id)
+            }}
+          >
+            <PlusIcon className="connection-context-menu-icon" />
+            <span>Duplicate</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="connection-context-menu-item"
+            aria-label={`Open operations for ${contextConnection.name}`}
+            onClick={() => {
+              setContextMenu(undefined)
+              onOpenConnectionOperations(contextConnection.id)
+            }}
+          >
+            <SettingsIcon className="connection-context-menu-icon" />
+            <span>Operations</span>
+          </button>
+          <div className="connection-context-menu-separator" role="separator" />
+          <button
+            type="button"
+            role="menuitem"
+            className="connection-context-menu-item connection-context-menu-item--danger"
+            aria-label={`Delete connection ${contextConnection.name}`}
+            onClick={() => {
+              setContextMenu(undefined)
+              onDeleteConnection(contextConnection.id)
+            }}
+          >
+            <TrashIcon className="connection-context-menu-icon" />
+            <span>Delete</span>
           </button>
         </div>
       ) : null}

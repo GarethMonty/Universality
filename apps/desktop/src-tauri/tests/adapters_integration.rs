@@ -14,6 +14,14 @@ fn fixtures_enabled() -> bool {
     env::var("UNIVERSALITY_FIXTURE_RUN").unwrap_or_default() == "1"
 }
 
+fn fixture_profile_enabled(profile: &str) -> bool {
+    let value = env::var("UNIVERSALITY_FIXTURE_PROFILE").unwrap_or_default();
+    value
+        .split(',')
+        .map(str::trim)
+        .any(|item| item == "all" || item == profile)
+}
+
 fn env_or(key: &str, fallback: &str) -> String {
     env::var(key).unwrap_or_else(|_| fallback.to_string())
 }
@@ -513,6 +521,40 @@ async fn postgres_adapter_fixture_roundtrip() -> Result<(), CommandError> {
     .map_err(|error| CommandError::new("sqlite-test-execution", error.message))?;
     assert_eq!(result.engine, "postgresql");
     assert!(!result.payloads.is_empty());
+
+    let scalar_result = adapters::execute(
+        &connection,
+        &execution_request(
+            &connection.id,
+            "env-dev",
+            "sql",
+            "select '2024-01-02 03:04:05+00'::timestamptz as ts_tz, timestamp '2024-01-02 03:04:05' as ts, date '2024-01-02' as date_value, time '03:04:05' as time_value, 123.45::numeric as amount, '00000000-0000-0000-0000-000000000001'::uuid as uuid_value, jsonb_build_object('ok', true) as json_value;",
+        ),
+        Vec::new(),
+    )
+    .await?;
+    let row = scalar_result.payloads[0]
+        .get("rows")
+        .and_then(|value| value.as_array())
+        .and_then(|rows| rows.first())
+        .and_then(|value| value.as_array())
+        .expect("scalar result row");
+    let cells = row
+        .iter()
+        .map(|value| value.as_str().unwrap_or_default())
+        .collect::<Vec<_>>();
+
+    assert_eq!(cells[0], "2024-01-02T03:04:05+00:00");
+    assert_eq!(cells[1], "2024-01-02 03:04:05");
+    assert_eq!(cells[2], "2024-01-02");
+    assert_eq!(cells[3], "03:04:05");
+    assert_eq!(cells[4], "123.45");
+    assert_eq!(cells[5], "00000000-0000-0000-0000-000000000001");
+    assert_eq!(cells[6], "{\"ok\":true}");
+    assert!(
+        cells.iter().all(|cell| !cell.starts_with('<')),
+        "known PostgreSQL scalar types should not render as placeholders: {cells:?}"
+    );
     Ok(())
 }
 
@@ -719,6 +761,40 @@ async fn mongodb_adapter_fixture_roundtrip() -> Result<(), CommandError> {
     .await?;
     assert_eq!(result.engine, "mongodb");
     assert!(!result.payloads.is_empty());
+    let document_payload = result
+        .payloads
+        .iter()
+        .find(|payload| {
+            payload.get("renderer").and_then(|value| value.as_str()) == Some("document")
+        })
+        .expect("document payload");
+    let json_payload = result
+        .payloads
+        .iter()
+        .find(|payload| payload.get("renderer").and_then(|value| value.as_str()) == Some("json"))
+        .expect("json payload");
+    let raw_payload = result
+        .payloads
+        .iter()
+        .find(|payload| payload.get("renderer").and_then(|value| value.as_str()) == Some("raw"))
+        .expect("raw payload");
+    let documents = document_payload
+        .get("documents")
+        .and_then(|value| value.as_array())
+        .expect("document rows");
+    let json_documents = json_payload
+        .get("value")
+        .and_then(|value| value.as_array())
+        .expect("json document rows");
+    let raw_text = raw_payload
+        .get("text")
+        .and_then(|value| value.as_str())
+        .expect("raw document text");
+
+    assert!(!documents.is_empty());
+    assert_eq!(json_documents.len(), documents.len());
+    assert!(raw_text.contains("sku") || raw_text.contains("_id"));
+    assert!(!raw_text.contains("\"collection\": \"products\""));
     Ok(())
 }
 
@@ -783,5 +859,455 @@ async fn redis_adapter_fixture_roundtrip() -> Result<(), CommandError> {
     .await?;
     assert_eq!(result.engine, "redis");
     assert!(!result.payloads.is_empty());
+    Ok(())
+}
+
+#[tokio::test]
+async fn cache_profile_fixture_roundtrips() -> Result<(), CommandError> {
+    if !fixtures_enabled() || !fixture_profile_enabled("cache") {
+        return Ok(());
+    }
+
+    for (engine, port, query) in [
+        ("valkey", 6381, "HGETALL session:9f2d7e1a"),
+        ("memcached", 11212, "get cache:feature-flags"),
+    ] {
+        let connection = ResolvedConnectionProfile {
+            id: format!("conn-{engine}"),
+            name: format!("Fixture {engine}"),
+            engine: engine.into(),
+            family: "keyvalue".into(),
+            host: "127.0.0.1".into(),
+            port: Some(port),
+            database: Some("0".into()),
+            username: None,
+            password: None,
+            connection_string: None,
+            read_only: false,
+        };
+
+        let test_result = adapters::test_connection(&connection, Vec::new()).await?;
+        assert!(test_result.ok);
+
+        let result = adapters::execute(
+            &connection,
+            &execution_request(&connection.id, "env-dev", "redis", query),
+            Vec::new(),
+        )
+        .await?;
+        assert_eq!(result.engine, engine);
+        assert!(!result.payloads.is_empty());
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn sqlplus_profile_fixture_roundtrips() -> Result<(), CommandError> {
+    if !fixtures_enabled() || !fixture_profile_enabled("sqlplus") {
+        return Ok(());
+    }
+
+    let mariadb = ResolvedConnectionProfile {
+        id: "conn-mariadb".into(),
+        name: "Fixture MariaDB".into(),
+        engine: "mariadb".into(),
+        family: "sql".into(),
+        host: "127.0.0.1".into(),
+        port: Some(33061),
+        database: Some("commerce".into()),
+        username: Some("universality".into()),
+        password: Some("universality".into()),
+        connection_string: None,
+        read_only: false,
+    };
+    let mariadb_result = adapters::execute(
+        &mariadb,
+        &execution_request(
+            &mariadb.id,
+            "env-dev",
+            "sql",
+            "select order_id, status from orders order by order_id limit 2;",
+        ),
+        Vec::new(),
+    )
+    .await?;
+    assert_eq!(mariadb_result.engine, "mariadb");
+    assert!(!mariadb_result.payloads.is_empty());
+
+    let timescale = ResolvedConnectionProfile {
+        id: "conn-timescaledb".into(),
+        name: "Fixture TimescaleDB".into(),
+        engine: "timescaledb".into(),
+        family: "timeseries".into(),
+        host: "127.0.0.1".into(),
+        port: Some(54330),
+        database: Some("metrics".into()),
+        username: Some("universality".into()),
+        password: Some("universality".into()),
+        connection_string: None,
+        read_only: false,
+    };
+    let test_result = adapters::test_connection(&timescale, Vec::new()).await?;
+    assert!(test_result.ok);
+    let timescale_result = adapters::execute(
+        &timescale,
+        &execution_request(
+            &timescale.id,
+            "env-dev",
+            "sql",
+            "select region, orders from order_metrics order by time limit 2;",
+        ),
+        Vec::new(),
+    )
+    .await?;
+    assert_eq!(timescale_result.engine, "timescaledb");
+    assert!(!timescale_result.payloads.is_empty());
+
+    let cockroach = ResolvedConnectionProfile {
+        id: "conn-cockroachdb".into(),
+        name: "Fixture CockroachDB".into(),
+        engine: "cockroachdb".into(),
+        family: "sql".into(),
+        host: "127.0.0.1".into(),
+        port: Some(26257),
+        database: Some("universality".into()),
+        username: Some("root".into()),
+        password: Some(String::new()),
+        connection_string: Some("postgres://root@127.0.0.1:26257/universality".into()),
+        read_only: false,
+    };
+    let cockroach_result = adapters::execute(
+        &cockroach,
+        &execution_request(
+            &cockroach.id,
+            "env-dev",
+            "sql",
+            "select transaction_id, status from transactions order by transaction_id limit 2;",
+        ),
+        Vec::new(),
+    )
+    .await?;
+    assert_eq!(cockroach_result.engine, "cockroachdb");
+    assert!(!cockroach_result.payloads.is_empty());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn analytics_profile_fixture_roundtrips() -> Result<(), CommandError> {
+    if !fixtures_enabled() || !fixture_profile_enabled("analytics") {
+        return Ok(());
+    }
+
+    let clickhouse = ResolvedConnectionProfile {
+        id: "conn-clickhouse".into(),
+        name: "Fixture ClickHouse".into(),
+        engine: "clickhouse".into(),
+        family: "warehouse".into(),
+        host: "127.0.0.1".into(),
+        port: Some(8124),
+        database: Some("analytics".into()),
+        username: Some("universality".into()),
+        password: Some("universality".into()),
+        connection_string: None,
+        read_only: false,
+    };
+    let clickhouse_result = adapters::execute(
+        &clickhouse,
+        &execution_request(
+            &clickhouse.id,
+            "env-dev",
+            "clickhouse-sql",
+            "select event_type from events order by event_time limit 2",
+        ),
+        Vec::new(),
+    )
+    .await?;
+    assert_eq!(clickhouse_result.engine, "clickhouse");
+    assert!(!clickhouse_result.payloads.is_empty());
+
+    let influxdb = ResolvedConnectionProfile {
+        id: "conn-influxdb".into(),
+        name: "Fixture InfluxDB".into(),
+        engine: "influxdb".into(),
+        family: "timeseries".into(),
+        host: "127.0.0.1".into(),
+        port: Some(8087),
+        database: Some("metrics".into()),
+        username: None,
+        password: None,
+        connection_string: None,
+        read_only: false,
+    };
+    let influx_result = adapters::execute(
+        &influxdb,
+        &execution_request(
+            &influxdb.id,
+            "env-dev",
+            "influxql",
+            "select * from order_latency limit 2",
+        ),
+        Vec::new(),
+    )
+    .await?;
+    assert_eq!(influx_result.engine, "influxdb");
+    assert!(!influx_result.payloads.is_empty());
+
+    let prometheus = ResolvedConnectionProfile {
+        id: "conn-prometheus".into(),
+        name: "Fixture Prometheus".into(),
+        engine: "prometheus".into(),
+        family: "timeseries".into(),
+        host: "127.0.0.1".into(),
+        port: Some(9091),
+        database: None,
+        username: None,
+        password: None,
+        connection_string: None,
+        read_only: false,
+    };
+    let prom_result = adapters::execute(
+        &prometheus,
+        &execution_request(&prometheus.id, "env-dev", "promql", "up"),
+        Vec::new(),
+    )
+    .await?;
+    assert_eq!(prom_result.engine, "prometheus");
+    assert!(!prom_result.payloads.is_empty());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn search_profile_fixture_roundtrips() -> Result<(), CommandError> {
+    if !fixtures_enabled() || !fixture_profile_enabled("search") {
+        return Ok(());
+    }
+
+    for (engine, port) in [("opensearch", 9201), ("elasticsearch", 9202)] {
+        let connection = ResolvedConnectionProfile {
+            id: format!("conn-{engine}"),
+            name: format!("Fixture {engine}"),
+            engine: engine.into(),
+            family: "search".into(),
+            host: "127.0.0.1".into(),
+            port: Some(port),
+            database: None,
+            username: None,
+            password: None,
+            connection_string: None,
+            read_only: false,
+        };
+        let result = adapters::execute(
+            &connection,
+            &execution_request(
+                &connection.id,
+                "env-dev",
+                "query-dsl",
+                r#"{ "index": "orders", "body": { "query": { "match_all": {} } } }"#,
+            ),
+            Vec::new(),
+        )
+        .await?;
+        assert_eq!(result.engine, engine);
+        assert!(!result.payloads.is_empty());
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn graph_profile_fixture_roundtrips() -> Result<(), CommandError> {
+    if !fixtures_enabled() || !fixture_profile_enabled("graph") {
+        return Ok(());
+    }
+
+    let neo4j = ResolvedConnectionProfile {
+        id: "conn-neo4j".into(),
+        name: "Fixture Neo4j".into(),
+        engine: "neo4j".into(),
+        family: "graph".into(),
+        host: "127.0.0.1".into(),
+        port: Some(7475),
+        database: Some("neo4j".into()),
+        username: Some("neo4j".into()),
+        password: Some("universality".into()),
+        connection_string: None,
+        read_only: false,
+    };
+    let neo4j_result = adapters::execute(
+        &neo4j,
+        &execution_request(
+            &neo4j.id,
+            "env-dev",
+            "cypher",
+            "MATCH (a:Account)-[:PLACED]->(o:Order) RETURN a, o LIMIT 2",
+        ),
+        Vec::new(),
+    )
+    .await?;
+    assert_eq!(neo4j_result.engine, "neo4j");
+    assert!(!neo4j_result.payloads.is_empty());
+
+    let arango = ResolvedConnectionProfile {
+        id: "conn-arango".into(),
+        name: "Fixture ArangoDB".into(),
+        engine: "arango".into(),
+        family: "graph".into(),
+        host: "127.0.0.1".into(),
+        port: Some(8529),
+        database: Some("universality".into()),
+        username: Some("root".into()),
+        password: Some("universality".into()),
+        connection_string: None,
+        read_only: false,
+    };
+    let arango_result = adapters::execute(
+        &arango,
+        &execution_request(
+            &arango.id,
+            "env-dev",
+            "aql",
+            "FOR account IN accounts LIMIT 2 RETURN account",
+        ),
+        Vec::new(),
+    )
+    .await?;
+    assert_eq!(arango_result.engine, "arango");
+    assert!(!arango_result.payloads.is_empty());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn cloud_contract_profile_fixture_roundtrips() -> Result<(), CommandError> {
+    if !fixtures_enabled() || !fixture_profile_enabled("cloud-contract") {
+        return Ok(());
+    }
+
+    let dynamodb = ResolvedConnectionProfile {
+        id: "conn-dynamodb".into(),
+        name: "Fixture DynamoDB Local".into(),
+        engine: "dynamodb".into(),
+        family: "widecolumn".into(),
+        host: "127.0.0.1".into(),
+        port: Some(8001),
+        database: None,
+        username: None,
+        password: None,
+        connection_string: None,
+        read_only: false,
+    };
+    let dynamodb_result = adapters::execute(
+        &dynamodb,
+        &execution_request(
+            &dynamodb.id,
+            "env-dev",
+            "json",
+            r#"{ "operation": "Scan", "TableName": "orders", "Limit": 5 }"#,
+        ),
+        Vec::new(),
+    )
+    .await?;
+    assert_eq!(dynamodb_result.engine, "dynamodb");
+    assert!(!dynamodb_result.payloads.is_empty());
+
+    let bigquery = ResolvedConnectionProfile {
+        id: "conn-bigquery".into(),
+        name: "Fixture BigQuery Mock".into(),
+        engine: "bigquery".into(),
+        family: "warehouse".into(),
+        host: "127.0.0.1".into(),
+        port: Some(19050),
+        database: Some("analytics".into()),
+        username: Some("universality-project".into()),
+        password: Some("fixture-token".into()),
+        connection_string: Some("http://127.0.0.1:19050".into()),
+        read_only: false,
+    };
+    let bigquery_result = adapters::execute(
+        &bigquery,
+        &execution_request(&bigquery.id, "env-dev", "google-sql", "select 1"),
+        Vec::new(),
+    )
+    .await?;
+    assert_eq!(bigquery_result.engine, "bigquery");
+    assert!(bigquery_result.payloads.iter().any(|payload| payload
+        .get("renderer")
+        .and_then(|value| value.as_str())
+        == Some("costEstimate")));
+
+    let snowflake = ResolvedConnectionProfile {
+        id: "conn-snowflake".into(),
+        name: "Fixture Snowflake Mock".into(),
+        engine: "snowflake".into(),
+        family: "warehouse".into(),
+        host: "127.0.0.1".into(),
+        port: Some(19060),
+        database: Some("UNIVERSALITY".into()),
+        username: Some("PUBLIC".into()),
+        password: Some("fixture-token".into()),
+        connection_string: Some("http://127.0.0.1:19060".into()),
+        read_only: false,
+    };
+    let snowflake_result = adapters::execute(
+        &snowflake,
+        &execution_request(&snowflake.id, "env-dev", "snowflake-sql", "select 1"),
+        Vec::new(),
+    )
+    .await?;
+    assert_eq!(snowflake_result.engine, "snowflake");
+    assert!(!snowflake_result.payloads.is_empty());
+
+    let cosmosdb = ResolvedConnectionProfile {
+        id: "conn-cosmosdb".into(),
+        name: "Fixture Cosmos DB Mock".into(),
+        engine: "cosmosdb".into(),
+        family: "document".into(),
+        host: "127.0.0.1".into(),
+        port: Some(19070),
+        database: Some("universality".into()),
+        username: None,
+        password: Some("fixture-token".into()),
+        connection_string: Some("http://127.0.0.1:19070".into()),
+        read_only: false,
+    };
+    let cosmos_result = adapters::execute(
+        &cosmosdb,
+        &execution_request(
+            &cosmosdb.id,
+            "env-dev",
+            "sql",
+            r#"{ "operation": "QueryDocuments", "database": "universality", "container": "orders", "query": "SELECT * FROM c" }"#,
+        ),
+        Vec::new(),
+    )
+    .await?;
+    assert_eq!(cosmos_result.engine, "cosmosdb");
+    assert!(!cosmos_result.payloads.is_empty());
+
+    let neptune = ResolvedConnectionProfile {
+        id: "conn-neptune".into(),
+        name: "Fixture Neptune Mock".into(),
+        engine: "neptune".into(),
+        family: "graph".into(),
+        host: "127.0.0.1".into(),
+        port: Some(19080),
+        database: None,
+        username: None,
+        password: None,
+        connection_string: Some("http://127.0.0.1:19080".into()),
+        read_only: false,
+    };
+    let neptune_result = adapters::execute(
+        &neptune,
+        &execution_request(&neptune.id, "env-dev", "gremlin", "g.V().limit(1)"),
+        Vec::new(),
+    )
+    .await?;
+    assert_eq!(neptune_result.engine, "neptune");
+    assert!(!neptune_result.payloads.is_empty());
+
     Ok(())
 }

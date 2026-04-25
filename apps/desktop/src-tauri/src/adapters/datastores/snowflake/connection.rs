@@ -261,7 +261,10 @@ mod tests {
         let endpoint = SnowflakeEndpoint::from_url("http://localhost:19060/snow").unwrap();
         assert_eq!(endpoint.host, "localhost");
         assert_eq!(endpoint.port, 19060);
-        assert_eq!(endpoint.path("/api/v2/statements"), "/snow/api/v2/statements");
+        assert_eq!(
+            endpoint.path("/api/v2/statements"),
+            "/snow/api/v2/statements"
+        );
     }
 
     #[test]

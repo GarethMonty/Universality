@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, HashMap, HashSet},
     sync::Mutex,
 };
 
@@ -13,14 +13,15 @@ use crate::{
         models::{
             AdapterDiagnosticsRequest, AdapterDiagnosticsResponse, AppHealth, AppPreferences,
             BootstrapPayload, CancelExecutionRequest, CancelExecutionResult,
-            ClosedQueryTabSnapshot, ConnectionProfile, ConnectionTestRequest, ConnectionTestResult,
-            DiagnosticsCounts, DiagnosticsReport, EnvironmentProfile, ExecutionRequest,
-            ExecutionResponse, ExplorerInspectRequest, ExplorerInspectResponse, ExplorerRequest,
-            ExplorerResponse, ExportBundle, LockState, OperationManifestRequest,
-            OperationManifestResponse, OperationPlanRequest, OperationPlanResponse,
-            PermissionInspectionRequest, PermissionInspectionResponse, QueryExecutionNotice,
-            QueryHistoryEntry, QueryTabState, ResolvedConnectionProfile, ResolvedEnvironment,
-            ResultPageRequest, ResultPageResponse, SavedWorkItem, StructureRequest,
+            ClosedQueryTabSnapshot, ConnectionAuth, ConnectionProfile, ConnectionTestRequest,
+            ConnectionTestResult, DiagnosticsCounts, DiagnosticsReport, EnvironmentProfile,
+            ExecutionRequest, ExecutionResponse, ExplorerInspectRequest, ExplorerInspectResponse,
+            ExplorerRequest, ExplorerResponse, ExportBundle, LockState, OperationExecutionRequest,
+            OperationExecutionResponse, OperationManifestRequest, OperationManifestResponse,
+            OperationPlanRequest, OperationPlanResponse, PermissionInspectionRequest,
+            PermissionInspectionResponse, QueryExecutionNotice, QueryHistoryEntry,
+            QueryTabReorderRequest, QueryTabState, ResolvedConnectionProfile, ResolvedEnvironment,
+            ResultPageRequest, ResultPageResponse, SavedWorkItem, SecretRef, StructureRequest,
             StructureResponse, UiState, UpdateUiStateRequest, UserFacingError, WorkspaceSnapshot,
         },
     },
@@ -36,11 +37,19 @@ pub type SharedAppState = Mutex<ManagedAppState>;
 
 impl ManagedAppState {
     pub fn load(app: AppHandle) -> Self {
-        let snapshot = persistence::load_snapshot(&app)
+        let loaded_snapshot = persistence::load_snapshot(&app)
             .ok()
             .flatten()
-            .map(migrate_snapshot)
-            .unwrap_or_else(blank_workspace_snapshot);
+            .map(migrate_snapshot);
+        let seed_fixture_workspace =
+            fixture_debug_enabled() && loaded_snapshot.as_ref().is_none_or(workspace_is_empty);
+        let snapshot = if seed_fixture_workspace {
+            let seed = fixture_workspace_seed();
+            let _ = seed_fixture_secrets(&seed.secrets);
+            seed.snapshot
+        } else {
+            loaded_snapshot.unwrap_or_else(blank_workspace_snapshot)
+        };
         let managed = Self { app, snapshot };
         let _ = persistence::save_snapshot(&managed.app, &sanitize_snapshot(&managed.snapshot));
         managed
@@ -80,7 +89,7 @@ impl ManagedAppState {
             created_at: timestamp_now(),
             runtime: self.health().runtime,
             platform: self.health().platform,
-            app_version: "0.2.0".into(),
+            app_version: env!("CARGO_PKG_VERSION").into(),
             counts: DiagnosticsCounts {
                 connections: self.snapshot.connections.len(),
                 environments: self.snapshot.environments.len(),
@@ -98,11 +107,11 @@ impl ManagedAppState {
     fn next_query_tab_title(&self, connection: &ConnectionProfile) -> String {
         let (prefix, extension) = query_tab_title_parts(connection);
         let mut index = 1;
-        let mut title = format!("{prefix}_{index}.{extension}");
+        let mut title = format!("{prefix} {index}.{extension}");
 
         while self.snapshot.tabs.iter().any(|tab| tab.title == title) {
             index += 1;
-            title = format!("{prefix}_{index}.{extension}");
+            title = format!("{prefix} {index}.{extension}");
         }
 
         title
@@ -419,6 +428,16 @@ impl ManagedAppState {
         self.snapshot.ui.active_tab_id = tab.id;
         self.snapshot.ui.active_connection_id = tab.connection_id;
         self.snapshot.ui.active_environment_id = tab.environment_id;
+        self.snapshot.updated_at = timestamp_now();
+        self.persist()?;
+        Ok(self.bootstrap_payload())
+    }
+
+    pub fn reorder_query_tabs(
+        &mut self,
+        request: QueryTabReorderRequest,
+    ) -> Result<BootstrapPayload, CommandError> {
+        reorder_query_tabs_in_place(&mut self.snapshot.tabs, request.ordered_tab_ids)?;
         self.snapshot.updated_at = timestamp_now();
         self.persist()?;
         Ok(self.bootstrap_payload())
@@ -805,6 +824,17 @@ impl ManagedAppState {
             environment_id: request.environment_id,
             plan,
         })
+    }
+
+    pub async fn execute_operation(
+        &self,
+        request: OperationExecutionRequest,
+    ) -> Result<OperationExecutionResponse, CommandError> {
+        self.ensure_unlocked()?;
+        let profile = self.connection_by_id(&request.connection_id)?;
+        let (resolved, _, _) =
+            self.resolve_connection_profile(&profile, &request.environment_id)?;
+        adapters::execute_operation(&resolved, &request).await
     }
 
     pub async fn inspect_permissions(
@@ -1282,9 +1312,9 @@ fn editor_label_for_connection(connection: &ConnectionProfile) -> String {
 
 fn query_tab_title_parts(connection: &ConnectionProfile) -> (&'static str, &'static str) {
     match connection.family.as_str() {
-        "document" => ("MongoQuery", "json"),
-        "keyvalue" => ("RedisConsole", "redis"),
-        _ => ("SQLQuery", "sql"),
+        "document" => ("Query", "json"),
+        "keyvalue" => ("Console", "redis"),
+        _ => ("Query", "sql"),
     }
 }
 
@@ -1377,7 +1407,10 @@ fn is_explorer_view(value: &str) -> bool {
 }
 
 fn is_right_drawer(value: &str) -> bool {
-    matches!(value, "none" | "connection" | "inspection" | "diagnostics")
+    matches!(
+        value,
+        "none" | "connection" | "inspection" | "diagnostics" | "operations"
+    )
 }
 
 fn clamp_bottom_panel_height(value: u32) -> u32 {
@@ -1446,6 +1479,11 @@ fn normalize_ui_state(snapshot: &WorkspaceSnapshot) -> UiState {
         active_activity.clone()
     };
     let has_active_tab = active_tab.is_some();
+    let active_bottom_panel_tab = if is_bottom_panel_tab(&snapshot.ui.active_bottom_panel_tab) {
+        snapshot.ui.active_bottom_panel_tab.clone()
+    } else {
+        "results".into()
+    };
 
     UiState {
         active_connection_id: active_connection.map(|item| item.id).unwrap_or_default(),
@@ -1461,12 +1499,9 @@ fn normalize_ui_state(snapshot: &WorkspaceSnapshot) -> UiState {
         sidebar_collapsed: snapshot.ui.sidebar_collapsed,
         active_sidebar_pane,
         sidebar_width: clamp_sidebar_width(snapshot.ui.sidebar_width),
-        bottom_panel_visible: snapshot.ui.bottom_panel_visible && has_active_tab,
-        active_bottom_panel_tab: if is_bottom_panel_tab(&snapshot.ui.active_bottom_panel_tab) {
-            snapshot.ui.active_bottom_panel_tab.clone()
-        } else {
-            "results".into()
-        },
+        bottom_panel_visible: snapshot.ui.bottom_panel_visible
+            && (has_active_tab || active_bottom_panel_tab == "messages"),
+        active_bottom_panel_tab,
         bottom_panel_height: clamp_bottom_panel_height(snapshot.ui.bottom_panel_height),
         right_drawer: if is_right_drawer(&snapshot.ui.right_drawer) {
             snapshot.ui.right_drawer.clone()
@@ -1559,6 +1594,978 @@ fn strip_demo_records(snapshot: &mut WorkspaceSnapshot) {
     });
 }
 
+struct FixtureWorkspaceSeed {
+    snapshot: WorkspaceSnapshot,
+    secrets: Vec<(SecretRef, String)>,
+}
+
+struct FixtureConnectionSeed {
+    profile: Option<&'static str>,
+    id: &'static str,
+    name: &'static str,
+    engine: &'static str,
+    family: &'static str,
+    host: &'static str,
+    port: Option<u16>,
+    database: Option<&'static str>,
+    use_sqlite_fixture: bool,
+    username: Option<&'static str>,
+    password: Option<&'static str>,
+    auth_mechanism: Option<&'static str>,
+    ssl_mode: Option<&'static str>,
+    connection_string: Option<&'static str>,
+    group: &'static str,
+    color: &'static str,
+    icon: &'static str,
+    query_title: &'static str,
+    query_text: &'static str,
+    tags: &'static [&'static str],
+}
+
+fn fixture_debug_enabled() -> bool {
+    std::env::var("UNIVERSALITY_FIXTURE_RUN")
+        .map(|value| value == "1" || value.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
+
+fn workspace_is_empty(snapshot: &WorkspaceSnapshot) -> bool {
+    snapshot.connections.is_empty()
+        && snapshot.environments.is_empty()
+        && snapshot.tabs.is_empty()
+        && snapshot.saved_work.is_empty()
+}
+
+fn fixture_workspace_seed() -> FixtureWorkspaceSeed {
+    let profile_value = std::env::var("UNIVERSALITY_FIXTURE_PROFILE").ok();
+    let sqlite_fixture = std::env::var("UNIVERSALITY_SQLITE_FIXTURE")
+        .unwrap_or_else(|_| "tests/fixtures/sqlite/universality.sqlite3".into());
+    fixture_workspace_seed_for_profile(profile_value.as_deref(), &sqlite_fixture)
+}
+
+fn fixture_workspace_seed_for_profile(
+    profile_value: Option<&str>,
+    sqlite_fixture: &str,
+) -> FixtureWorkspaceSeed {
+    let created_at = timestamp_now();
+    let environments = fixture_environments(&created_at, sqlite_fixture);
+    let seeds: Vec<FixtureConnectionSeed> = fixture_connection_seeds()
+        .into_iter()
+        .filter(|seed| fixture_profile_requested(seed.profile, profile_value))
+        .collect();
+    let mut secrets = Vec::new();
+    let mut connections = Vec::new();
+
+    for seed in &seeds {
+        let (connection, secret) = build_fixture_connection(seed, sqlite_fixture, &created_at);
+        if let Some(secret) = secret {
+            secrets.push(secret);
+        }
+        connections.push(connection);
+    }
+
+    let tabs = connections
+        .iter()
+        .filter_map(|connection| {
+            seeds
+                .iter()
+                .find(|seed| seed.id == connection.id)
+                .map(|seed| fixture_query_tab(connection, seed, &created_at))
+        })
+        .collect::<Vec<_>>();
+    let saved_work = connections
+        .iter()
+        .filter_map(|connection| {
+            seeds
+                .iter()
+                .find(|seed| seed.id == connection.id)
+                .map(|seed| fixture_saved_query(connection, seed, &created_at))
+        })
+        .chain(fixture_snippets(&created_at))
+        .collect::<Vec<_>>();
+    let closed_tabs = fixture_closed_tabs(&connections, &created_at);
+    let active_connection_id = connections
+        .first()
+        .map(|connection| connection.id.clone())
+        .unwrap_or_default();
+    let active_tab_id = tabs.first().map(|tab| tab.id.clone()).unwrap_or_default();
+
+    FixtureWorkspaceSeed {
+        snapshot: WorkspaceSnapshot {
+            schema_version: persistence::SCHEMA_VERSION,
+            connections,
+            environments,
+            tabs,
+            closed_tabs,
+            saved_work,
+            explorer_nodes: Vec::new(),
+            adapter_manifests: adapters::manifests(),
+            preferences: AppPreferences {
+                theme: "dark".into(),
+                telemetry: "opt-in".into(),
+                lock_after_minutes: 15,
+                safe_mode_enabled: true,
+                command_palette_enabled: true,
+            },
+            guardrails: Vec::new(),
+            lock_state: LockState {
+                is_locked: false,
+                locked_at: None,
+            },
+            ui: UiState {
+                active_connection_id,
+                active_environment_id: "env-fixtures".into(),
+                active_tab_id,
+                explorer_filter: String::new(),
+                explorer_view: "structure".into(),
+                active_activity: "connections".into(),
+                sidebar_collapsed: false,
+                active_sidebar_pane: "connections".into(),
+                sidebar_width: 300,
+                bottom_panel_visible: false,
+                active_bottom_panel_tab: "results".into(),
+                bottom_panel_height: 300,
+                right_drawer: "none".into(),
+                right_drawer_width: 380,
+            },
+            updated_at: created_at,
+        },
+        secrets,
+    }
+}
+
+fn seed_fixture_secrets(secrets: &[(SecretRef, String)]) -> Result<(), CommandError> {
+    if !security::using_file_secret_store() {
+        return Err(CommandError::new(
+            "fixture-secret-store",
+            "Fixture workspace seeding requires UNIVERSALITY_SECRET_STORE=file.",
+        ));
+    }
+
+    for (secret_ref, secret) in secrets {
+        security::store_secret_value(secret_ref, secret)?;
+    }
+
+    Ok(())
+}
+
+fn fixture_profile_requested(seed_profile: Option<&str>, profile_value: Option<&str>) -> bool {
+    match seed_profile {
+        None => true,
+        Some(seed_profile) => profile_value
+            .unwrap_or_default()
+            .split(',')
+            .map(str::trim)
+            .any(|profile| profile == "all" || profile.eq_ignore_ascii_case(seed_profile)),
+    }
+}
+
+fn fixture_environments(created_at: &str, sqlite_fixture: &str) -> Vec<EnvironmentProfile> {
+    let mut variables = HashMap::new();
+    variables.insert("FIXTURE_HOST".into(), "127.0.0.1".into());
+    variables.insert("SQLITE_FIXTURE".into(), sqlite_fixture.into());
+
+    vec![
+        EnvironmentProfile {
+            id: "env-fixtures".into(),
+            label: "Fixtures".into(),
+            color: "#2dbf9b".into(),
+            risk: "low".into(),
+            inherits_from: None,
+            variables,
+            sensitive_keys: Vec::new(),
+            requires_confirmation: false,
+            safe_mode: false,
+            exportable: true,
+            created_at: created_at.into(),
+            updated_at: created_at.into(),
+        },
+        EnvironmentProfile {
+            id: "env-fixtures-prod-sim".into(),
+            label: "Fixture Prod Sim".into(),
+            color: "#ec7b7b".into(),
+            risk: "critical".into(),
+            inherits_from: Some("env-fixtures".into()),
+            variables: HashMap::new(),
+            sensitive_keys: Vec::new(),
+            requires_confirmation: true,
+            safe_mode: true,
+            exportable: true,
+            created_at: created_at.into(),
+            updated_at: created_at.into(),
+        },
+    ]
+}
+
+fn build_fixture_connection(
+    seed: &FixtureConnectionSeed,
+    _sqlite_fixture: &str,
+    created_at: &str,
+) -> (ConnectionProfile, Option<(SecretRef, String)>) {
+    let database = if seed.use_sqlite_fixture {
+        Some("${SQLITE_FIXTURE}".into())
+    } else {
+        seed.database.map(str::to_string)
+    };
+    let secret_ref = seed.password.map(|_| SecretRef {
+        id: format!("secret-{}", seed.id),
+        provider: "file".into(),
+        service: "UniversalityFixture".into(),
+        account: seed.id.into(),
+        label: format!("{} fixture credential", seed.name),
+    });
+    let secret = secret_ref.clone().zip(seed.password.map(str::to_string));
+
+    (
+        ConnectionProfile {
+            id: seed.id.into(),
+            name: seed.name.into(),
+            engine: seed.engine.into(),
+            family: seed.family.into(),
+            host: seed.host.into(),
+            port: seed.port,
+            database,
+            connection_string: seed.connection_string.map(str::to_string),
+            connection_mode: Some(
+                if seed.use_sqlite_fixture {
+                    "file"
+                } else {
+                    "host"
+                }
+                .into(),
+            ),
+            environment_ids: vec!["env-fixtures".into()],
+            tags: seed.tags.iter().map(|tag| (*tag).to_string()).collect(),
+            favorite: seed.profile.is_none(),
+            read_only: false,
+            icon: seed.icon.into(),
+            color: Some(seed.color.into()),
+            group: Some(seed.group.into()),
+            notes: Some("Seeded only for fixture debug workspaces.".into()),
+            auth: ConnectionAuth {
+                username: seed.username.map(str::to_string),
+                auth_mechanism: seed.auth_mechanism.map(str::to_string),
+                ssl_mode: seed.ssl_mode.map(str::to_string),
+                cloud_provider: None,
+                principal: None,
+                secret_ref,
+            },
+            created_at: created_at.into(),
+            updated_at: created_at.into(),
+        },
+        secret,
+    )
+}
+
+fn fixture_query_tab(
+    connection: &ConnectionProfile,
+    seed: &FixtureConnectionSeed,
+    created_at: &str,
+) -> QueryTabState {
+    QueryTabState {
+        id: format!("tab-{}", seed.id),
+        title: seed.query_title.into(),
+        connection_id: connection.id.clone(),
+        environment_id: "env-fixtures".into(),
+        family: connection.family.clone(),
+        language: language_for_connection(connection),
+        pinned: Some(seed.profile.is_none()),
+        saved_query_id: Some(format!("saved-{}", seed.id)),
+        editor_label: editor_label_for_connection(connection),
+        query_text: seed.query_text.into(),
+        status: "idle".into(),
+        dirty: false,
+        last_run_at: None,
+        result: None,
+        history: vec![QueryHistoryEntry {
+            id: format!("history-{}", seed.id),
+            query_text: seed.query_text.into(),
+            executed_at: created_at.into(),
+            status: "seeded".into(),
+        }],
+        error: None,
+    }
+}
+
+fn fixture_saved_query(
+    connection: &ConnectionProfile,
+    seed: &FixtureConnectionSeed,
+    created_at: &str,
+) -> SavedWorkItem {
+    SavedWorkItem {
+        id: format!("saved-{}", seed.id),
+        kind: "query".into(),
+        name: format!("{} smoke query", seed.name),
+        summary: format!("Fixture query for {}", seed.name),
+        tags: seed.tags.iter().map(|tag| (*tag).to_string()).collect(),
+        updated_at: created_at.into(),
+        folder: Some(match seed.profile {
+            Some(profile) => format!("Fixture Profiles/{profile}"),
+            None => "Fixture Core".into(),
+        }),
+        favorite: Some(seed.profile.is_none()),
+        connection_id: Some(connection.id.clone()),
+        environment_id: Some("env-fixtures".into()),
+        language: Some(language_for_connection(connection)),
+        query_text: Some(seed.query_text.into()),
+        snapshot_result_id: None,
+    }
+}
+
+fn fixture_snippets(created_at: &str) -> impl Iterator<Item = SavedWorkItem> {
+    [
+        SavedWorkItem {
+            id: "saved-fixture-sql-count-snippet".into(),
+            kind: "snippet".into(),
+            name: "SQL row-count smoke snippet".into(),
+            summary: "Quick count pattern for fixture tables.".into(),
+            tags: vec!["fixtures".into(), "sql".into()],
+            updated_at: created_at.into(),
+            folder: Some("Fixture Snippets".into()),
+            favorite: Some(false),
+            connection_id: None,
+            environment_id: Some("env-fixtures".into()),
+            language: Some("sql".into()),
+            query_text: Some("select count(*) as row_count from <table_name>;".into()),
+            snapshot_result_id: None,
+        },
+        SavedWorkItem {
+            id: "saved-fixture-redis-scan-snippet".into(),
+            kind: "snippet".into(),
+            name: "Redis session scan snippet".into(),
+            summary: "Bounded SCAN pattern for cache fixture keys.".into(),
+            tags: vec!["fixtures".into(), "redis".into()],
+            updated_at: created_at.into(),
+            folder: Some("Fixture Snippets".into()),
+            favorite: Some(false),
+            connection_id: Some("fixture-redis".into()),
+            environment_id: Some("env-fixtures".into()),
+            language: Some("redis".into()),
+            query_text: Some("SCAN 0 MATCH session:* COUNT 25".into()),
+            snapshot_result_id: None,
+        },
+    ]
+    .into_iter()
+}
+
+fn fixture_closed_tabs(
+    connections: &[ConnectionProfile],
+    created_at: &str,
+) -> Vec<ClosedQueryTabSnapshot> {
+    let Some(connection) = connections
+        .iter()
+        .find(|connection| connection.id == "fixture-postgresql")
+        .or_else(|| connections.first())
+    else {
+        return Vec::new();
+    };
+
+    vec![ClosedQueryTabSnapshot {
+        tab: QueryTabState {
+            id: "tab-fixture-recovery-example".into(),
+            title: "Recovered fixture scratch.sql".into(),
+            connection_id: connection.id.clone(),
+            environment_id: "env-fixtures".into(),
+            family: connection.family.clone(),
+            language: language_for_connection(connection),
+            pinned: None,
+            saved_query_id: None,
+            editor_label: editor_label_for_connection(connection),
+            query_text: "select count(*) as table_count from observability.table_health;".into(),
+            status: "idle".into(),
+            dirty: true,
+            last_run_at: None,
+            result: None,
+            history: vec![QueryHistoryEntry {
+                id: "history-fixture-recovery-example".into(),
+                query_text: "select count(*) as table_count from observability.table_health;"
+                    .into(),
+                executed_at: created_at.into(),
+                status: "recovered".into(),
+            }],
+            error: None,
+        },
+        closed_at: created_at.into(),
+        close_reason: "fixture-recovery-example".into(),
+    }]
+}
+
+fn fixture_connection_seeds() -> Vec<FixtureConnectionSeed> {
+    vec![
+        FixtureConnectionSeed {
+            profile: None,
+            id: "fixture-postgresql",
+            name: "Fixture PostgreSQL",
+            engine: "postgresql",
+            family: "sql",
+            host: "127.0.0.1",
+            port: Some(54329),
+            database: Some("universality"),
+            use_sqlite_fixture: false,
+            username: Some("universality"),
+            password: Some("universality"),
+            auth_mechanism: Some("password"),
+            ssl_mode: Some("disable"),
+            connection_string: None,
+            group: "Core Fixtures",
+            color: "#2dbf9b",
+            icon: "postgresql",
+            query_title: "Fixture PostgreSQL.sql",
+            query_text: "select table_name, rows_estimate, last_vacuum from observability.table_health order by rows_estimate desc limit 50;",
+            tags: &["fixtures", "core", "sql"],
+        },
+        FixtureConnectionSeed {
+            profile: None,
+            id: "fixture-sqlserver",
+            name: "Fixture SQL Server",
+            engine: "sqlserver",
+            family: "sql",
+            host: "127.0.0.1",
+            port: Some(14333),
+            database: Some("universality"),
+            use_sqlite_fixture: false,
+            username: Some("sa"),
+            password: Some("Universality_pwd_123"),
+            auth_mechanism: Some("sql-server"),
+            ssl_mode: Some("trust"),
+            connection_string: None,
+            group: "Core Fixtures",
+            color: "#4aa3ff",
+            icon: "sqlserver",
+            query_title: "Fixture SQL Server.sql",
+            query_text: "select top 50 order_id, status, updated_at from dbo.orders order by updated_at desc;",
+            tags: &["fixtures", "core", "sql"],
+        },
+        FixtureConnectionSeed {
+            profile: None,
+            id: "fixture-mysql",
+            name: "Fixture MySQL",
+            engine: "mysql",
+            family: "sql",
+            host: "127.0.0.1",
+            port: Some(33060),
+            database: Some("commerce"),
+            use_sqlite_fixture: false,
+            username: Some("universality"),
+            password: Some("universality"),
+            auth_mechanism: Some("password"),
+            ssl_mode: Some("disable"),
+            connection_string: None,
+            group: "Core Fixtures",
+            color: "#f0a95b",
+            icon: "mysql",
+            query_title: "Fixture MySQL.sql",
+            query_text: "select sku, inventory_available, updated_at from inventory_items order by updated_at desc limit 50;",
+            tags: &["fixtures", "core", "sql"],
+        },
+        FixtureConnectionSeed {
+            profile: None,
+            id: "fixture-sqlite",
+            name: "Fixture SQLite",
+            engine: "sqlite",
+            family: "sql",
+            host: "localhost",
+            port: None,
+            database: None,
+            use_sqlite_fixture: true,
+            username: None,
+            password: None,
+            auth_mechanism: None,
+            ssl_mode: None,
+            connection_string: None,
+            group: "Core Fixtures",
+            color: "#c9a86a",
+            icon: "sqlite",
+            query_title: "Fixture SQLite.sql",
+            query_text: "select id, name, status, updated_at from accounts order by id;",
+            tags: &["fixtures", "core", "local"],
+        },
+        FixtureConnectionSeed {
+            profile: None,
+            id: "fixture-mongodb",
+            name: "Fixture MongoDB",
+            engine: "mongodb",
+            family: "document",
+            host: "127.0.0.1",
+            port: Some(27018),
+            database: Some("catalog"),
+            use_sqlite_fixture: false,
+            username: Some("universality"),
+            password: Some("universality"),
+            auth_mechanism: Some("password"),
+            ssl_mode: None,
+            connection_string: None,
+            group: "Core Fixtures",
+            color: "#5abf6f",
+            icon: "mongodb",
+            query_title: "Fixture MongoDB.json",
+            query_text: "{\n  \"collection\": \"products\",\n  \"filter\": {},\n  \"limit\": 50\n}",
+            tags: &["fixtures", "core", "document"],
+        },
+        FixtureConnectionSeed {
+            profile: None,
+            id: "fixture-redis",
+            name: "Fixture Redis",
+            engine: "redis",
+            family: "keyvalue",
+            host: "127.0.0.1",
+            port: Some(6380),
+            database: Some("0"),
+            use_sqlite_fixture: false,
+            username: None,
+            password: None,
+            auth_mechanism: None,
+            ssl_mode: None,
+            connection_string: None,
+            group: "Core Fixtures",
+            color: "#d15b5b",
+            icon: "redis",
+            query_title: "Fixture Redis.redis",
+            query_text: "SCAN 0 MATCH session:* COUNT 25",
+            tags: &["fixtures", "core", "cache"],
+        },
+        FixtureConnectionSeed {
+            profile: Some("cache"),
+            id: "fixture-valkey",
+            name: "Fixture Valkey",
+            engine: "valkey",
+            family: "keyvalue",
+            host: "127.0.0.1",
+            port: Some(6381),
+            database: Some("0"),
+            use_sqlite_fixture: false,
+            username: None,
+            password: None,
+            auth_mechanism: None,
+            ssl_mode: None,
+            connection_string: None,
+            group: "Cache Fixtures",
+            color: "#c9463c",
+            icon: "valkey",
+            query_title: "Fixture Valkey.redis",
+            query_text: "SCAN 0 MATCH session:* COUNT 25",
+            tags: &["fixtures", "cache"],
+        },
+        FixtureConnectionSeed {
+            profile: Some("cache"),
+            id: "fixture-memcached",
+            name: "Fixture Memcached",
+            engine: "memcached",
+            family: "keyvalue",
+            host: "127.0.0.1",
+            port: Some(11212),
+            database: None,
+            use_sqlite_fixture: false,
+            username: None,
+            password: None,
+            auth_mechanism: None,
+            ssl_mode: None,
+            connection_string: None,
+            group: "Cache Fixtures",
+            color: "#8ac16f",
+            icon: "memcached",
+            query_title: "Fixture Memcached.txt",
+            query_text: "stats",
+            tags: &["fixtures", "cache"],
+        },
+        FixtureConnectionSeed {
+            profile: Some("sqlplus"),
+            id: "fixture-mariadb",
+            name: "Fixture MariaDB",
+            engine: "mariadb",
+            family: "sql",
+            host: "127.0.0.1",
+            port: Some(33061),
+            database: Some("commerce"),
+            use_sqlite_fixture: false,
+            username: Some("universality"),
+            password: Some("universality"),
+            auth_mechanism: Some("password"),
+            ssl_mode: Some("disable"),
+            connection_string: None,
+            group: "SQL+ Fixtures",
+            color: "#b98edb",
+            icon: "mariadb",
+            query_title: "Fixture MariaDB.sql",
+            query_text: "select order_id, account_id, status, total_amount, updated_at from orders order by updated_at desc limit 50;",
+            tags: &["fixtures", "sqlplus", "sql"],
+        },
+        FixtureConnectionSeed {
+            profile: Some("sqlplus"),
+            id: "fixture-cockroachdb",
+            name: "Fixture CockroachDB",
+            engine: "cockroachdb",
+            family: "sql",
+            host: "127.0.0.1",
+            port: Some(26257),
+            database: Some("universality"),
+            use_sqlite_fixture: false,
+            username: Some("root"),
+            password: None,
+            auth_mechanism: Some("password"),
+            ssl_mode: Some("disable"),
+            connection_string: None,
+            group: "SQL+ Fixtures",
+            color: "#6eb7ff",
+            icon: "cockroachdb",
+            query_title: "Fixture CockroachDB.sql",
+            query_text: "select id, name, status, updated_at from accounts order by id limit 50;",
+            tags: &["fixtures", "sqlplus", "sql"],
+        },
+        FixtureConnectionSeed {
+            profile: Some("sqlplus"),
+            id: "fixture-timescaledb",
+            name: "Fixture TimescaleDB",
+            engine: "timescaledb",
+            family: "timeseries",
+            host: "127.0.0.1",
+            port: Some(54330),
+            database: Some("metrics"),
+            use_sqlite_fixture: false,
+            username: Some("universality"),
+            password: Some("universality"),
+            auth_mechanism: Some("password"),
+            ssl_mode: Some("disable"),
+            connection_string: None,
+            group: "SQL+ Fixtures",
+            color: "#55a8e6",
+            icon: "timescaledb",
+            query_title: "Fixture TimescaleDB.sql",
+            query_text: "select time, account_id, region, orders, latency_ms from order_metrics order by time desc limit 50;",
+            tags: &["fixtures", "sqlplus", "timeseries"],
+        },
+        FixtureConnectionSeed {
+            profile: Some("analytics"),
+            id: "fixture-clickhouse",
+            name: "Fixture ClickHouse",
+            engine: "clickhouse",
+            family: "warehouse",
+            host: "127.0.0.1",
+            port: Some(8124),
+            database: Some("analytics"),
+            use_sqlite_fixture: false,
+            username: Some("universality"),
+            password: Some("universality"),
+            auth_mechanism: Some("password"),
+            ssl_mode: None,
+            connection_string: None,
+            group: "Analytics Fixtures",
+            color: "#f3d74f",
+            icon: "clickhouse",
+            query_title: "Fixture ClickHouse.sql",
+            query_text: "select event_time, account_id, event_type, latency_ms from analytics.events order by event_time desc limit 50;",
+            tags: &["fixtures", "analytics", "warehouse"],
+        },
+        FixtureConnectionSeed {
+            profile: Some("analytics"),
+            id: "fixture-influxdb",
+            name: "Fixture InfluxDB",
+            engine: "influxdb",
+            family: "timeseries",
+            host: "127.0.0.1",
+            port: Some(8087),
+            database: Some("metrics"),
+            use_sqlite_fixture: false,
+            username: None,
+            password: None,
+            auth_mechanism: None,
+            ssl_mode: None,
+            connection_string: None,
+            group: "Analytics Fixtures",
+            color: "#8d74ff",
+            icon: "influxdb",
+            query_title: "Fixture InfluxDB.influxql",
+            query_text: "SELECT * FROM order_latency LIMIT 25",
+            tags: &["fixtures", "analytics", "timeseries"],
+        },
+        FixtureConnectionSeed {
+            profile: Some("analytics"),
+            id: "fixture-prometheus",
+            name: "Fixture Prometheus",
+            engine: "prometheus",
+            family: "timeseries",
+            host: "127.0.0.1",
+            port: Some(9091),
+            database: None,
+            use_sqlite_fixture: false,
+            username: None,
+            password: None,
+            auth_mechanism: None,
+            ssl_mode: None,
+            connection_string: None,
+            group: "Analytics Fixtures",
+            color: "#e87941",
+            icon: "prometheus",
+            query_title: "Fixture Prometheus.promql",
+            query_text: "up",
+            tags: &["fixtures", "analytics", "timeseries"],
+        },
+        FixtureConnectionSeed {
+            profile: Some("search"),
+            id: "fixture-opensearch",
+            name: "Fixture OpenSearch",
+            engine: "opensearch",
+            family: "search",
+            host: "127.0.0.1",
+            port: Some(9201),
+            database: None,
+            use_sqlite_fixture: false,
+            username: None,
+            password: None,
+            auth_mechanism: None,
+            ssl_mode: None,
+            connection_string: None,
+            group: "Search Fixtures",
+            color: "#5cb3ff",
+            icon: "opensearch",
+            query_title: "Fixture OpenSearch.json",
+            query_text: "{\n  \"index\": \"orders\",\n  \"query\": { \"match_all\": {} },\n  \"size\": 25\n}",
+            tags: &["fixtures", "search"],
+        },
+        FixtureConnectionSeed {
+            profile: Some("search"),
+            id: "fixture-elasticsearch",
+            name: "Fixture Elasticsearch",
+            engine: "elasticsearch",
+            family: "search",
+            host: "127.0.0.1",
+            port: Some(9202),
+            database: None,
+            use_sqlite_fixture: false,
+            username: None,
+            password: None,
+            auth_mechanism: None,
+            ssl_mode: None,
+            connection_string: None,
+            group: "Search Fixtures",
+            color: "#f0bf4f",
+            icon: "elasticsearch",
+            query_title: "Fixture Elasticsearch.json",
+            query_text: "{\n  \"index\": \"orders\",\n  \"query\": { \"match_all\": {} },\n  \"size\": 25\n}",
+            tags: &["fixtures", "search"],
+        },
+        FixtureConnectionSeed {
+            profile: Some("graph"),
+            id: "fixture-neo4j",
+            name: "Fixture Neo4j",
+            engine: "neo4j",
+            family: "graph",
+            host: "127.0.0.1",
+            port: Some(7688),
+            database: Some("neo4j"),
+            use_sqlite_fixture: false,
+            username: Some("neo4j"),
+            password: Some("universality"),
+            auth_mechanism: Some("password"),
+            ssl_mode: None,
+            connection_string: None,
+            group: "Graph Fixtures",
+            color: "#4f8dff",
+            icon: "neo4j",
+            query_title: "Fixture Neo4j.cypher",
+            query_text: "MATCH (n) RETURN n LIMIT 25",
+            tags: &["fixtures", "graph"],
+        },
+        FixtureConnectionSeed {
+            profile: Some("graph"),
+            id: "fixture-arangodb",
+            name: "Fixture ArangoDB",
+            engine: "arango",
+            family: "graph",
+            host: "127.0.0.1",
+            port: Some(8529),
+            database: Some("universality"),
+            use_sqlite_fixture: false,
+            username: Some("root"),
+            password: Some("universality"),
+            auth_mechanism: Some("password"),
+            ssl_mode: None,
+            connection_string: None,
+            group: "Graph Fixtures",
+            color: "#75b84d",
+            icon: "arangodb",
+            query_title: "Fixture ArangoDB.aql",
+            query_text: "FOR doc IN accounts LIMIT 25 RETURN doc",
+            tags: &["fixtures", "graph"],
+        },
+        FixtureConnectionSeed {
+            profile: Some("graph"),
+            id: "fixture-janusgraph",
+            name: "Fixture JanusGraph",
+            engine: "janusgraph",
+            family: "graph",
+            host: "127.0.0.1",
+            port: Some(8183),
+            database: None,
+            use_sqlite_fixture: false,
+            username: None,
+            password: None,
+            auth_mechanism: None,
+            ssl_mode: None,
+            connection_string: None,
+            group: "Graph Fixtures",
+            color: "#9a7bd7",
+            icon: "janusgraph",
+            query_title: "Fixture JanusGraph.gremlin",
+            query_text: "g.V().limit(25)",
+            tags: &["fixtures", "graph"],
+        },
+        FixtureConnectionSeed {
+            profile: Some("widecolumn"),
+            id: "fixture-cassandra",
+            name: "Fixture Cassandra",
+            engine: "cassandra",
+            family: "widecolumn",
+            host: "127.0.0.1",
+            port: Some(9043),
+            database: Some("universality"),
+            use_sqlite_fixture: false,
+            username: None,
+            password: None,
+            auth_mechanism: None,
+            ssl_mode: None,
+            connection_string: None,
+            group: "Wide Column Fixtures",
+            color: "#64a6d8",
+            icon: "cassandra",
+            query_title: "Fixture Cassandra.cql",
+            query_text: "select * from universality.orders limit 25;",
+            tags: &["fixtures", "widecolumn"],
+        },
+        FixtureConnectionSeed {
+            profile: Some("oracle"),
+            id: "fixture-oracle",
+            name: "Fixture Oracle",
+            engine: "oracle",
+            family: "sql",
+            host: "127.0.0.1",
+            port: Some(1522),
+            database: Some("FREEPDB1"),
+            use_sqlite_fixture: false,
+            username: Some("universality"),
+            password: Some("universality"),
+            auth_mechanism: Some("password"),
+            ssl_mode: None,
+            connection_string: None,
+            group: "Oracle Fixtures",
+            color: "#d85f4f",
+            icon: "oracle",
+            query_title: "Fixture Oracle.sql",
+            query_text: "select order_id, account_id, status, total_amount, updated_at from orders fetch first 50 rows only",
+            tags: &["fixtures", "oracle", "sql"],
+        },
+        FixtureConnectionSeed {
+            profile: Some("cloud-contract"),
+            id: "fixture-dynamodb",
+            name: "Fixture DynamoDB Local",
+            engine: "dynamodb",
+            family: "widecolumn",
+            host: "127.0.0.1",
+            port: Some(8001),
+            database: Some("sharedDb"),
+            use_sqlite_fixture: false,
+            username: Some("local"),
+            password: Some("local"),
+            auth_mechanism: Some("local"),
+            ssl_mode: None,
+            connection_string: None,
+            group: "Cloud Contract Fixtures",
+            color: "#5487e8",
+            icon: "dynamodb",
+            query_title: "Fixture DynamoDB.json",
+            query_text: "{\n  \"table\": \"orders\",\n  \"limit\": 25\n}",
+            tags: &["fixtures", "cloud-contract", "widecolumn"],
+        },
+        FixtureConnectionSeed {
+            profile: Some("cloud-contract"),
+            id: "fixture-bigquery",
+            name: "Fixture BigQuery Mock",
+            engine: "bigquery",
+            family: "warehouse",
+            host: "127.0.0.1",
+            port: Some(19050),
+            database: Some("analytics"),
+            use_sqlite_fixture: false,
+            username: Some("universality-project"),
+            password: Some("fixture-token"),
+            auth_mechanism: Some("mock-token"),
+            ssl_mode: None,
+            connection_string: Some("http://127.0.0.1:19050"),
+            group: "Cloud Contract Fixtures",
+            color: "#669df6",
+            icon: "bigquery",
+            query_title: "Fixture BigQuery.sql",
+            query_text: "select * from analytics.orders limit 25;",
+            tags: &["fixtures", "cloud-contract", "warehouse"],
+        },
+        FixtureConnectionSeed {
+            profile: Some("cloud-contract"),
+            id: "fixture-snowflake",
+            name: "Fixture Snowflake Mock",
+            engine: "snowflake",
+            family: "warehouse",
+            host: "127.0.0.1",
+            port: Some(19060),
+            database: Some("UNIVERSALITY"),
+            use_sqlite_fixture: false,
+            username: Some("PUBLIC"),
+            password: Some("fixture-token"),
+            auth_mechanism: Some("mock-token"),
+            ssl_mode: None,
+            connection_string: Some("http://127.0.0.1:19060"),
+            group: "Cloud Contract Fixtures",
+            color: "#7dd3fc",
+            icon: "snowflake",
+            query_title: "Fixture Snowflake.sql",
+            query_text: "select * from orders limit 25;",
+            tags: &["fixtures", "cloud-contract", "warehouse"],
+        },
+        FixtureConnectionSeed {
+            profile: Some("cloud-contract"),
+            id: "fixture-cosmosdb",
+            name: "Fixture Cosmos DB Mock",
+            engine: "cosmosdb",
+            family: "document",
+            host: "127.0.0.1",
+            port: Some(19070),
+            database: Some("universality"),
+            use_sqlite_fixture: false,
+            username: None,
+            password: Some("fixture-token"),
+            auth_mechanism: Some("mock-token"),
+            ssl_mode: None,
+            connection_string: Some("http://127.0.0.1:19070"),
+            group: "Cloud Contract Fixtures",
+            color: "#58a6ff",
+            icon: "cosmosdb",
+            query_title: "Fixture Cosmos DB.sql",
+            query_text: "select top 25 * from c",
+            tags: &["fixtures", "cloud-contract", "document"],
+        },
+        FixtureConnectionSeed {
+            profile: Some("cloud-contract"),
+            id: "fixture-neptune",
+            name: "Fixture Neptune Mock",
+            engine: "neptune",
+            family: "graph",
+            host: "127.0.0.1",
+            port: Some(19080),
+            database: None,
+            use_sqlite_fixture: false,
+            username: None,
+            password: None,
+            auth_mechanism: None,
+            ssl_mode: None,
+            connection_string: Some("http://127.0.0.1:19080"),
+            group: "Cloud Contract Fixtures",
+            color: "#64d2ff",
+            icon: "neptune",
+            query_title: "Fixture Neptune.gremlin",
+            query_text: "g.V().limit(25)",
+            tags: &["fixtures", "cloud-contract", "graph"],
+        },
+    ]
+}
+
 pub fn resolve_environment(
     environments: &[EnvironmentProfile],
     environment_id: &str,
@@ -1646,6 +2653,41 @@ pub fn resolve_environment(
     }
 }
 
+fn reorder_query_tabs_in_place(
+    tabs: &mut Vec<QueryTabState>,
+    ordered_tab_ids: Vec<String>,
+) -> Result<(), CommandError> {
+    let current_ids = tabs
+        .iter()
+        .map(|tab| tab.id.as_str())
+        .collect::<HashSet<_>>();
+    let requested_ids = ordered_tab_ids
+        .iter()
+        .map(String::as_str)
+        .collect::<HashSet<_>>();
+
+    if ordered_tab_ids.len() != tabs.len()
+        || requested_ids.len() != ordered_tab_ids.len()
+        || requested_ids != current_ids
+    {
+        return Err(CommandError::new(
+            "tab-reorder-invalid",
+            "Tab order was rejected because it does not match the open query tabs.",
+        ));
+    }
+
+    let mut tabs_by_id = tabs
+        .drain(..)
+        .map(|tab| (tab.id.clone(), tab))
+        .collect::<HashMap<_, _>>();
+    *tabs = ordered_tab_ids
+        .into_iter()
+        .filter_map(|tab_id| tabs_by_id.remove(&tab_id))
+        .collect();
+
+    Ok(())
+}
+
 pub fn blank_workspace_snapshot() -> WorkspaceSnapshot {
     let created_at = timestamp_now();
 
@@ -1687,5 +2729,214 @@ pub fn blank_workspace_snapshot() -> WorkspaceSnapshot {
             right_drawer_width: 360,
         },
         updated_at: created_at,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{fs, path::PathBuf, sync::Mutex as TestMutex};
+
+    static ENV_LOCK: TestMutex<()> = TestMutex::new(());
+
+    #[test]
+    fn normal_blank_workspace_has_no_fixture_user_data() {
+        let snapshot = blank_workspace_snapshot();
+
+        assert!(workspace_is_empty(&snapshot));
+        assert!(snapshot.connections.is_empty());
+        assert!(snapshot.environments.is_empty());
+        assert!(snapshot.tabs.is_empty());
+        assert!(snapshot.saved_work.is_empty());
+    }
+
+    #[test]
+    fn fixture_core_seed_preloads_connections_tabs_and_saved_work() {
+        let seed = fixture_workspace_seed_for_profile(None, "fixture.sqlite3");
+
+        assert!(!workspace_is_empty(&seed.snapshot));
+        assert!(seed
+            .snapshot
+            .connections
+            .iter()
+            .any(|connection| connection.name == "Fixture PostgreSQL"));
+        assert!(seed
+            .snapshot
+            .connections
+            .iter()
+            .any(|connection| connection.name == "Fixture Redis"));
+        assert!(seed
+            .snapshot
+            .tabs
+            .iter()
+            .any(|tab| tab.query_text.contains("observability.table_health")));
+        assert!(seed
+            .snapshot
+            .saved_work
+            .iter()
+            .any(|item| item.name == "Fixture PostgreSQL smoke query"));
+        assert!(seed.snapshot.explorer_nodes.is_empty());
+    }
+
+    #[test]
+    fn fixture_profile_seed_includes_selected_profile_without_all_profiles() {
+        let seed = fixture_workspace_seed_for_profile(Some("sqlplus"), "fixture.sqlite3");
+
+        assert!(seed
+            .snapshot
+            .connections
+            .iter()
+            .any(|connection| connection.name == "Fixture MariaDB"));
+        assert!(!seed
+            .snapshot
+            .connections
+            .iter()
+            .any(|connection| connection.name == "Fixture Neo4j"));
+    }
+
+    #[test]
+    fn fixture_all_seed_includes_every_documented_profile() {
+        let seed = fixture_workspace_seed_for_profile(Some("all"), "fixture.sqlite3");
+        let connection_names = seed
+            .snapshot
+            .connections
+            .iter()
+            .map(|connection| connection.name.as_str())
+            .collect::<Vec<_>>();
+
+        for expected in [
+            "Fixture Valkey",
+            "Fixture TimescaleDB",
+            "Fixture ClickHouse",
+            "Fixture OpenSearch",
+            "Fixture Neo4j",
+            "Fixture Cassandra",
+            "Fixture Oracle",
+            "Fixture BigQuery Mock",
+        ] {
+            assert!(
+                connection_names.contains(&expected),
+                "missing fixture connection {expected}"
+            );
+        }
+    }
+
+    #[test]
+    fn existing_debug_workspace_is_not_empty_and_should_be_preserved() {
+        let mut snapshot = blank_workspace_snapshot();
+        snapshot.connections.push(ConnectionProfile {
+            id: "user-fixture-debug-connection".into(),
+            name: "My debug connection".into(),
+            engine: "sqlite".into(),
+            family: "sql".into(),
+            host: "localhost".into(),
+            port: None,
+            database: Some("local.sqlite3".into()),
+            connection_string: None,
+            connection_mode: Some("file".into()),
+            environment_ids: Vec::new(),
+            tags: Vec::new(),
+            favorite: false,
+            read_only: false,
+            icon: "sqlite".into(),
+            color: None,
+            group: None,
+            notes: None,
+            auth: ConnectionAuth::default(),
+            created_at: timestamp_now(),
+            updated_at: timestamp_now(),
+        });
+
+        assert!(!workspace_is_empty(&snapshot));
+    }
+
+    #[test]
+    fn fixture_workspace_json_contains_secret_refs_but_never_raw_passwords() {
+        let seed = fixture_workspace_seed_for_profile(Some("all"), "fixture.sqlite3");
+        let serialized = serde_json::to_string(&seed.snapshot).expect("serialize fixture snapshot");
+
+        for raw_secret in ["Universality_pwd_123", "fixture-token"] {
+            assert!(
+                !serialized.contains(raw_secret),
+                "workspace JSON leaked {raw_secret}"
+            );
+        }
+        assert!(serialized.contains("secret-fixture-sqlserver"));
+        assert!(serialized.contains("secret-fixture-bigquery"));
+    }
+
+    #[test]
+    fn fixture_secrets_are_written_to_file_secret_store() {
+        let _guard = ENV_LOCK.lock().expect("env test lock");
+        let path = temp_secret_file_path();
+        std::env::set_var("UNIVERSALITY_SECRET_STORE", "file");
+        std::env::set_var("UNIVERSALITY_SECRET_FILE", &path);
+
+        let seed = fixture_workspace_seed_for_profile(Some("cloud-contract"), "fixture.sqlite3");
+        seed_fixture_secrets(&seed.secrets).expect("store fixture secrets");
+        let secret_file = fs::read_to_string(&path).expect("read fixture secrets file");
+
+        assert!(secret_file.contains("UniversalityFixture:fixture-sqlserver"));
+        assert!(secret_file.contains("Universality_pwd_123"));
+        assert!(secret_file.contains("fixture-token"));
+
+        std::env::remove_var("UNIVERSALITY_SECRET_STORE");
+        std::env::remove_var("UNIVERSALITY_SECRET_FILE");
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn tab_reorder_accepts_same_tab_set_and_preserves_requested_order() {
+        let mut tabs = tabs_for_reorder_tests();
+
+        reorder_query_tabs_in_place(
+            &mut tabs,
+            vec!["tab-three".into(), "tab-one".into(), "tab-two".into()],
+        )
+        .expect("valid reorder");
+
+        assert_eq!(
+            tabs.iter().map(|tab| tab.id.as_str()).collect::<Vec<_>>(),
+            vec!["tab-three", "tab-one", "tab-two"]
+        );
+    }
+
+    #[test]
+    fn tab_reorder_rejects_duplicate_missing_or_unknown_ids() {
+        for order in [
+            vec!["tab-one", "tab-one", "tab-two"],
+            vec!["tab-one", "tab-two"],
+            vec!["tab-one", "tab-two", "tab-unknown"],
+        ] {
+            let mut tabs = tabs_for_reorder_tests();
+
+            assert!(reorder_query_tabs_in_place(
+                &mut tabs,
+                order.into_iter().map(String::from).collect(),
+            )
+            .is_err());
+            assert_eq!(
+                tabs.iter().map(|tab| tab.id.as_str()).collect::<Vec<_>>(),
+                vec!["tab-one", "tab-two", "tab-three"]
+            );
+        }
+    }
+
+    fn tabs_for_reorder_tests() -> Vec<QueryTabState> {
+        ["tab-one", "tab-two", "tab-three"]
+            .into_iter()
+            .map(|id| QueryTabState {
+                id: id.into(),
+                title: id.into(),
+                ..QueryTabState::default()
+            })
+            .collect()
+    }
+
+    fn temp_secret_file_path() -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "universality-fixture-secrets-{}.json",
+            generate_id("test")
+        ))
     }
 }

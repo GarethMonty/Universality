@@ -44,9 +44,7 @@ pub(super) fn inspect_cassandra_explorer_node(
         .and_then(|rest| rest.split_once(':'))
         .map(|(keyspace, table)| cassandra_table_query(keyspace, table))
         .unwrap_or_else(|| match request.node_id.as_str() {
-            "cassandra-keyspaces" => {
-                "select keyspace_name from system_schema.keyspaces;".into()
-            }
+            "cassandra-keyspaces" => "select keyspace_name from system_schema.keyspaces;".into(),
             "cassandra-security" => "list roles;".into(),
             "cassandra-diagnostics" => "select * from system.local;".into(),
             _ => format!("select * from system_schema.tables where keyspace_name = '{keyspace}';"),

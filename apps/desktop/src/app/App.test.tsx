@@ -31,7 +31,7 @@ async function createFirstConnection() {
   })
 
   await waitFor(() => {
-    expect(screen.getByRole('tab', { name: /SQLQuery_1\.sql/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /Query 1\.sql/i })).toBeInTheDocument()
   })
 
   return drawer
@@ -55,6 +55,13 @@ function getConnectionRow(connectionName: string) {
   }
 
   return row
+}
+
+function getEditorTabNames() {
+  const tablist = screen.getByRole('tablist', { name: 'Editor tabs' })
+  return within(tablist)
+    .getAllByRole('tab')
+    .map((tab) => tab.textContent ?? '')
 }
 
 async function openExplorerFromConnection(connectionName = 'PostgreSQL connection') {
@@ -130,7 +137,7 @@ describe('App', () => {
     fireEvent.click(screen.getByLabelText('Connections view'))
 
     await waitFor(() => {
-      expect(screen.getByRole('tab', { name: /SQLQuery_1\.sql/i })).toBeInTheDocument()
+      expect(screen.getByRole('tab', { name: /Query 1\.sql/i })).toBeInTheDocument()
     })
   })
 
@@ -150,6 +157,11 @@ describe('App', () => {
       name: 'Connection options for PostgreSQL connection',
     })
     expect(
+      screen.queryByRole('button', {
+        name: 'Delete connection PostgreSQL connection',
+      }),
+    ).not.toBeInTheDocument()
+    expect(
       within(menu).getByRole('menuitem', {
         name: 'Open Explorer for PostgreSQL connection',
       }),
@@ -168,6 +180,39 @@ describe('App', () => {
     expect(screen.getAllByText('PostgreSQL connection').length).toBeGreaterThan(0)
   })
 
+  it('opens operations from the connection context menu and previews a live-safe operation', async () => {
+    render(<App />)
+
+    const drawer = await createFirstConnection()
+    fireEvent.click(within(drawer).getByRole('button', { name: 'Save Connection' }))
+
+    await waitFor(() => {
+      expect(screen.queryByLabelText('connection drawer')).not.toBeInTheDocument()
+    })
+
+    fireEvent.contextMenu(getConnectionRow('PostgreSQL connection'))
+    fireEvent.click(
+      await screen.findByRole('menuitem', {
+        name: 'Open operations for PostgreSQL connection',
+      }),
+    )
+
+    const operationsDrawer = await screen.findByLabelText('operations drawer')
+    expect(
+      within(operationsDrawer).getByRole('heading', { level: 2, name: 'Operations' }),
+    ).toBeInTheDocument()
+
+    await waitFor(() => {
+      expect(within(operationsDrawer).getByText('Refresh Metadata')).toBeInTheDocument()
+    })
+
+    fireEvent.click(within(operationsDrawer).getByRole('button', { name: 'Execute' }))
+
+    await waitFor(() => {
+      expect(within(operationsDrawer).getByText('Preview operation completed.')).toBeInTheDocument()
+    })
+  })
+
   it('opens a query tab when selecting a connection that has no active tab', async () => {
     render(<App />)
 
@@ -180,13 +225,13 @@ describe('App', () => {
 
     fireEvent.click(
       screen.getByRole('button', {
-        name: /Close tab SQLQuery_1\.sql/i,
+        name: /Close tab Query 1\.sql/i,
       }),
     )
 
     await waitFor(() => {
       expect(
-        screen.queryByRole('tab', { name: /SQLQuery_1\.sql/i }),
+        screen.queryByRole('tab', { name: /Query 1\.sql/i }),
       ).not.toBeInTheDocument()
     })
 
@@ -197,7 +242,7 @@ describe('App', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByRole('tab', { name: /SQLQuery_1\.sql/i })).toBeInTheDocument()
+      expect(screen.getByRole('tab', { name: /Query 1\.sql/i })).toBeInTheDocument()
     })
     expect(screen.queryByText('No tab exists for the connection.')).not.toBeInTheDocument()
   })
@@ -475,11 +520,17 @@ describe('App', () => {
       ).toHaveValue('Copy of PostgreSQL connection')
     })
 
+    fireEvent.contextMenu(getConnectionRow('Copy of PostgreSQL connection'))
     fireEvent.click(
-      screen.getByRole('button', {
+      await screen.findByRole('menuitem', {
         name: 'Delete connection Copy of PostgreSQL connection',
       }),
     )
+
+    const deleteDialog = await screen.findByRole('dialog', {
+      name: 'Remove Copy of PostgreSQL connection?',
+    })
+    fireEvent.click(within(deleteDialog).getByRole('button', { name: 'Delete Connection' }))
 
     await waitFor(() => {
       expect(
@@ -577,18 +628,18 @@ describe('App', () => {
       expect(screen.getByText('Saved Queries')).toBeInTheDocument()
     })
 
-    fireEvent.click(screen.getByRole('button', { name: /Open saved work SQLQuery_1\.sql/i }))
+    fireEvent.click(screen.getByRole('button', { name: /Open saved work Query 1\.sql/i }))
 
     await waitFor(() => {
-      expect(screen.getAllByRole('tab', { name: /SQLQuery_1\.sql/i }).length).toBeGreaterThan(1)
+      expect(screen.getAllByRole('tab', { name: /Query 1\.sql/i }).length).toBeGreaterThan(1)
     })
 
     fireEvent.click(screen.getByLabelText('Saved Work view'))
     const savedWorkSidebar = screen.getByLabelText('saved-work sidebar')
-    fireEvent.click(screen.getByRole('button', { name: /Delete saved work SQLQuery_1\.sql/i }))
+    fireEvent.click(screen.getByRole('button', { name: /Delete saved work Query 1\.sql/i }))
 
     await waitFor(() => {
-      expect(within(savedWorkSidebar).queryByText('SQLQuery_1.sql')).not.toBeInTheDocument()
+      expect(within(savedWorkSidebar).queryByText('Query 1.sql')).not.toBeInTheDocument()
     })
   })
 
@@ -596,10 +647,10 @@ describe('App', () => {
     render(<App />)
 
     await createFirstConnection()
-    fireEvent.contextMenu(screen.getByRole('tab', { name: /SQLQuery_1\.sql/i }))
-    fireEvent.click(screen.getByRole('menuitem', { name: /Rename tab SQLQuery_1\.sql/i }))
+    fireEvent.contextMenu(screen.getByRole('tab', { name: /Query 1\.sql/i }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /Rename tab Query 1\.sql/i }))
 
-    const titleInput = screen.getByLabelText(/Rename tab SQLQuery_1\.sql/i)
+    const titleInput = screen.getByLabelText(/Rename tab Query 1\.sql/i)
     fireEvent.change(titleInput, { target: { value: 'Customer lookup' } })
     fireEvent.keyDown(titleInput, { key: 'Enter' })
 
@@ -616,19 +667,75 @@ describe('App', () => {
     })
   })
 
+  it('keeps query tab headers clean, scrollable, and reorderable', async () => {
+    render(<App />)
+
+    await createFirstConnection()
+    const tablist = screen.getByRole('tablist', { name: 'Editor tabs' })
+
+    expect(screen.getByRole('button', { name: 'Scroll tabs left' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Scroll tabs right' })).toBeInTheDocument()
+    expect(within(tablist).getByRole('tab', { name: /Query 1\.sql/i })).toBeInTheDocument()
+    expect(within(tablist).queryByText('Local')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create query tab' }))
+
+    await waitFor(() => {
+      expect(within(tablist).getByRole('tab', { name: /Query 2\.sql/i })).toBeInTheDocument()
+    })
+
+    fireEvent.contextMenu(within(tablist).getByRole('tab', { name: /Query 1\.sql/i }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /Move tab Query 1\.sql right/i }))
+
+    await waitFor(() => {
+      expect(getEditorTabNames()[0]).toContain('Query 2.sql')
+    })
+  })
+
+  it('supports VS Code-style tab close actions from the context menu', async () => {
+    render(<App />)
+
+    await createFirstConnection()
+    fireEvent.click(screen.getByRole('button', { name: 'Create query tab' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Create query tab' }))
+
+    const tablist = screen.getByRole('tablist', { name: 'Editor tabs' })
+
+    await waitFor(() => {
+      expect(within(tablist).getAllByRole('tab')).toHaveLength(3)
+    })
+
+    fireEvent.contextMenu(within(tablist).getByRole('tab', { name: /Query 1\.sql/i }))
+    fireEvent.click(
+      screen.getByRole('menuitem', { name: /Close other tabs except Query 1\.sql/i }),
+    )
+
+    await waitFor(() => {
+      expect(within(tablist).getAllByRole('tab')).toHaveLength(1)
+    })
+    expect(within(tablist).getByRole('tab', { name: /Query 1\.sql/i })).toBeInTheDocument()
+
+    fireEvent.contextMenu(within(tablist).getByRole('tab', { name: /Query 1\.sql/i }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Close all tabs' }))
+
+    await waitFor(() => {
+      expect(within(tablist).queryByRole('tab')).not.toBeInTheDocument()
+    })
+  })
+
   it('closes ephemeral tabs and keeps a recoverable closed-tab history', async () => {
     render(<App />)
 
     await createFirstConnection()
     fireEvent.click(
       screen.getByRole('button', {
-        name: /Close tab SQLQuery_1\.sql/i,
+        name: /Close tab Query 1\.sql/i,
       }),
     )
 
     await waitFor(() => {
       expect(
-        screen.queryByRole('tab', { name: /SQLQuery_1\.sql/i }),
+        screen.queryByRole('tab', { name: /Query 1\.sql/i }),
       ).not.toBeInTheDocument()
     })
 
@@ -640,13 +747,13 @@ describe('App', () => {
 
     fireEvent.click(
       screen.getByRole('button', {
-        name: /Reopen closed tab SQLQuery_1\.sql/i,
+        name: /Reopen closed tab Query 1\.sql/i,
       }),
     )
 
     await waitFor(() => {
       expect(
-        screen.getByRole('tab', { name: /SQLQuery_1\.sql/i }),
+        screen.getByRole('tab', { name: /Query 1\.sql/i }),
       ).toBeInTheDocument()
     })
   })
@@ -669,13 +776,13 @@ describe('App', () => {
 
     fireEvent.click(
       screen.getByRole('button', {
-        name: /Open saved work SQLQuery_1\.sql/i,
+        name: /Open saved work Query 1\.sql/i,
       }),
     )
 
     await waitFor(() => {
       expect(
-        screen.getAllByRole('tab', { name: /SQLQuery_1\.sql/i }),
+        screen.getAllByRole('tab', { name: /Query 1\.sql/i }),
       ).toHaveLength(2)
     })
 
@@ -687,7 +794,7 @@ describe('App', () => {
     })
 
     const closeButtons = screen.getAllByRole('button', {
-      name: /Close tab SQLQuery_1\.sql/i,
+      name: /Close tab Query 1\.sql/i,
     })
     const dirtySavedCloseButton = closeButtons.at(-1)
 
@@ -713,7 +820,7 @@ describe('App', () => {
 
     fireEvent.click(
       screen.getAllByRole('button', {
-        name: /Close tab SQLQuery_1\.sql/i,
+        name: /Close tab Query 1\.sql/i,
       }).at(-1)!,
     )
     fireEvent.click(screen.getByRole('button', { name: 'Save and Close' }))
@@ -736,9 +843,67 @@ describe('App', () => {
     fireEvent.keyDown(window, { key: 'Enter', ctrlKey: true })
 
     await waitFor(() => {
-      expect(screen.getByRole('status')).toHaveTextContent(
-        'Unlock the workspace before using privileged desktop commands.',
-      )
+      expect(screen.getByLabelText('Bottom panel')).toBeInTheDocument()
+    })
+    expect(
+      screen.getByText('Unlock the workspace before using privileged desktop commands.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  })
+
+  it('routes command failures into the Messages panel until cleared', async () => {
+    vi.spyOn(desktopClient, 'setTheme').mockRejectedValueOnce(
+      new Error('Theme switch exploded'),
+    )
+
+    render(<App />)
+
+    await screen.findByLabelText('connections sidebar')
+    fireEvent.click(screen.getByLabelText('Toggle theme'))
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Bottom panel')).toBeInTheDocument()
+    })
+    expect(screen.getByText('Theme switch exploded')).toBeInTheDocument()
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByLabelText('Hide bottom panel'))
+    await waitFor(() => {
+      expect(screen.queryByLabelText('Bottom panel')).not.toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show 1 workbench message' }))
+    await waitFor(() => {
+      expect(screen.getByLabelText('Bottom panel')).toBeInTheDocument()
+    })
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Clear message Theme switch exploded' }),
+    )
+    await waitFor(() => {
+      expect(screen.queryByText('Theme switch exploded')).not.toBeInTheDocument()
+    })
+    expect(screen.getByText('No messages.')).toBeInTheDocument()
+  })
+
+  it('can clear all workbench messages from the Messages panel', async () => {
+    vi.spyOn(desktopClient, 'setTheme').mockRejectedValueOnce(
+      new Error('Theme switch exploded'),
+    )
+
+    render(<App />)
+
+    await screen.findByLabelText('connections sidebar')
+    fireEvent.click(screen.getByLabelText('Toggle theme'))
+
+    await waitFor(() => {
+      expect(screen.getByText('Theme switch exploded')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear all workbench messages' }))
+
+    await waitFor(() => {
+      expect(screen.queryByText('Theme switch exploded')).not.toBeInTheDocument()
     })
   })
 
@@ -749,7 +914,9 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'messages' }))
 
     await waitFor(() => {
-      expect(screen.getByText('Logs and adapter notices.')).toBeInTheDocument()
+      expect(
+        screen.getByText('Command errors, runtime notices, and query diagnostics.'),
+      ).toBeInTheDocument()
     })
 
     fireEvent.click(screen.getByLabelText('Hide bottom panel'))

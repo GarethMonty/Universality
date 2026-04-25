@@ -97,7 +97,13 @@ function isBottomPanelTab(value: unknown): value is UiState['activeBottomPanelTa
 }
 
 function isRightDrawer(value: unknown): value is UiState['rightDrawer'] {
-  return value === 'none' || value === 'connection' || value === 'inspection' || value === 'diagnostics'
+  return (
+    value === 'none' ||
+    value === 'connection' ||
+    value === 'inspection' ||
+    value === 'diagnostics' ||
+    value === 'operations'
+  )
 }
 
 function isExplorerView(value: unknown): value is UiState['explorerView'] {
@@ -131,6 +137,9 @@ export function normalizeUiState(snapshot: WorkspaceSnapshot): UiState {
     : activeActivity === 'settings'
       ? 'connections'
       : activeActivity
+  const activeBottomPanelTab = isBottomPanelTab(legacyUi?.activeBottomPanelTab)
+    ? legacyUi.activeBottomPanelTab
+    : 'results'
 
   return {
     activeConnectionId: activeConnection?.id ?? '',
@@ -144,11 +153,9 @@ export function normalizeUiState(snapshot: WorkspaceSnapshot): UiState {
     activeSidebarPane,
     sidebarWidth: clampSidebarWidth(legacyUi?.sidebarWidth),
     bottomPanelVisible:
-      Boolean(activeTab) &&
+      (Boolean(activeTab) || activeBottomPanelTab === 'messages') &&
       (typeof legacyUi?.bottomPanelVisible === 'boolean' ? legacyUi.bottomPanelVisible : false),
-    activeBottomPanelTab: isBottomPanelTab(legacyUi?.activeBottomPanelTab)
-      ? legacyUi.activeBottomPanelTab
-      : 'results',
+    activeBottomPanelTab,
     bottomPanelHeight: clampBottomPanelHeight(legacyUi?.bottomPanelHeight),
     rightDrawer: isRightDrawer(legacyUi?.rightDrawer) ? legacyUi.rightDrawer : 'none',
     rightDrawerWidth: clampRightDrawerWidth(legacyUi?.rightDrawerWidth),

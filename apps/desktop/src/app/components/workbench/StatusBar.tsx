@@ -5,7 +5,7 @@ import type {
   QueryTabState,
   WorkspaceSnapshot,
 } from '@universality/shared-types'
-import { PanelIcon, SettingsIcon } from './icons'
+import { PanelIcon, SettingsIcon, WarningIcon } from './icons'
 
 interface StatusBarProps {
   health: AppHealth
@@ -14,7 +14,9 @@ interface StatusBarProps {
   activeEnvironment?: EnvironmentProfile
   activeTab?: QueryTabState
   bottomPanelVisible: boolean
+  messageCount: number
   onToggleBottomPanel(): void
+  onOpenMessages(): void
   onOpenDiagnostics(): void
 }
 
@@ -25,7 +27,9 @@ export function StatusBar({
   activeEnvironment,
   activeTab,
   bottomPanelVisible,
+  messageCount,
   onToggleBottomPanel,
+  onOpenMessages,
   onOpenDiagnostics,
 }: StatusBarProps) {
   return (
@@ -38,6 +42,18 @@ export function StatusBar({
       </div>
 
       <div className="status-bar-group">
+        {messageCount > 0 ? (
+          <button
+            type="button"
+            className="status-button status-button--error"
+            aria-label={`Show ${messageCount} workbench ${messageCount === 1 ? 'message' : 'messages'}`}
+            title="Open the Messages panel and review command/runtime errors."
+            onClick={onOpenMessages}
+          >
+            <WarningIcon className="status-icon" />
+            <span>Errors: {messageCount}</span>
+          </button>
+        ) : null}
         <button
           type="button"
           className={`status-button${bottomPanelVisible ? ' is-active' : ''}`}

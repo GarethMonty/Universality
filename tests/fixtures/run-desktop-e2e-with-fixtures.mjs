@@ -5,7 +5,10 @@ const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm'
 function run(args, options = {}) {
   const result = spawnSync(npm, args, {
     cwd: process.cwd(),
-    env: process.env,
+    env: {
+      ...process.env,
+      UNIVERSALITY_FIXTURE_RUN: process.env.UNIVERSALITY_FIXTURE_RUN ?? '1',
+    },
     stdio: 'inherit',
     shell: process.platform === 'win32',
     ...options,

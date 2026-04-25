@@ -61,7 +61,10 @@ where
     value.map(|item| item.to_string())
 }
 
-pub(crate) fn stringify_sqlx_common(candidates: [Option<String>; 7], fallback: String) -> String {
+pub(crate) fn stringify_sqlx_common<const N: usize>(
+    candidates: [Option<String>; N],
+    fallback: String,
+) -> String {
     candidates.into_iter().flatten().next().unwrap_or(fallback)
 }
 

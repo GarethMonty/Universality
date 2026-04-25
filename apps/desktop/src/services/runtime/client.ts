@@ -21,12 +21,15 @@ import type {
   LocalDatabaseCreateResult,
   LocalDatabasePickRequest,
   LocalDatabasePickResult,
+  OperationExecutionRequest,
+  OperationExecutionResponse,
   OperationManifestRequest,
   OperationManifestResponse,
   OperationPlanRequest,
   OperationPlanResponse,
   PermissionInspectionRequest,
   PermissionInspectionResponse,
+  QueryTabReorderRequest,
   QueryTabState,
   ResultPageRequest,
   ResultPageResponse,
@@ -274,12 +277,12 @@ function defaultQueryTabTitle(
 ) {
   const { prefix, extension } = tabTitleParts(connection)
   let index = 1
-  let title = `${prefix}_${index}.${extension}`
+  let title = `${prefix} ${index}.${extension}`
   const existingTitles = new Set(snapshot.tabs.map((tab) => tab.title))
 
   while (existingTitles.has(title)) {
     index += 1
-    title = `${prefix}_${index}.${extension}`
+    title = `${prefix} ${index}.${extension}`
   }
 
   return title
@@ -287,14 +290,14 @@ function defaultQueryTabTitle(
 
 function tabTitleParts(connection: ConnectionProfile) {
   if (connection.family === 'document') {
-    return { prefix: 'MongoQuery', extension: 'json' }
+    return { prefix: 'Query', extension: 'json' }
   }
 
   if (connection.family === 'keyvalue') {
-    return { prefix: 'RedisConsole', extension: 'redis' }
+    return { prefix: 'Console', extension: 'redis' }
   }
 
-  return { prefix: 'SQLQuery', extension: 'sql' }
+  return { prefix: 'Query', extension: 'sql' }
 }
 
 function renameQueryTab(
@@ -352,6 +355,28 @@ function closeQueryTab(snapshot: WorkspaceSnapshot, tabId: string): WorkspaceSna
     next.ui.bottomPanelVisible = false
   }
 
+  next.updatedAt = new Date().toISOString()
+  return next
+}
+
+function reorderQueryTabsInSnapshot(
+  snapshot: WorkspaceSnapshot,
+  request: QueryTabReorderRequest,
+): WorkspaceSnapshot {
+  const next = cloneSnapshot(snapshot)
+  const tabById = new Map(next.tabs.map((tab) => [tab.id, tab]))
+
+  if (
+    request.orderedTabIds.length !== next.tabs.length ||
+    new Set(request.orderedTabIds).size !== request.orderedTabIds.length ||
+    request.orderedTabIds.some((tabId) => !tabById.has(tabId))
+  ) {
+    return next
+  }
+
+  next.tabs = request.orderedTabIds
+    .map((tabId) => tabById.get(tabId))
+    .filter((tab): tab is QueryTabState => Boolean(tab))
   next.updatedAt = new Date().toISOString()
   return next
 }
@@ -624,6 +649,11 @@ function buildOperationManifestsForConnection(
       supportedRenderers: ['schema', 'table', 'json'],
       description: 'Load engine-native metadata for the explorer.',
       requiresConfirmation: false,
+      executionSupport: backlog?.maturity === 'beta' ? 'plan-only' : 'live',
+      disabledReason:
+        backlog?.maturity === 'beta'
+          ? 'Beta adapters expose generated plans before live execution.'
+          : undefined,
       previewOnly: backlog?.maturity === 'beta',
     },
     {
@@ -637,6 +667,11 @@ function buildOperationManifestsForConnection(
       supportedRenderers: backlog?.resultRenderers ?? ['raw'],
       description: 'Run a native query and normalize results.',
       requiresConfirmation: false,
+      executionSupport: backlog?.maturity === 'beta' ? 'plan-only' : 'live',
+      disabledReason:
+        backlog?.maturity === 'beta'
+          ? 'Beta adapters expose generated plans before live execution.'
+          : undefined,
       previewOnly: backlog?.maturity === 'beta',
     },
   ] satisfies OperationManifestResponse['operations']
@@ -655,6 +690,11 @@ function buildOperationManifestsForConnection(
       supportedRenderers: ['plan', 'table', 'json', 'raw'],
       description: 'Generate an execution plan preview.',
       requiresConfirmation: false,
+      executionSupport: backlog?.maturity === 'beta' ? 'plan-only' : 'live',
+      disabledReason:
+        backlog?.maturity === 'beta'
+          ? 'Beta adapters expose generated plans before live execution.'
+          : undefined,
       previewOnly: backlog?.maturity === 'beta',
     })
   }
@@ -671,6 +711,9 @@ function buildOperationManifestsForConnection(
       supportedRenderers: ['profile', 'plan', 'metrics'],
       description: 'Profile a query with execution warnings.',
       requiresConfirmation: true,
+      executionSupport: 'plan-only',
+      disabledReason:
+        'Profiling can execute workload and needs an adapter-specific live executor.',
       previewOnly: backlog?.maturity === 'beta',
     })
   }
@@ -687,6 +730,9 @@ function buildOperationManifestsForConnection(
       supportedRenderers: ['diff', 'raw'],
       description: 'Preview a destructive object operation.',
       requiresConfirmation: true,
+      executionSupport: 'plan-only',
+      disabledReason:
+        'Destructive operation execution needs an adapter-specific live executor.',
       previewOnly: true,
     })
   }
@@ -703,6 +749,11 @@ function buildOperationManifestsForConnection(
       supportedRenderers: ['metrics', 'series', 'chart', 'json'],
       description: 'Collect normalized metrics for dashboards.',
       requiresConfirmation: false,
+      executionSupport: backlog?.maturity === 'beta' ? 'plan-only' : 'live',
+      disabledReason:
+        backlog?.maturity === 'beta'
+          ? 'Beta adapters expose generated plans before live execution.'
+          : undefined,
       previewOnly: backlog?.maturity === 'beta',
     })
   }
@@ -860,6 +911,96 @@ function collectDiagnosticsLocally(
       ],
       warnings: ['Browser preview diagnostics do not contact live engines.'],
     },
+  }
+}
+
+function executeOperationLocally(
+  snapshot: WorkspaceSnapshot,
+  request: OperationExecutionRequest,
+): OperationExecutionResponse {
+  const planResponse = planOperationLocally(snapshot, request)
+  const connection = findConnection(snapshot, request.connectionId)
+  const operation = connection
+    ? buildOperationManifestsForConnection(connection).find(
+        (item) => item.id === request.operationId,
+      )
+    : undefined
+  const executionSupport = operation?.executionSupport ?? 'unsupported'
+  const warnings = [...planResponse.plan.warnings]
+  const messages: string[] = []
+
+  if (!connection) {
+    throw new Error('Connection was not found.')
+  }
+
+  if (
+    connection.readOnly &&
+    operation &&
+    ['write', 'destructive'].includes(operation.risk)
+  ) {
+    warnings.push('Live execution was blocked because this connection is read-only.')
+  }
+
+  const confirmationText = planResponse.plan.confirmationText
+  if (confirmationText && request.confirmationText !== confirmationText) {
+    warnings.push(`Type \`${confirmationText}\` before executing this operation.`)
+  }
+
+  if (executionSupport !== 'live' || warnings.length > planResponse.plan.warnings.length) {
+    return {
+      connectionId: request.connectionId,
+      environmentId: request.environmentId,
+      operationId: request.operationId,
+      executionSupport,
+      executed: false,
+      plan: planResponse.plan,
+      messages,
+      warnings,
+    }
+  }
+
+  if (request.operationId.endsWith('security.inspect')) {
+    const permissionInspection = inspectPermissionsLocally(snapshot, request).inspection
+    return {
+      connectionId: request.connectionId,
+      environmentId: request.environmentId,
+      operationId: request.operationId,
+      executionSupport,
+      executed: true,
+      plan: planResponse.plan,
+      permissionInspection,
+      messages: ['Permission inspection completed.'],
+      warnings,
+    }
+  }
+
+  if (request.operationId.endsWith('diagnostics.metrics')) {
+    const diagnostics = collectDiagnosticsLocally(snapshot, request).diagnostics
+    return {
+      connectionId: request.connectionId,
+      environmentId: request.environmentId,
+      operationId: request.operationId,
+      executionSupport,
+      executed: true,
+      plan: planResponse.plan,
+      diagnostics,
+      messages: ['Adapter diagnostics collected.'],
+      warnings,
+    }
+  }
+
+  return {
+    connectionId: request.connectionId,
+    environmentId: request.environmentId,
+    operationId: request.operationId,
+    executionSupport,
+    executed: true,
+    plan: planResponse.plan,
+    metadata: {
+      summary: `Preview operation ${request.operationId} executed in browser mode.`,
+    },
+    messages: ['Preview operation completed.'],
+    warnings,
   }
 }
 
@@ -1568,6 +1709,18 @@ export const desktopClient = {
     return buildBrowserPayload(snapshot)
   },
 
+  async reorderQueryTabs(orderedTabIds: string[]): Promise<BootstrapPayload> {
+    const request: QueryTabReorderRequest = { orderedTabIds }
+
+    if (isTauriRuntime()) {
+      return invokeDesktop<BootstrapPayload>('reorder_query_tabs', { request })
+    }
+
+    const snapshot = reorderQueryTabsInSnapshot(loadBrowserSnapshot(), request)
+    saveBrowserSnapshot(snapshot)
+    return buildBrowserPayload(snapshot)
+  },
+
   async reopenClosedQueryTab(closedTabId: string): Promise<BootstrapPayload> {
     if (isTauriRuntime()) {
       return invokeDesktop<BootstrapPayload>('reopen_closed_query_tab', {
@@ -1801,6 +1954,18 @@ export const desktopClient = {
     }
 
     return planOperationLocally(loadBrowserSnapshot(), request)
+  },
+
+  async executeDatastoreOperation(
+    request: OperationExecutionRequest,
+  ): Promise<OperationExecutionResponse> {
+    if (isTauriRuntime()) {
+      return invokeDesktop<OperationExecutionResponse>('execute_datastore_operation', {
+        request,
+      })
+    }
+
+    return executeOperationLocally(loadBrowserSnapshot(), request)
   },
 
   async inspectConnectionPermissions(

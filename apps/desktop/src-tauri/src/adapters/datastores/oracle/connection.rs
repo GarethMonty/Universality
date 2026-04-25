@@ -98,7 +98,10 @@ mod tests {
     #[test]
     fn oracle_descriptor_uses_default_port_and_service() {
         assert_eq!(oracle_service_name(&connection()), "FREEPDB1");
-        assert_eq!(oracle_connect_descriptor(&connection()), "dbhost:1521/FREEPDB1");
+        assert_eq!(
+            oracle_connect_descriptor(&connection()),
+            "dbhost:1521/FREEPDB1"
+        );
     }
 
     #[test]

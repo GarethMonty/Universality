@@ -18,6 +18,113 @@
       "problemMatcher": []
     },
     {
+      "label": "universality:fixtures:up:core",
+      "type": "shell",
+      "command": "npm",
+      "args": [
+        "run",
+        "fixtures:up"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "universality:fixtures:up:profile",
+      "type": "shell",
+      "command": "npm",
+      "args": [
+        "run",
+        "fixtures:up:profile",
+        "--",
+        "${input:universalityFixtureProfile}"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "universality:fixtures:up:all",
+      "type": "shell",
+      "command": "npm",
+      "args": [
+        "run",
+        "fixtures:up:all"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "universality:fixtures:seed",
+      "type": "shell",
+      "command": "npm",
+      "args": [
+        "run",
+        "fixtures:seed"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "universality:fixtures:seed:all",
+      "type": "shell",
+      "command": "npm",
+      "args": [
+        "run",
+        "fixtures:seed:all"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "universality:fixtures:down",
+      "type": "shell",
+      "command": "npm",
+      "args": [
+        "run",
+        "fixtures:down"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "universality:fixtures:ready:core",
+      "dependsOn": [
+        "universality:fixtures:up:core",
+        "universality:fixtures:seed"
+      ],
+      "dependsOrder": "sequence",
+      "problemMatcher": []
+    },
+    {
+      "label": "universality:fixtures:ready:profile",
+      "dependsOn": [
+        "universality:fixtures:up:profile",
+        "universality:fixtures:seed"
+      ],
+      "dependsOrder": "sequence",
+      "problemMatcher": []
+    },
+    {
+      "label": "universality:fixtures:ready:all",
+      "dependsOn": [
+        "universality:fixtures:up:all",
+        "universality:fixtures:seed:all"
+      ],
+      "dependsOrder": "sequence",
+      "problemMatcher": []
+    },
+    {
       "label": "universality:ui:dev",
       "type": "shell",
       "command": "node",
@@ -36,6 +143,81 @@
         "universality:ui:dev"
       ],
       "dependsOrder": "parallel"
+    },
+    {
+      "label": "universality:ui:fixtures:core",
+      "dependsOn": [
+        "universality:ui:dev",
+        "universality:fixtures:ready:core"
+      ],
+      "dependsOrder": "parallel",
+      "problemMatcher": []
+    },
+    {
+      "label": "universality:ui:fixtures:profile",
+      "dependsOn": [
+        "universality:ui:dev",
+        "universality:fixtures:ready:profile"
+      ],
+      "dependsOrder": "parallel",
+      "problemMatcher": []
+    },
+    {
+      "label": "universality:ui:fixtures:all",
+      "dependsOn": [
+        "universality:ui:dev",
+        "universality:fixtures:ready:all"
+      ],
+      "dependsOrder": "parallel",
+      "problemMatcher": []
+    },
+    {
+      "label": "universality:dev:fixtures:core",
+      "dependsOn": [
+        "universality:rust:build",
+        "universality:ui:dev",
+        "universality:fixtures:ready:core"
+      ],
+      "dependsOrder": "parallel",
+      "problemMatcher": []
+    },
+    {
+      "label": "universality:dev:fixtures:profile",
+      "dependsOn": [
+        "universality:rust:build",
+        "universality:ui:dev",
+        "universality:fixtures:ready:profile"
+      ],
+      "dependsOrder": "parallel",
+      "problemMatcher": []
+    },
+    {
+      "label": "universality:dev:fixtures:all",
+      "dependsOn": [
+        "universality:rust:build",
+        "universality:ui:dev",
+        "universality:fixtures:ready:all"
+      ],
+      "dependsOrder": "parallel",
+      "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    {
+      "id": "universalityFixtureProfile",
+      "type": "pickString",
+      "description": "Fixture profile to start before debugging",
+      "options": [
+        "cache",
+        "sqlplus",
+        "analytics",
+        "search",
+        "graph",
+        "widecolumn",
+        "oracle",
+        "cloud-contract"
+      ],
+      "default": "sqlplus"
     }
   ]
 }

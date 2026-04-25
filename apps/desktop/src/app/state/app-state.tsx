@@ -25,6 +25,12 @@ import type {
   LocalDatabaseCreateResult,
   LocalDatabasePickRequest,
   LocalDatabasePickResult,
+  OperationExecutionRequest,
+  OperationExecutionResponse,
+  OperationManifestRequest,
+  OperationManifestResponse,
+  OperationPlanRequest,
+  OperationPlanResponse,
   ResultPageRequest,
   ResultPageResponse,
   ResultPayload,
@@ -42,6 +48,17 @@ import { createId } from './helpers'
 type LoadStatus = 'booting' | 'ready' | 'error'
 type RemoteStatus = 'idle' | 'loading' | 'ready'
 
+export type WorkbenchMessageSeverity = 'error' | 'warning' | 'info'
+
+export interface WorkbenchMessage {
+  id: string
+  severity: WorkbenchMessageSeverity
+  message: string
+  source: string
+  createdAt: string
+  details?: string
+}
+
 interface StateShape {
   status: LoadStatus
   payload?: BootstrapPayload
@@ -58,7 +75,8 @@ interface StateShape {
   lastExecution?: ExecutionResponse
   lastExecutionRequest?: ExecutionRequest
   connectionTests: Record<string, ConnectionTestResult>
-  errorMessage?: string
+  startupErrorMessage?: string
+  workbenchMessages: WorkbenchMessage[]
 }
 
 type Action =
@@ -79,6 +97,10 @@ type Action =
   | { type: 'RESULT_PAGE_READY'; page: ResultPageResponse }
   | { type: 'BOOTSTRAP_ERROR'; message: string }
   | { type: 'COMMAND_ERROR'; message: string }
+  | { type: 'WORKBENCH_MESSAGE_ADDED'; message: WorkbenchMessage }
+  | { type: 'WORKBENCH_MESSAGES_OPENED' }
+  | { type: 'WORKBENCH_MESSAGE_DISMISSED'; id: string }
+  | { type: 'WORKBENCH_MESSAGES_CLEARED' }
 
 const initialState: StateShape = {
   status: 'booting',
@@ -86,10 +108,39 @@ const initialState: StateShape = {
   structureStatus: 'idle',
   executionStatus: 'idle',
   connectionTests: {},
+  workbenchMessages: [],
 }
 
 function clonePayload(payload: BootstrapPayload): BootstrapPayload {
   return JSON.parse(JSON.stringify(payload)) as BootstrapPayload
+}
+
+function createWorkbenchMessage(
+  message: string,
+  source = 'Workbench',
+  severity: WorkbenchMessageSeverity = 'error',
+  details?: string,
+): WorkbenchMessage {
+  return {
+    id: createId('msg'),
+    severity,
+    message,
+    source,
+    createdAt: new Date().toISOString(),
+    details,
+  }
+}
+
+function openMessagesPayload(payload: BootstrapPayload | undefined) {
+  if (!payload) {
+    return payload
+  }
+
+  const next = clonePayload(payload)
+  next.snapshot.ui.bottomPanelVisible = true
+  next.snapshot.ui.activeBottomPanelTab = 'messages'
+  next.snapshot.updatedAt = new Date().toISOString()
+  return next
 }
 
 function applyExecutionToPayload(
@@ -374,7 +425,7 @@ function reducer(state: StateShape, action: Action): StateShape {
         status: 'ready',
         payload: action.payload,
         diagnostics: action.payload.diagnostics,
-        errorMessage: undefined,
+        startupErrorMessage: undefined,
       }
     case 'COMMAND_SUCCESS':
       return {
@@ -382,19 +433,16 @@ function reducer(state: StateShape, action: Action): StateShape {
         status: 'ready',
         payload: action.payload,
         diagnostics: action.payload.diagnostics,
-        errorMessage: undefined,
       }
     case 'DIAGNOSTICS_READY':
       return {
         ...state,
         diagnostics: action.diagnostics,
-        errorMessage: undefined,
       }
     case 'EXPORT_READY':
       return {
         ...state,
         exportBundle: action.exportBundle,
-        errorMessage: undefined,
       }
     case 'CONNECTION_TEST_READY':
       return {
@@ -403,14 +451,12 @@ function reducer(state: StateShape, action: Action): StateShape {
           ...state.connectionTests,
           [action.profileId]: action.result,
         },
-        errorMessage: undefined,
       }
     case 'EXPLORER_LOADING':
       return {
         ...state,
         explorerStatus: 'loading',
         explorerError: undefined,
-        errorMessage: undefined,
       }
     case 'EXPLORER_READY':
       return {
@@ -418,27 +464,23 @@ function reducer(state: StateShape, action: Action): StateShape {
         explorerStatus: 'ready',
         explorer: mergeExplorerResponse(state.explorer, action.explorer),
         explorerError: undefined,
-        errorMessage: undefined,
       }
     case 'EXPLORER_ERROR':
       return {
         ...state,
         explorerStatus: 'ready',
         explorerError: action.message,
-        errorMessage: undefined,
       }
     case 'EXPLORER_INSPECTION_READY':
       return {
         ...state,
         explorerInspection: action.inspection,
-        errorMessage: undefined,
       }
     case 'STRUCTURE_LOADING':
       return {
         ...state,
         structureStatus: 'loading',
         structureError: undefined,
-        errorMessage: undefined,
       }
     case 'STRUCTURE_READY':
       return {
@@ -446,20 +488,17 @@ function reducer(state: StateShape, action: Action): StateShape {
         structureStatus: 'ready',
         structure: action.structure,
         structureError: undefined,
-        errorMessage: undefined,
       }
     case 'STRUCTURE_ERROR':
       return {
         ...state,
         structureStatus: 'ready',
         structureError: action.message,
-        errorMessage: undefined,
       }
     case 'EXECUTION_LOADING':
       return {
         ...state,
         executionStatus: 'loading',
-        errorMessage: undefined,
       }
     case 'EXECUTION_READY': {
       const payload = applyExecutionToPayload(state.payload, action.execution)
@@ -470,33 +509,56 @@ function reducer(state: StateShape, action: Action): StateShape {
         payload,
         lastExecution: action.execution,
         lastExecutionRequest: action.request,
-        errorMessage:
-          action.execution.guardrail.status === 'confirm'
-            ? undefined
-            : action.execution.diagnostics[0],
       }
     }
     case 'RESULT_PAGE_READY':
       return {
         ...state,
         payload: applyResultPageToPayload(state.payload, action.page),
-        errorMessage: undefined,
       }
     case 'BOOTSTRAP_ERROR':
       return {
         ...state,
         status: 'error',
-        errorMessage: action.message,
+        startupErrorMessage: action.message,
       }
     case 'COMMAND_ERROR':
       return {
         ...state,
         status: state.payload ? 'ready' : 'error',
+        payload: openMessagesPayload(state.payload),
         explorerStatus: state.explorerStatus === 'loading' ? 'idle' : state.explorerStatus,
         structureStatus: state.structureStatus === 'loading' ? 'idle' : state.structureStatus,
         executionStatus:
           state.executionStatus === 'loading' ? 'idle' : state.executionStatus,
-        errorMessage: action.message,
+        startupErrorMessage: state.payload ? state.startupErrorMessage : action.message,
+        workbenchMessages: [
+          createWorkbenchMessage(action.message, 'Desktop command'),
+          ...state.workbenchMessages,
+        ],
+      }
+    case 'WORKBENCH_MESSAGE_ADDED':
+      return {
+        ...state,
+        payload: openMessagesPayload(state.payload),
+        workbenchMessages: [action.message, ...state.workbenchMessages],
+      }
+    case 'WORKBENCH_MESSAGES_OPENED':
+      return {
+        ...state,
+        payload: openMessagesPayload(state.payload),
+      }
+    case 'WORKBENCH_MESSAGE_DISMISSED':
+      return {
+        ...state,
+        workbenchMessages: state.workbenchMessages.filter(
+          (message) => message.id !== action.id,
+        ),
+      }
+    case 'WORKBENCH_MESSAGES_CLEARED':
+      return {
+        ...state,
+        workbenchMessages: [],
       }
     default:
       return state
@@ -574,6 +636,7 @@ interface Actions {
   createTab(connectionId: string): Promise<void>
   closeTab(tabId: string): Promise<void>
   reopenClosedTab(closedTabId: string): Promise<void>
+  reorderTabs(orderedTabIds: string[]): Promise<void>
   updateQuery(tabId: string, queryText: string): Promise<void>
   renameTab(tabId: string, title: string): Promise<void>
   saveCurrentQuery(tabId: string): Promise<void>
@@ -597,6 +660,18 @@ interface Actions {
   createLocalDatabase(
     request: LocalDatabaseCreateRequest,
   ): Promise<LocalDatabaseCreateResult | undefined>
+  listDatastoreOperations(
+    request: OperationManifestRequest,
+  ): Promise<OperationManifestResponse | undefined>
+  planDatastoreOperation(
+    request: OperationPlanRequest,
+  ): Promise<OperationPlanResponse | undefined>
+  executeDatastoreOperation(
+    request: OperationExecutionRequest,
+  ): Promise<OperationExecutionResponse | undefined>
+  openWorkbenchMessages(): void
+  dismissWorkbenchMessage(id: string): void
+  clearWorkbenchMessages(): void
   setTheme(theme: WorkspaceSnapshot['preferences']['theme']): Promise<void>
   updateUiState(patch: UpdateUiStateRequest): Promise<void>
   setLocked(isLocked: boolean): Promise<void>
@@ -626,6 +701,7 @@ const defaultActions: Actions = {
   createTab: noop,
   closeTab: noop,
   reopenClosedTab: noop,
+  reorderTabs: noop,
   updateQuery: noop,
   renameTab: noop,
   saveCurrentQuery: noop,
@@ -641,6 +717,12 @@ const defaultActions: Actions = {
   cancelExecution: noop,
   pickLocalDatabaseFile: async () => ({ canceled: true }),
   createLocalDatabase: async () => undefined,
+  listDatastoreOperations: async () => undefined,
+  planDatastoreOperation: async () => undefined,
+  executeDatastoreOperation: async () => undefined,
+  openWorkbenchMessages: () => undefined,
+  dismissWorkbenchMessage: () => undefined,
+  clearWorkbenchMessages: () => undefined,
   setTheme: noop,
   updateUiState: noop,
   setLocked: noop,
@@ -904,6 +986,17 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     async (closedTabId) => {
       try {
         applyPayload(await desktopClient.reopenClosedQueryTab(closedTabId))
+      } catch (error) {
+        handleError(error)
+      }
+    },
+    [applyPayload, handleError],
+  )
+
+  const reorderTabs = useCallback<Actions['reorderTabs']>(
+    async (orderedTabIds) => {
+      try {
+        applyPayload(await desktopClient.reorderQueryTabs(orderedTabIds))
       } catch (error) {
         handleError(error)
       }
@@ -1188,6 +1281,66 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     [handleError, state.payload],
   )
 
+  const listDatastoreOperations = useCallback<Actions['listDatastoreOperations']>(
+    async (request) => {
+      try {
+        ensureWorkspaceUnlocked(state.payload)
+        return await desktopClient.listDatastoreOperations(request)
+      } catch (error) {
+        handleError(error)
+        return undefined
+      }
+    },
+    [handleError, state.payload],
+  )
+
+  const planDatastoreOperation = useCallback<Actions['planDatastoreOperation']>(
+    async (request) => {
+      try {
+        ensureWorkspaceUnlocked(state.payload)
+        return await desktopClient.planDatastoreOperation(request)
+      } catch (error) {
+        handleError(error)
+        return undefined
+      }
+    },
+    [handleError, state.payload],
+  )
+
+  const executeDatastoreOperation = useCallback<Actions['executeDatastoreOperation']>(
+    async (request) => {
+      try {
+        ensureWorkspaceUnlocked(state.payload)
+        return await desktopClient.executeDatastoreOperation(request)
+      } catch (error) {
+        handleError(error)
+        return undefined
+      }
+    },
+    [handleError, state.payload],
+  )
+
+  const dismissWorkbenchMessage = useCallback<Actions['dismissWorkbenchMessage']>(
+    (id) => {
+      dispatch({ type: 'WORKBENCH_MESSAGE_DISMISSED', id })
+    },
+    [],
+  )
+
+  const clearWorkbenchMessages = useCallback<Actions['clearWorkbenchMessages']>(
+    () => {
+      dispatch({ type: 'WORKBENCH_MESSAGES_CLEARED' })
+    },
+    [],
+  )
+
+  const openWorkbenchMessages = useCallback<Actions['openWorkbenchMessages']>(
+    () => {
+      dispatch({ type: 'WORKBENCH_MESSAGES_OPENED' })
+    },
+    [],
+  )
+
   const setTheme = useCallback<Actions['setTheme']>(
     async (theme) => {
       try {
@@ -1284,6 +1437,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       createTab,
       closeTab,
       reopenClosedTab,
+      reorderTabs,
       updateQuery,
       renameTab,
       saveCurrentQuery,
@@ -1299,6 +1453,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       cancelExecution,
       pickLocalDatabaseFile,
       createLocalDatabase,
+      listDatastoreOperations,
+      planDatastoreOperation,
+      executeDatastoreOperation,
+      openWorkbenchMessages,
+      dismissWorkbenchMessage,
+      clearWorkbenchMessages,
       setTheme,
       updateUiState,
       setLocked,
@@ -1308,6 +1468,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     }),
     [
       cancelExecution,
+      clearWorkbenchMessages,
       createLocalDatabase,
       createConnection,
       createEnvironment,
@@ -1315,17 +1476,23 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       closeTab,
       deleteConnection,
       duplicateConnection,
+      dismissWorkbenchMessage,
+      executeDatastoreOperation,
       executeQuery,
       exportWorkspace,
       fetchResultPage,
       importWorkspace,
       inspectExplorer,
+      listDatastoreOperations,
+      openWorkbenchMessages,
       pickLocalDatabaseFile,
+      planDatastoreOperation,
       loadExplorer,
       loadStructureMap,
       deleteSavedWork,
       openSavedWork,
       renameTab,
+      reorderTabs,
       reopenClosedTab,
       refreshDiagnostics,
       saveAndCloseTab,

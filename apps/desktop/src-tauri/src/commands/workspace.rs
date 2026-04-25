@@ -14,9 +14,10 @@ use crate::{
             ConnectionTestRequest, ConnectionTestResult, EnvironmentProfile, ExecutionRequest,
             ExecutionResponse, ExplorerInspectRequest, ExplorerInspectResponse, ExplorerRequest,
             ExplorerResponse, ExportBundle, LocalDatabaseCreateRequest, LocalDatabaseCreateResult,
-            LocalDatabasePickRequest, LocalDatabasePickResult, OperationManifestRequest,
-            OperationManifestResponse, OperationPlanRequest, OperationPlanResponse,
-            PermissionInspectionRequest, PermissionInspectionResponse, ResultPageRequest,
+            LocalDatabasePickRequest, LocalDatabasePickResult, OperationExecutionRequest,
+            OperationExecutionResponse, OperationManifestRequest, OperationManifestResponse,
+            OperationPlanRequest, OperationPlanResponse, PermissionInspectionRequest,
+            PermissionInspectionResponse, QueryTabReorderRequest, ResultPageRequest,
             ResultPageResponse, SavedWorkItem, StructureRequest, StructureResponse,
             UpdateUiStateRequest,
         },
@@ -116,6 +117,15 @@ pub fn reopen_closed_query_tab(
 ) -> Result<BootstrapPayload, CommandError> {
     let mut state = state.lock().unwrap();
     state.reopen_closed_query_tab(&closed_tab_id)
+}
+
+#[tauri::command]
+pub fn reorder_query_tabs(
+    state: State<'_, SharedAppState>,
+    request: QueryTabReorderRequest,
+) -> Result<BootstrapPayload, CommandError> {
+    let mut state = state.lock().unwrap();
+    state.reorder_query_tabs(request)
 }
 
 #[tauri::command]
@@ -229,6 +239,15 @@ pub async fn plan_datastore_operation(
 ) -> Result<OperationPlanResponse, CommandError> {
     let runtime = clone_runtime(&state);
     runtime.plan_operation(request).await
+}
+
+#[tauri::command]
+pub async fn execute_datastore_operation(
+    state: State<'_, SharedAppState>,
+    request: OperationExecutionRequest,
+) -> Result<OperationExecutionResponse, CommandError> {
+    let runtime = clone_runtime(&state);
+    runtime.execute_operation(request).await
 }
 
 #[tauri::command]

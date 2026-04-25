@@ -4,7 +4,14 @@ const sqliteFixture =
   process.env.UNIVERSALITY_SQLITE_FIXTURE ??
   'tests/fixtures/sqlite/universality.sqlite3'
 
-const CONNECTIONS = [
+function fixtureProfileEnabled(profile) {
+  return (process.env.UNIVERSALITY_FIXTURE_PROFILE ?? '')
+    .split(',')
+    .map((item) => item.trim())
+    .some((item) => item === 'all' || item === profile)
+}
+
+const CORE_CONNECTIONS = [
   {
     name: 'Fixture PostgreSQL',
     engine: 'postgresql',
@@ -66,6 +73,124 @@ const CONNECTIONS = [
   },
 ]
 
+const PROFILE_CONNECTIONS = [
+  {
+    profile: 'cache',
+    name: 'Fixture Valkey',
+    engine: 'valkey',
+    server: '127.0.0.1',
+    port: '6381',
+    database: '0',
+    username: '',
+    secret: '',
+    expectedResult: 'Redis scan returned',
+  },
+  {
+    profile: 'cache',
+    name: 'Fixture Memcached',
+    engine: 'memcached',
+    server: '127.0.0.1',
+    port: '11212',
+    database: '',
+    username: '',
+    secret: '',
+    expectedResult: 'Memcached stats returned',
+  },
+  {
+    profile: 'sqlplus',
+    name: 'Fixture MariaDB',
+    engine: 'mariadb',
+    server: '127.0.0.1',
+    port: '33061',
+    database: 'commerce',
+    username: 'universality',
+    secret: 'universality',
+    expectedResult: 'row(s) returned from Fixture MariaDB',
+  },
+  {
+    profile: 'sqlplus',
+    name: 'Fixture CockroachDB',
+    engine: 'cockroachdb',
+    server: '127.0.0.1',
+    port: '26257',
+    database: 'universality',
+    username: 'root',
+    secret: '',
+    expectedResult: 'row(s) returned from Fixture CockroachDB',
+  },
+  {
+    profile: 'sqlplus',
+    name: 'Fixture TimescaleDB',
+    engine: 'timescaledb',
+    server: '127.0.0.1',
+    port: '54330',
+    database: 'metrics',
+    username: 'universality',
+    secret: 'universality',
+    expectedResult: 'row(s) returned from Fixture TimescaleDB',
+  },
+  {
+    profile: 'analytics',
+    name: 'Fixture ClickHouse',
+    engine: 'clickhouse',
+    server: '127.0.0.1',
+    port: '8124',
+    database: 'analytics',
+    username: 'universality',
+    secret: 'universality',
+    expectedResult: 'ClickHouse query returned',
+  },
+  {
+    profile: 'analytics',
+    name: 'Fixture Prometheus',
+    engine: 'prometheus',
+    server: '127.0.0.1',
+    port: '9091',
+    database: '',
+    username: '',
+    secret: '',
+    expectedResult: 'Prometheus vector query returned',
+  },
+  {
+    profile: 'search',
+    name: 'Fixture OpenSearch',
+    engine: 'opensearch',
+    server: '127.0.0.1',
+    port: '9201',
+    database: '',
+    username: '',
+    secret: '',
+    expectedResult: 'OpenSearch search returned',
+  },
+  {
+    profile: 'search',
+    name: 'Fixture Elasticsearch',
+    engine: 'elasticsearch',
+    server: '127.0.0.1',
+    port: '9202',
+    database: '',
+    username: '',
+    secret: '',
+    expectedResult: 'Elasticsearch search returned',
+  },
+  {
+    profile: 'graph',
+    name: 'Fixture Neo4j',
+    engine: 'neo4j',
+    server: '127.0.0.1',
+    port: '7475',
+    database: 'neo4j',
+    username: 'neo4j',
+    secret: 'universality',
+    expectedResult: 'Neo4j Cypher returned',
+  },
+]
+
+const CONNECTIONS = [
+  ...CORE_CONNECTIONS,
+  ...PROFILE_CONNECTIONS.filter((connection) => fixtureProfileEnabled(connection.profile)),
+]
+
 async function appText() {
   return browser.execute(() => document.body.innerText)
 }
@@ -109,6 +234,43 @@ async function clickControl(label) {
   }, label)
 
   assert.equal(clicked, true, `Unable to click control "${label}"`)
+}
+
+async function clickElementByText(text) {
+  const clicked = await browser.execute((targetText) => {
+    const normalize = (value) => value?.replace(/\s+/g, ' ').trim() ?? ''
+    const candidates = [
+      ...document.querySelectorAll(
+        '[role="tab"], [role="treeitem"], button, [role="button"], [aria-label]',
+      ),
+    ]
+    const exact = candidates.find((element) => {
+      const accessible =
+        element.getAttribute('aria-label') ??
+        element.getAttribute('title') ??
+        normalize(element.textContent)
+      return accessible === targetText || normalize(element.textContent) === targetText
+    })
+    const partial =
+      exact ??
+      candidates.find((element) => {
+        const label =
+          element.getAttribute('aria-label') ??
+          element.getAttribute('title') ??
+          normalize(element.textContent)
+        return label.includes(targetText) || normalize(element.textContent).includes(targetText)
+      })
+
+    if (!partial) {
+      return false
+    }
+
+    partial.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+    partial.click()
+    return true
+  }, text)
+
+  assert.equal(clicked, true, `Unable to click element containing "${text}"`)
 }
 
 async function setField(label, value) {
@@ -181,6 +343,31 @@ async function runActiveQuery(connection) {
   await waitForText(connection.expectedResult, 60000)
 }
 
+function seededTabTitle(connection) {
+  const extensionByEngine = {
+    mongodb: 'json',
+    redis: 'redis',
+    valkey: 'redis',
+    memcached: 'txt',
+    neo4j: 'cypher',
+    arango: 'aql',
+    janusgraph: 'gremlin',
+    cassandra: 'cql',
+    prometheus: 'promql',
+    influxdb: 'influxql',
+    opensearch: 'json',
+    elasticsearch: 'json',
+    dynamodb: 'json',
+    neptune: 'gremlin',
+  }
+  return `${connection.name}.${extensionByEngine[connection.engine] ?? 'sql'}`
+}
+
+async function activateSeededFixtureTab(connection) {
+  await clickElementByText(seededTabTitle(connection))
+  await waitForText(connection.name)
+}
+
 async function loadExplorerForActiveConnection() {
   await clickControl('Explorer view')
   await clickControl('Refresh explorer')
@@ -213,17 +400,21 @@ async function exportWorkspace() {
 }
 
 describe('Universality Tauri desktop fixtures', () => {
-  it('starts with a blank workspace instead of demo seed data', async () => {
-    await waitForText('Connect to your first datastore.')
-    await waitForText('No connections yet.')
+  it('starts with a fixture-seeded workspace instead of demo seed data', async () => {
+    for (const connection of CORE_CONNECTIONS) {
+      await waitForText(connection.name)
+    }
+
+    await waitForText('Fixture PostgreSQL.sql')
     await expectNoText('Analytics Postgres')
     await expectNoText('Ops dashboard')
     await expectNoText('Redis hot key pack')
+    await expectNoText('No connections yet.')
   })
 
-  it('creates, tests, explores, and executes against all MVP datastore fixtures', async () => {
+  it('explores and executes against seeded MVP datastore fixtures', async () => {
     for (const connection of CONNECTIONS) {
-      await createAndTestConnection(connection)
+      await activateSeededFixtureTab(connection)
       await runActiveQuery(connection)
       await loadExplorerForActiveConnection()
     }
@@ -236,7 +427,7 @@ describe('Universality Tauri desktop fixtures', () => {
 
     const encryptedPayload = await exportWorkspace()
     assert.equal(encryptedPayload.includes('Universality_pwd_123'), false)
-    assert.equal(encryptedPayload.includes('universality-root'), false)
+    assert.equal(encryptedPayload.includes('fixture-token'), false)
     assert.equal(encryptedPayload.includes('"secret"'), false)
   })
 })

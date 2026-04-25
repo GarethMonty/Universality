@@ -16,6 +16,20 @@ pub(crate) fn operation_manifest(
     description: &str,
     requires_confirmation: bool,
 ) -> DatastoreOperationManifest {
+    let preview_only = manifest.maturity == "beta";
+    let live_safe = matches!(risk, "read" | "diagnostic") && !preview_only;
+    let execution_support = if live_safe { "live" } else { "plan-only" };
+    let disabled_reason = if preview_only {
+        Some("Beta adapters expose generated operation plans before live execution.".into())
+    } else if live_safe {
+        None
+    } else {
+        Some(
+            "This operation needs an adapter-specific live executor before it can run safely."
+                .into(),
+        )
+    };
+
     DatastoreOperationManifest {
         id: format!("{}.{}", manifest.engine, suffix),
         engine: manifest.engine.clone(),
@@ -33,7 +47,9 @@ pub(crate) fn operation_manifest(
             .collect(),
         description: description.into(),
         requires_confirmation,
-        preview_only: Some(manifest.maturity == "beta"),
+        execution_support: execution_support.into(),
+        disabled_reason,
+        preview_only: Some(preview_only),
     }
 }
 

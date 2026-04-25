@@ -82,6 +82,8 @@ function runWdio(application) {
       env: {
         ...process.env,
         UNIVERSALITY_DESKTOP_BINARY: application,
+        UNIVERSALITY_FIXTURE_RUN: process.env.UNIVERSALITY_FIXTURE_RUN ?? '1',
+        UNIVERSALITY_FIXTURE_PROFILE: process.env.UNIVERSALITY_FIXTURE_PROFILE ?? '',
         UNIVERSALITY_WORKSPACE_DIR: workspaceDir,
         UNIVERSALITY_SECRET_STORE: 'file',
         UNIVERSALITY_SECRET_FILE: join(workspaceDir, 'secrets.json'),

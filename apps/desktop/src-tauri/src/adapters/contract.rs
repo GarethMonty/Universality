@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use serde_json::json;
 
 use super::*;
 
@@ -44,6 +45,247 @@ pub trait DatastoreAdapter: Send + Sync {
             &self.manifest(),
             scope,
         ))
+    }
+    async fn execute_operation(
+        &self,
+        connection: &ResolvedConnectionProfile,
+        request: &OperationExecutionRequest,
+    ) -> Result<OperationExecutionResponse, CommandError> {
+        let operation = self
+            .operation_manifests()
+            .into_iter()
+            .find(|item| item.id == request.operation_id)
+            .ok_or_else(|| {
+                CommandError::new(
+                    "operation-unsupported",
+                    format!(
+                        "Operation `{}` is not available for {}.",
+                        request.operation_id, connection.engine
+                    ),
+                )
+            })?;
+        let parameters = request.parameters.as_ref().map(|items| {
+            items
+                .iter()
+                .map(|(key, value)| (key.clone(), value.clone()))
+                .collect::<BTreeMap<_, _>>()
+        });
+        let plan = self
+            .plan_operation(
+                connection,
+                &request.operation_id,
+                request.object_name.as_deref(),
+                parameters.as_ref(),
+            )
+            .await?;
+        let confirmation_required =
+            operation.requires_confirmation || plan.confirmation_text.is_some();
+        let mut warnings = plan.warnings.clone();
+        let mut messages = Vec::new();
+
+        if connection.read_only && matches!(operation.risk.as_str(), "write" | "destructive") {
+            warnings
+                .push("Live execution was blocked because this connection is read-only.".into());
+            return Ok(OperationExecutionResponse {
+                connection_id: request.connection_id.clone(),
+                environment_id: request.environment_id.clone(),
+                operation_id: request.operation_id.clone(),
+                execution_support: operation.execution_support,
+                executed: false,
+                plan,
+                result: None,
+                permission_inspection: None,
+                diagnostics: None,
+                metadata: None,
+                messages,
+                warnings,
+            });
+        }
+
+        if confirmation_required {
+            let expected = plan
+                .confirmation_text
+                .as_deref()
+                .unwrap_or("CONFIRM OPERATION");
+
+            if request.confirmation_text.as_deref() != Some(expected) {
+                warnings.push(format!(
+                    "Type `{expected}` before executing this operation."
+                ));
+                return Ok(OperationExecutionResponse {
+                    connection_id: request.connection_id.clone(),
+                    environment_id: request.environment_id.clone(),
+                    operation_id: request.operation_id.clone(),
+                    execution_support: operation.execution_support,
+                    executed: false,
+                    plan,
+                    result: None,
+                    permission_inspection: None,
+                    diagnostics: None,
+                    metadata: None,
+                    messages,
+                    warnings,
+                });
+            }
+        }
+
+        if operation.execution_support != "live" {
+            messages.push(
+                "Generated an operation plan. Live execution is not enabled for this operation."
+                    .into(),
+            );
+            return Ok(OperationExecutionResponse {
+                connection_id: request.connection_id.clone(),
+                environment_id: request.environment_id.clone(),
+                operation_id: request.operation_id.clone(),
+                execution_support: operation.execution_support,
+                executed: false,
+                plan,
+                result: None,
+                permission_inspection: None,
+                diagnostics: None,
+                metadata: None,
+                messages,
+                warnings,
+            });
+        }
+
+        if request.operation_id.ends_with("metadata.refresh") {
+            let explorer = self
+                .list_explorer_nodes(
+                    connection,
+                    &ExplorerRequest {
+                        connection_id: request.connection_id.clone(),
+                        environment_id: request.environment_id.clone(),
+                        limit: request.row_limit.or(Some(100)),
+                        scope: request.object_name.clone(),
+                    },
+                )
+                .await?;
+            messages.push(explorer.summary.clone());
+
+            return Ok(OperationExecutionResponse {
+                connection_id: request.connection_id.clone(),
+                environment_id: request.environment_id.clone(),
+                operation_id: request.operation_id.clone(),
+                execution_support: operation.execution_support,
+                executed: true,
+                plan,
+                result: None,
+                permission_inspection: None,
+                diagnostics: None,
+                metadata: Some(json!(explorer)),
+                messages,
+                warnings,
+            });
+        }
+
+        if request.operation_id.ends_with("security.inspect") {
+            let inspection = self.inspect_permissions(connection).await?;
+            messages.push("Permission inspection completed.".into());
+
+            return Ok(OperationExecutionResponse {
+                connection_id: request.connection_id.clone(),
+                environment_id: request.environment_id.clone(),
+                operation_id: request.operation_id.clone(),
+                execution_support: operation.execution_support,
+                executed: true,
+                plan,
+                result: None,
+                permission_inspection: Some(inspection),
+                diagnostics: None,
+                metadata: None,
+                messages,
+                warnings,
+            });
+        }
+
+        if request.operation_id.ends_with("diagnostics.metrics") {
+            let diagnostics = self
+                .collect_diagnostics(connection, request.object_name.as_deref())
+                .await?;
+            messages.push("Adapter diagnostics collected.".into());
+
+            return Ok(OperationExecutionResponse {
+                connection_id: request.connection_id.clone(),
+                environment_id: request.environment_id.clone(),
+                operation_id: request.operation_id.clone(),
+                execution_support: operation.execution_support,
+                executed: true,
+                plan,
+                result: None,
+                permission_inspection: None,
+                diagnostics: Some(diagnostics),
+                metadata: None,
+                messages,
+                warnings,
+            });
+        }
+
+        if request.operation_id.contains(".query.") {
+            let execution_request = ExecutionRequest {
+                execution_id: None,
+                tab_id: request
+                    .tab_id
+                    .clone()
+                    .unwrap_or_else(|| format!("operation-{}", request.operation_id)),
+                connection_id: request.connection_id.clone(),
+                environment_id: request.environment_id.clone(),
+                language: plan.request_language.clone(),
+                query_text: plan.generated_request.clone(),
+                selected_text: None,
+                mode: if request.operation_id.ends_with("query.explain") {
+                    Some("explain".into())
+                } else {
+                    Some("full".into())
+                },
+                row_limit: request.row_limit.or(Some(500)),
+                confirmed_guardrail_id: None,
+            };
+            let result = self
+                .execute(
+                    connection,
+                    &execution_request,
+                    vec![QueryExecutionNotice {
+                        code: "operation-execution".into(),
+                        level: "info".into(),
+                        message: format!("Executed operation {}.", operation.label),
+                    }],
+                )
+                .await?;
+            messages.push(result.summary.clone());
+
+            return Ok(OperationExecutionResponse {
+                connection_id: request.connection_id.clone(),
+                environment_id: request.environment_id.clone(),
+                operation_id: request.operation_id.clone(),
+                execution_support: operation.execution_support,
+                executed: true,
+                plan,
+                result: Some(result),
+                permission_inspection: None,
+                diagnostics: None,
+                metadata: None,
+                messages,
+                warnings,
+            });
+        }
+
+        warnings.push("No live executor is available for this operation yet.".into());
+        Ok(OperationExecutionResponse {
+            connection_id: request.connection_id.clone(),
+            environment_id: request.environment_id.clone(),
+            operation_id: request.operation_id.clone(),
+            execution_support: "plan-only".into(),
+            executed: false,
+            plan,
+            result: None,
+            permission_inspection: None,
+            diagnostics: None,
+            metadata: None,
+            messages,
+            warnings,
+        })
     }
     async fn test_connection(
         &self,

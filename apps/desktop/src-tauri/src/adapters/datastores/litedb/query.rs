@@ -250,8 +250,7 @@ mod tests {
     use serde_json::json;
 
     use super::{
-        litedb_operation, normalize_litedb_response, parse_litedb_request,
-        preview_litedb_response,
+        litedb_operation, normalize_litedb_response, parse_litedb_request, preview_litedb_response,
     };
     use crate::domain::models::ResolvedConnectionProfile;
 
@@ -292,7 +291,13 @@ mod tests {
         let (columns, rows, documents) = normalize_litedb_response("Find", &response, 25);
 
         assert!(columns.contains(&"status".into()));
-        assert_eq!(rows[0][columns.iter().position(|column| column == "status").unwrap()], "bridge-request-built");
+        assert_eq!(
+            rows[0][columns
+                .iter()
+                .position(|column| column == "status")
+                .unwrap()],
+            "bridge-request-built"
+        );
         assert_eq!(documents.as_array().unwrap().len(), 1);
     }
 
