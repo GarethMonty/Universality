@@ -1,5 +1,4 @@
-import { useMemo, useState } from 'react'
-import type { ReactNode } from 'react'
+import type { DragEvent, ReactNode } from 'react'
 import type {
   MongoBuilderValueType,
   MongoFilterOperator,
@@ -11,10 +10,12 @@ import {
   buildMongoFindQueryText,
   isMongoFindBuilderState,
 } from './mongo-find'
+import { readFieldDragData } from '../results/field-drag'
 
 interface QueryBuilderPanelProps {
   tab: QueryTabState
-  onApply(builderState: QueryBuilderState, queryText: string): void
+  builderState?: QueryBuilderState
+  onBuilderStateChange?(tabId: string, builderState: QueryBuilderState): void
 }
 
 const FILTER_OPERATORS: Array<{ value: MongoFilterOperator; label: string }> = [
@@ -31,8 +32,14 @@ const FILTER_OPERATORS: Array<{ value: MongoFilterOperator; label: string }> = [
 
 const VALUE_TYPES: MongoBuilderValueType[] = ['string', 'number', 'boolean', 'null', 'json']
 
-export function QueryBuilderPanel({ tab, onApply }: QueryBuilderPanelProps) {
-  if (!isMongoFindBuilderState(tab.builderState)) {
+export function QueryBuilderPanel({
+  builderState,
+  tab,
+  onBuilderStateChange,
+}: QueryBuilderPanelProps) {
+  const resolvedBuilderState = builderState ?? tab.builderState
+
+  if (!isMongoFindBuilderState(resolvedBuilderState)) {
     return null
   }
 
@@ -40,8 +47,8 @@ export function QueryBuilderPanel({ tab, onApply }: QueryBuilderPanelProps) {
     <MongoFindBuilder
       key={tab.id}
       tab={tab}
-      builderState={tab.builderState}
-      onApply={onApply}
+      builderState={resolvedBuilderState}
+      onBuilderStateChange={onBuilderStateChange}
     />
   )
 }
@@ -49,26 +56,24 @@ export function QueryBuilderPanel({ tab, onApply }: QueryBuilderPanelProps) {
 function MongoFindBuilder({
   tab,
   builderState,
-  onApply,
+  onBuilderStateChange,
 }: {
   tab: QueryTabState
   builderState: MongoFindBuilderState
-  onApply(builderState: QueryBuilderState, queryText: string): void
+  onBuilderStateChange?(tabId: string, builderState: QueryBuilderState): void
 }) {
-  const [draft, setDraft] = useState(builderState)
+  const draft = builderState
 
-  const generatedQueryText = useMemo(() => buildMongoFindQueryText(draft), [draft])
-  const rawEdited = Boolean(draft.lastAppliedQueryText && tab.queryText !== draft.lastAppliedQueryText)
-  const updateDraft = (patch: Partial<MongoFindBuilderState>) =>
-    setDraft((current) => ({ ...current, ...patch }))
-  const applyBuilder = () => {
-    onApply(
-      {
-        ...draft,
-        lastAppliedQueryText: generatedQueryText,
-      },
-      generatedQueryText,
-    )
+  const updateDraft = (patch: Partial<MongoFindBuilderState>) => {
+    const nextDraft = { ...draft, ...patch }
+    const next = {
+      ...nextDraft,
+      lastAppliedQueryText: buildMongoFindQueryText(nextDraft),
+    }
+
+    if (onBuilderStateChange) {
+      onBuilderStateChange(tab.id, next)
+    }
   }
 
   return (
@@ -79,10 +84,7 @@ function MongoFindBuilder({
           <h2>{draft.collection || 'Collection query'}</h2>
         </div>
         <div className="query-builder-status">
-          {rawEdited ? <span className="query-builder-warning">Raw edited</span> : null}
-          <button type="button" className="drawer-button" onClick={applyBuilder}>
-            Apply Builder
-          </button>
+          <span className="query-builder-warning">Live query</span>
         </div>
       </div>
 
@@ -117,6 +119,21 @@ function MongoFindBuilder({
       <BuilderSection
         title="Filters"
         actionLabel="Add Filter"
+        dropHint="Drop a result field to filter"
+        onDropField={(field) =>
+          updateDraft({
+            filters: [
+              ...draft.filters,
+              {
+                id: rowId('filter'),
+                field,
+                operator: 'eq',
+                value: '',
+                valueType: 'string',
+              },
+            ],
+          })
+        }
         onAdd={() =>
           updateDraft({
             filters: [
@@ -215,6 +232,16 @@ function MongoFindBuilder({
       <BuilderSection
         title="Projection"
         actionLabel="Add Field"
+        dropHint="Drop a result field to project"
+        onDropField={(field) =>
+          updateDraft({
+            projectionMode: draft.projectionMode === 'all' ? 'include' : draft.projectionMode,
+            projectionFields: [
+              ...draft.projectionFields,
+              { id: rowId('projection'), field },
+            ],
+          })
+        }
         onAdd={() =>
           updateDraft({
             projectionMode: draft.projectionMode === 'all' ? 'include' : draft.projectionMode,
@@ -272,6 +299,12 @@ function MongoFindBuilder({
       <BuilderSection
         title="Sort"
         actionLabel="Add Sort"
+        dropHint="Drop a result field to order"
+        onDropField={(field) =>
+          updateDraft({
+            sort: [...draft.sort, { id: rowId('sort'), field, direction: 'asc' }],
+          })
+        }
         onAdd={() =>
           updateDraft({
             sort: [...draft.sort, { id: rowId('sort'), field: '', direction: 'asc' }],
@@ -327,18 +360,49 @@ function MongoFindBuilder({
 function BuilderSection({
   actionLabel,
   children,
+  dropHint,
   onAdd,
+  onDropField,
   title,
 }: {
   actionLabel: string
   children: ReactNode
+  dropHint?: string
   onAdd(): void
+  onDropField?(field: string): void
   title: string
 }) {
+  const handleDragOver = (event: DragEvent<HTMLElement>) => {
+    if (!onDropField) {
+      return
+    }
+
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'copy'
+  }
+  const handleDrop = (event: DragEvent<HTMLElement>) => {
+    if (!onDropField) {
+      return
+    }
+
+    event.preventDefault()
+    const field = readFieldDragData(event)
+
+    if (field) {
+      onDropField(field)
+    }
+  }
+
   return (
-    <section className="query-builder-section">
+    <section
+      className="query-builder-section"
+      onDragEnter={handleDragOver}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
       <div className="query-builder-section-header">
         <h3>{title}</h3>
+        {dropHint ? <span className="query-builder-drop-hint">{dropHint}</span> : null}
         <button type="button" className="drawer-button" onClick={onAdd}>
           {actionLabel}
         </button>

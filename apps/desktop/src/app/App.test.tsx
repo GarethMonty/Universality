@@ -31,7 +31,7 @@ async function createFirstConnection() {
   })
 
   await waitFor(() => {
-    expect(screen.getByRole('tab', { name: /Query 1\.sql/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /Query 1/i })).toBeInTheDocument()
   })
 
   return drawer
@@ -71,6 +71,44 @@ async function openExplorerFromConnection(connectionName = 'PostgreSQL connectio
       name: `Open Explorer for ${connectionName}`,
     }),
   )
+}
+
+async function createCatalogMongoWithBuilderTab() {
+  const drawer = await createFirstConnection()
+  fireEvent.click(within(drawer).getByRole('button', { name: 'Save Connection' }))
+
+  await waitFor(() => {
+    expect(screen.queryByLabelText('connection drawer')).not.toBeInTheDocument()
+  })
+
+  fireEvent.click(screen.getByRole('button', { name: 'New connection' }))
+  const mongoDrawer = await screen.findByLabelText('connection drawer')
+  fireEvent.change(within(mongoDrawer).getByLabelText('Name'), {
+    target: { value: 'Catalog Mongo' },
+  })
+  fireEvent.change(within(mongoDrawer).getByLabelText('Database type'), {
+    target: { value: 'mongodb' },
+  })
+  fireEvent.click(within(mongoDrawer).getByRole('button', { name: 'Save Connection' }))
+
+  await waitFor(() => {
+    expect(screen.queryByLabelText('connection drawer')).not.toBeInTheDocument()
+  })
+
+  const sidebar = screen.getByLabelText('connections sidebar')
+  fireEvent.click(within(sidebar).getByLabelText('Expand connection Catalog Mongo'))
+
+  const mongoTree = within(sidebar).getByRole('tree', { name: 'Catalog Mongo objects' })
+  fireEvent.click(within(mongoTree).getByLabelText('Expand Databases'))
+  fireEvent.click(within(mongoTree).getByLabelText('Expand admin'))
+  fireEvent.click(within(mongoTree).getByLabelText('Expand Collections'))
+
+  const productsCollection = within(mongoTree).getByRole('treeitem', { name: /products/i })
+  fireEvent.dblClick(productsCollection)
+
+  await waitFor(() => {
+    expect(screen.getByRole('tab', { name: /products\.find/i })).toBeInTheDocument()
+  })
 }
 
 describe('App', () => {
@@ -137,7 +175,7 @@ describe('App', () => {
     fireEvent.click(screen.getByLabelText('Connections view'))
 
     await waitFor(() => {
-      expect(screen.getByRole('tab', { name: /Query 1\.sql/i })).toBeInTheDocument()
+      expect(screen.getByRole('tab', { name: /Query 1/i })).toBeInTheDocument()
     })
   })
 
@@ -180,6 +218,74 @@ describe('App', () => {
     expect(screen.getAllByText('PostgreSQL connection').length).toBeGreaterThan(0)
   })
 
+  it('opens the connection drawer for editing from a connection context menu', async () => {
+    render(<App />)
+
+    const drawer = await createFirstConnection()
+    fireEvent.click(within(drawer).getByRole('button', { name: 'Save Connection' }))
+
+    await waitFor(() => {
+      expect(screen.queryByLabelText('connection drawer')).not.toBeInTheDocument()
+    })
+
+    fireEvent.contextMenu(getConnectionRow('PostgreSQL connection'))
+
+    const menu = await screen.findByRole('menu', {
+      name: 'Connection options for PostgreSQL connection',
+    })
+    fireEvent.click(
+      within(menu).getByRole('menuitem', {
+        name: 'Edit connection PostgreSQL connection',
+      }),
+    )
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { level: 2, name: 'Connection' })).toBeInTheDocument()
+    })
+    expect(
+      within(screen.getByLabelText('connection drawer')).getByRole('button', {
+        name: 'Save Connection',
+      }),
+    ).toBeInTheDocument()
+  })
+
+  it('creates a query from the connection context menu without opening connection details', async () => {
+    render(<App />)
+
+    const drawer = await createFirstConnection()
+    fireEvent.click(within(drawer).getByRole('button', { name: 'Save Connection' }))
+
+    await waitFor(() => {
+      expect(screen.queryByLabelText('connection drawer')).not.toBeInTheDocument()
+    })
+
+    fireEvent.contextMenu(getConnectionRow('PostgreSQL connection'))
+    fireEvent.click(
+      await screen.findByRole('menuitem', {
+        name: 'Create query tab for PostgreSQL connection',
+      }),
+    )
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: /Query 2/i })).toBeInTheDocument()
+    })
+    expect(screen.queryByLabelText('connection drawer')).not.toBeInTheDocument()
+  })
+
+  it('closes connection details when creating a query from the connections pane', async () => {
+    render(<App />)
+
+    await createFirstConnection()
+    expect(screen.getByLabelText('connection drawer')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'New query tab' }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: /Query 2/i })).toBeInTheDocument()
+      expect(screen.queryByLabelText('connection drawer')).not.toBeInTheDocument()
+    })
+  })
+
   it('opens operations from the connection context menu and previews a live-safe operation', async () => {
     render(<App />)
 
@@ -213,7 +319,7 @@ describe('App', () => {
     })
   })
 
-  it('opens a query tab when selecting a connection that has no active tab', async () => {
+  it('does not create a new query tab when selecting a connection that has no active tab', async () => {
     render(<App />)
 
     const drawer = await createFirstConnection()
@@ -225,13 +331,13 @@ describe('App', () => {
 
     fireEvent.click(
       screen.getByRole('button', {
-        name: /Close tab Query 1\.sql/i,
+        name: /Close tab Query 1/i,
       }),
     )
 
     await waitFor(() => {
       expect(
-        screen.queryByRole('tab', { name: /Query 1\.sql/i }),
+        screen.queryByRole('tab', { name: /Query 1/i }),
       ).not.toBeInTheDocument()
     })
 
@@ -242,9 +348,9 @@ describe('App', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByRole('tab', { name: /Query 1\.sql/i })).toBeInTheDocument()
+      expect(screen.queryByRole('tab', { name: /Query 1/i })).not.toBeInTheDocument()
     })
-    expect(screen.queryByText('No tab exists for the connection.')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'New query tab' })).toBeInTheDocument()
   })
 
   it('opens the connection drawer for editing from the toolbar', async () => {
@@ -280,9 +386,14 @@ describe('App', () => {
     render(<App />)
 
     await createFirstConnection()
+    const updateUiStateSpy = vi.spyOn(desktopClient, 'updateUiState')
     const sidebar = screen.getByLabelText('connections sidebar')
+    const header = within(sidebar).getByRole('heading', { name: 'Connections' }).parentElement
+
+    expect(header).not.toBeNull()
 
     expect(within(sidebar).getByRole('button', { name: 'Group connections: None' })).toBeInTheDocument()
+    expect(within(header!).getByRole('button', { name: 'Group connections: None' })).toBeInTheDocument()
 
     fireEvent.click(within(sidebar).getByRole('button', { name: 'Group connections: None' }))
     const groupByEnvironment = within(sidebar).getByRole('menuitemradio', {
@@ -291,7 +402,12 @@ describe('App', () => {
     expect(groupByEnvironment).toHaveAttribute('aria-checked', 'false')
 
     fireEvent.click(groupByEnvironment)
-    expect(within(sidebar).getByRole('button', { name: 'Group connections: Environment' })).toBeInTheDocument()
+    await waitFor(() => {
+      expect(updateUiStateSpy).toHaveBeenCalledWith({ connectionGroupMode: 'environment' })
+    })
+    await waitFor(() => {
+      expect(within(sidebar).getByRole('button', { name: 'Group connections: Environment' })).toBeInTheDocument()
+    })
     expect(within(sidebar).getByText('Local')).toBeInTheDocument()
 
     fireEvent.click(within(sidebar).getByRole('button', { name: 'Group connections: Environment' }))
@@ -299,7 +415,9 @@ describe('App', () => {
       name: /Type/,
     })
     fireEvent.click(groupByDatabaseType)
-    expect(within(sidebar).getByRole('button', { name: 'Group connections: Type' })).toBeInTheDocument()
+    await waitFor(() => {
+      expect(within(sidebar).getByRole('button', { name: 'Group connections: Type' })).toBeInTheDocument()
+    })
     expect(within(sidebar).getByText('SQL')).toBeInTheDocument()
 
     fireEvent.click(within(sidebar).getByRole('button', { name: 'Group connections: Type' }))
@@ -307,7 +425,41 @@ describe('App', () => {
       name: /None/,
     })
     fireEvent.click(showWithoutGrouping)
-    expect(within(sidebar).getByRole('button', { name: 'Group connections: None' })).toBeInTheDocument()
+    await waitFor(() => {
+      expect(within(sidebar).getByRole('button', { name: 'Group connections: None' })).toBeInTheDocument()
+    })
+  })
+
+  it('collapses sidebar sections and persists the section state', async () => {
+    render(<App />)
+
+    await createFirstConnection()
+    const updateUiStateSpy = vi.spyOn(desktopClient, 'updateUiState')
+    const sidebar = screen.getByLabelText('connections sidebar')
+    const connectionsSection = within(sidebar).getByRole('button', {
+      name: 'Collapse Connections section (1)',
+    })
+
+    expect(connectionsSection).toHaveAttribute('aria-expanded', 'true')
+    expect(within(sidebar).getByText('New PostgreSQL connection')).toBeInTheDocument()
+
+    fireEvent.click(connectionsSection)
+
+    await waitFor(() => {
+      expect(updateUiStateSpy).toHaveBeenCalledWith({
+        sidebarSectionStates: {
+          'connections:none:connections': false,
+        },
+      })
+    })
+    await waitFor(() => {
+      expect(
+        within(sidebar).queryByText('New PostgreSQL connection'),
+      ).not.toBeInTheDocument()
+    })
+    expect(
+      within(sidebar).getByRole('button', { name: 'Expand Connections section (1)' }),
+    ).toHaveAttribute('aria-expanded', 'false')
   })
 
   it('renders datastore-specific object trees under connections', async () => {
@@ -628,18 +780,18 @@ describe('App', () => {
       expect(screen.getByText('Saved Queries')).toBeInTheDocument()
     })
 
-    fireEvent.click(screen.getByRole('button', { name: /Open saved work Query 1\.sql/i }))
+    fireEvent.click(screen.getByRole('button', { name: /Open saved work Query 1/i }))
 
     await waitFor(() => {
-      expect(screen.getAllByRole('tab', { name: /Query 1\.sql/i }).length).toBeGreaterThan(1)
+      expect(screen.getAllByRole('tab', { name: /Query 1/i }).length).toBeGreaterThan(1)
     })
 
     fireEvent.click(screen.getByLabelText('Saved Work view'))
     const savedWorkSidebar = screen.getByLabelText('saved-work sidebar')
-    fireEvent.click(screen.getByRole('button', { name: /Delete saved work Query 1\.sql/i }))
+    fireEvent.click(screen.getByRole('button', { name: /Delete saved work Query 1/i }))
 
     await waitFor(() => {
-      expect(within(savedWorkSidebar).queryByText('Query 1.sql')).not.toBeInTheDocument()
+      expect(within(savedWorkSidebar).queryByText('Query 1')).not.toBeInTheDocument()
     })
   })
 
@@ -647,10 +799,10 @@ describe('App', () => {
     render(<App />)
 
     await createFirstConnection()
-    fireEvent.contextMenu(screen.getByRole('tab', { name: /Query 1\.sql/i }))
-    fireEvent.click(screen.getByRole('menuitem', { name: /Rename tab Query 1\.sql/i }))
+    fireEvent.contextMenu(screen.getByRole('tab', { name: /Query 1/i }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /Rename tab Query 1/i }))
 
-    const titleInput = screen.getByLabelText(/Rename tab Query 1\.sql/i)
+    const titleInput = screen.getByLabelText(/Rename tab Query 1/i)
     fireEvent.change(titleInput, { target: { value: 'Customer lookup' } })
     fireEvent.keyDown(titleInput, { key: 'Enter' })
 
@@ -675,20 +827,20 @@ describe('App', () => {
 
     expect(screen.getByRole('button', { name: 'Scroll tabs left' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Scroll tabs right' })).toBeInTheDocument()
-    expect(within(tablist).getByRole('tab', { name: /Query 1\.sql/i })).toBeInTheDocument()
+    expect(within(tablist).getByRole('tab', { name: /Query 1/i })).toBeInTheDocument()
     expect(within(tablist).queryByText('Local')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Create query tab' }))
 
     await waitFor(() => {
-      expect(within(tablist).getByRole('tab', { name: /Query 2\.sql/i })).toBeInTheDocument()
+      expect(within(tablist).getByRole('tab', { name: /Query 2/i })).toBeInTheDocument()
     })
 
-    fireEvent.contextMenu(within(tablist).getByRole('tab', { name: /Query 1\.sql/i }))
-    fireEvent.click(screen.getByRole('menuitem', { name: /Move tab Query 1\.sql right/i }))
+    fireEvent.contextMenu(within(tablist).getByRole('tab', { name: /Query 1/i }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /Move tab Query 1.* right/i }))
 
     await waitFor(() => {
-      expect(getEditorTabNames()[0]).toContain('Query 2.sql')
+      expect(getEditorTabNames()[0]).toContain('Query 2')
     })
   })
 
@@ -705,17 +857,17 @@ describe('App', () => {
       expect(within(tablist).getAllByRole('tab')).toHaveLength(3)
     })
 
-    fireEvent.contextMenu(within(tablist).getByRole('tab', { name: /Query 1\.sql/i }))
+    fireEvent.contextMenu(within(tablist).getByRole('tab', { name: /Query 1/i }))
     fireEvent.click(
-      screen.getByRole('menuitem', { name: /Close other tabs except Query 1\.sql/i }),
+      screen.getByRole('menuitem', { name: /Close other tabs except Query 1/i }),
     )
 
     await waitFor(() => {
       expect(within(tablist).getAllByRole('tab')).toHaveLength(1)
     })
-    expect(within(tablist).getByRole('tab', { name: /Query 1\.sql/i })).toBeInTheDocument()
+    expect(within(tablist).getByRole('tab', { name: /Query 1/i })).toBeInTheDocument()
 
-    fireEvent.contextMenu(within(tablist).getByRole('tab', { name: /Query 1\.sql/i }))
+    fireEvent.contextMenu(within(tablist).getByRole('tab', { name: /Query 1/i }))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Close all tabs' }))
 
     await waitFor(() => {
@@ -729,13 +881,13 @@ describe('App', () => {
     await createFirstConnection()
     fireEvent.click(
       screen.getByRole('button', {
-        name: /Close tab Query 1\.sql/i,
+        name: /Close tab Query 1/i,
       }),
     )
 
     await waitFor(() => {
       expect(
-        screen.queryByRole('tab', { name: /Query 1\.sql/i }),
+        screen.queryByRole('tab', { name: /Query 1/i }),
       ).not.toBeInTheDocument()
     })
 
@@ -747,13 +899,13 @@ describe('App', () => {
 
     fireEvent.click(
       screen.getByRole('button', {
-        name: /Reopen closed tab Query 1\.sql/i,
+        name: /Reopen closed tab Query 1/i,
       }),
     )
 
     await waitFor(() => {
       expect(
-        screen.getByRole('tab', { name: /Query 1\.sql/i }),
+        screen.getByRole('tab', { name: /Query 1/i }),
       ).toBeInTheDocument()
     })
   })
@@ -776,13 +928,13 @@ describe('App', () => {
 
     fireEvent.click(
       screen.getByRole('button', {
-        name: /Open saved work Query 1\.sql/i,
+        name: /Open saved work Query 1/i,
       }),
     )
 
     await waitFor(() => {
       expect(
-        screen.getAllByRole('tab', { name: /Query 1\.sql/i }),
+        screen.getAllByRole('tab', { name: /Query 1/i }),
       ).toHaveLength(2)
     })
 
@@ -794,7 +946,7 @@ describe('App', () => {
     })
 
     const closeButtons = screen.getAllByRole('button', {
-      name: /Close tab Query 1\.sql/i,
+      name: /Close tab Query 1/i,
     })
     const dirtySavedCloseButton = closeButtons.at(-1)
 
@@ -820,7 +972,7 @@ describe('App', () => {
 
     fireEvent.click(
       screen.getAllByRole('button', {
-        name: /Close tab Query 1\.sql/i,
+        name: /Close tab Query 1/i,
       }).at(-1)!,
     )
     fireEvent.click(screen.getByRole('button', { name: 'Save and Close' }))
@@ -849,6 +1001,175 @@ describe('App', () => {
       screen.getByText('Unlock the workspace before using privileged desktop commands.'),
     ).toBeInTheDocument()
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  })
+
+  it('shows raw editor controls only for non-builder tabs', async () => {
+    render(<App />)
+
+    await createFirstConnection()
+
+    expect(screen.queryByRole('button', { name: 'Show builder and raw' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Show builder only' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Show raw query only' })).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Query editor')).toBeInTheDocument()
+  })
+
+  it('shows builder controls for MongoDB scratch query tabs', async () => {
+    render(<App />)
+
+    const drawer = await createFirstConnection()
+    fireEvent.click(within(drawer).getByRole('button', { name: 'Save Connection' }))
+
+    await waitFor(() => {
+      expect(screen.queryByLabelText('connection drawer')).not.toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'New connection' }))
+    const mongoDrawer = await screen.findByLabelText('connection drawer')
+    fireEvent.change(within(mongoDrawer).getByLabelText('Name'), {
+      target: { value: 'Catalog Mongo' },
+    })
+    fireEvent.change(within(mongoDrawer).getByLabelText('Database type'), {
+      target: { value: 'mongodb' },
+    })
+    fireEvent.click(within(mongoDrawer).getByRole('button', { name: 'Save Connection' }))
+
+    await waitFor(() => {
+      expect(screen.queryByLabelText('connection drawer')).not.toBeInTheDocument()
+    })
+
+    fireEvent.contextMenu(getConnectionRow('Catalog Mongo'))
+    fireEvent.click(
+      await screen.findByRole('menuitem', {
+        name: 'Create query tab for Catalog Mongo',
+      }),
+    )
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Show builder and raw' })).toBeInTheDocument()
+    })
+    expect(screen.getByRole('button', { name: 'Show builder only' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Show raw query only' })).toBeInTheDocument()
+    expect(screen.getByLabelText('MongoDB query builder')).toBeInTheDocument()
+    expect(screen.queryByLabelText('connection drawer')).not.toBeInTheDocument()
+  })
+
+  it('starts builder queries in side-by-side mode and toggles builder/raw panels', async () => {
+    render(<App />)
+
+    await createCatalogMongoWithBuilderTab()
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: 'Show builder and raw' }),
+      ).toBeInTheDocument()
+    })
+    expect(screen.getByRole('button', { name: 'Show builder only' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Show raw query only' })).toBeInTheDocument()
+
+    expect(screen.getByLabelText('MongoDB query builder')).toBeInTheDocument()
+    expect(screen.getByLabelText('Query editor')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show raw query only' }))
+    expect(screen.queryByLabelText('MongoDB query builder')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Query editor')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show builder only' }))
+    expect(screen.getByLabelText('MongoDB query builder')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Query editor')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show builder and raw' }))
+    expect(screen.getByLabelText('MongoDB query builder')).toBeInTheDocument()
+    expect(screen.getByLabelText('Query editor')).toBeInTheDocument()
+  })
+
+  it('applies generated Mongo builder query before execution', async () => {
+    const updateBuilderSpy = vi.spyOn(desktopClient, 'updateQueryBuilderState')
+    const executeSpy = vi.spyOn(desktopClient, 'executeQuery')
+
+    render(<App />)
+
+    await createCatalogMongoWithBuilderTab()
+
+    const builder = screen.getByLabelText('MongoDB query builder')
+    const addFilterButton = within(builder).getByRole('button', { name: 'Add Filter' })
+
+    fireEvent.click(addFilterButton)
+
+    const filterField = within(builder).getByLabelText('Filter field')
+    const filterOperator = within(builder).getByLabelText('Filter operator')
+    const filterValue = within(builder).getByLabelText('Filter value')
+
+    fireEvent.change(filterField, { target: { value: 'status' } })
+    fireEvent.change(filterOperator, { target: { value: 'eq' } })
+    fireEvent.change(filterValue, { target: { value: 'open' } })
+
+    await waitFor(() => {
+      const queryEditor = screen.getByLabelText('Query editor') as HTMLTextAreaElement
+      expect(queryEditor.value).toContain('"status"')
+      expect(queryEditor.value).toContain('"open"')
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Run query' }))
+
+    await waitFor(() => {
+      expect(updateBuilderSpy).toHaveBeenCalled()
+      const latestRequest = updateBuilderSpy.mock.calls.at(-1)?.[0]
+      expect(latestRequest?.queryText).toContain('"status"')
+      expect(latestRequest?.queryText).toContain('"open"')
+      const latestExecution = executeSpy.mock.calls.at(-1)?.[0]
+      expect(latestExecution?.queryText).toContain('"status"')
+      expect(latestExecution?.queryText).toContain('"open"')
+    })
+  })
+
+  it('keeps the last result visible while editing a Mongo builder query', async () => {
+    render(<App />)
+
+    await createCatalogMongoWithBuilderTab()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Run query' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('2 documents returned from MongoDB adapter preview.')).toBeInTheDocument()
+    })
+
+    const builder = screen.getByLabelText('MongoDB query builder')
+    fireEvent.click(within(builder).getByRole('button', { name: 'Add Filter' }))
+    fireEvent.change(within(builder).getByLabelText('Filter field'), {
+      target: { value: 'inventory.available' },
+    })
+
+    expect(screen.getByText('2 documents returned from MongoDB adapter preview.')).toBeInTheDocument()
+    expect(screen.getByRole('treegrid', { name: 'Document result table' })).toBeInTheDocument()
+  })
+
+  it('runs the raw editor text when query view is raw-only', async () => {
+    const executeSpy = vi.spyOn(desktopClient, 'executeQuery')
+
+    render(<App />)
+
+    await createCatalogMongoWithBuilderTab()
+
+    const queryEditor = await screen.findByLabelText('Query editor')
+    const rawQuery = '{ "collection": "accounts", "filter": { "status": "open" }, "limit": 10 }'
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show raw query only' }))
+    await waitFor(() => {
+      expect(screen.queryByLabelText('MongoDB query builder')).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Show raw query only' })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      )
+    })
+
+    fireEvent.change(queryEditor, { target: { value: rawQuery } })
+    fireEvent.click(screen.getByRole('button', { name: 'Run query' }))
+
+    await waitFor(() => {
+      const latestExecution = executeSpy.mock.calls.at(-1)?.[0]
+      expect(latestExecution?.queryText).toBe(rawQuery)
+    })
   })
 
   it('routes command failures into the Messages panel until cleared', async () => {
@@ -1015,3 +1336,4 @@ describe('App', () => {
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })
 })
+

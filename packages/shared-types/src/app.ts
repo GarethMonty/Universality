@@ -45,12 +45,16 @@ export type RightDrawerView =
   | 'diagnostics'
   | 'operations'
 
+export type ConnectionGroupMode = 'environment' | 'database-type' | 'none'
+
 export interface UiState {
   activeConnectionId: string
   activeEnvironmentId: string
   activeTabId: string
   explorerFilter: string
   explorerView: 'tree' | 'structure'
+  connectionGroupMode: ConnectionGroupMode
+  sidebarSectionStates: Record<string, boolean>
   activeActivity: UiActivity
   sidebarCollapsed: boolean
   activeSidebarPane: SidebarPane

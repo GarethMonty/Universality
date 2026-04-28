@@ -7,7 +7,7 @@ services:
       POSTGRES_USER: universality
       POSTGRES_PASSWORD: universality
     ports:
-      - '54329:5432'
+      - '${UNIVERSALITY_POSTGRES_PORT:-54329}:5432'
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U universality -d universality']
       interval: 5s
@@ -25,7 +25,7 @@ services:
       MYSQL_PASSWORD: universality
       MYSQL_ROOT_PASSWORD: universality-root
     ports:
-      - '33060:3306'
+      - '${UNIVERSALITY_MYSQL_PORT:-33060}:3306'
     healthcheck:
       test: ['CMD', 'mysqladmin', 'ping', '-h', '127.0.0.1', '-u', 'root', '-puniversality-root']
       interval: 5s
@@ -41,7 +41,7 @@ services:
       ACCEPT_EULA: 'Y'
       MSSQL_SA_PASSWORD: Universality_pwd_123
     ports:
-      - '14333:1433'
+      - '${UNIVERSALITY_SQLSERVER_PORT:-14333}:1433'
     healthcheck:
       test:
         [
@@ -62,7 +62,7 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: universality
       MONGO_INITDB_DATABASE: catalog
     ports:
-      - '27018:27017'
+      - '${UNIVERSALITY_MONGODB_PORT:-27018}:27017'
     healthcheck:
       test:
         [
@@ -79,7 +79,7 @@ services:
     image: redis:7
     container_name: universality-redis
     ports:
-      - '6380:6379'
+      - '${UNIVERSALITY_REDIS_PORT:-6380}:6379'
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
       interval: 5s
@@ -91,7 +91,7 @@ services:
     container_name: universality-valkey
     profiles: ['cache']
     ports:
-      - '6381:6379'
+      - '${UNIVERSALITY_VALKEY_PORT:-6381}:6379'
     healthcheck:
       test: ['CMD', 'valkey-cli', 'ping']
       interval: 5s
@@ -104,7 +104,7 @@ services:
     profiles: ['cache']
     command: ['memcached', '-m', '64', '-vv']
     ports:
-      - '11212:11211'
+      - '${UNIVERSALITY_MEMCACHED_PORT:-11212}:11211'
 
   mariadb:
     image: mariadb:11
@@ -116,7 +116,7 @@ services:
       MARIADB_PASSWORD: universality
       MARIADB_ROOT_PASSWORD: universality-root
     ports:
-      - '33061:3306'
+      - '${UNIVERSALITY_MARIADB_PORT:-33061}:3306'
     healthcheck:
       test: ['CMD', 'healthcheck.sh', '--connect', '--innodb_initialized']
       interval: 5s
@@ -131,8 +131,8 @@ services:
     profiles: ['sqlplus']
     command: ['start-single-node', '--insecure', '--store=type=mem,size=1GiB']
     ports:
-      - '26257:26257'
-      - '8080:8080'
+      - '${UNIVERSALITY_COCKROACH_PORT:-26257}:26257'
+      - '${UNIVERSALITY_COCKROACH_HTTP_PORT:-8080}:8080'
     healthcheck:
       test: ['CMD', '/cockroach/cockroach', 'sql', '--insecure', '--execute=select 1']
       interval: 5s
@@ -150,7 +150,7 @@ services:
       POSTGRES_USER: universality
       POSTGRES_PASSWORD: universality
     ports:
-      - '54330:5432'
+      - '${UNIVERSALITY_TIMESCALE_PORT:-54330}:5432'
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U universality -d metrics']
       interval: 5s
@@ -169,8 +169,8 @@ services:
       CLICKHOUSE_PASSWORD: universality
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
     ports:
-      - '8124:8123'
-      - '9001:9000'
+      - '${UNIVERSALITY_CLICKHOUSE_HTTP_PORT:-8124}:8123'
+      - '${UNIVERSALITY_CLICKHOUSE_NATIVE_PORT:-9001}:9000'
     healthcheck:
       test: ['CMD', 'wget', '--spider', '-q', 'http://127.0.0.1:8123/ping']
       interval: 5s
@@ -187,7 +187,7 @@ services:
       INFLUXDB_DB: metrics
       INFLUXDB_HTTP_AUTH_ENABLED: 'false'
     ports:
-      - '8087:8086'
+      - '${UNIVERSALITY_INFLUXDB_PORT:-8087}:8086'
     healthcheck:
       test: ['CMD', 'influx', '-execute', 'SHOW DATABASES']
       interval: 5s
@@ -205,7 +205,7 @@ services:
       - '--storage.tsdb.path=/prometheus'
       - '--web.enable-lifecycle'
     ports:
-      - '9091:9090'
+      - '${UNIVERSALITY_PROMETHEUS_PORT:-9091}:9090'
     healthcheck:
       test:
         [
@@ -228,7 +228,7 @@ services:
       OPENSEARCH_INITIAL_ADMIN_PASSWORD: Universality_pwd_123
       OPENSEARCH_JAVA_OPTS: -Xms512m -Xmx512m
     ports:
-      - '9201:9200'
+      - '${UNIVERSALITY_OPENSEARCH_PORT:-9201}:9200'
     healthcheck:
       test: ['CMD-SHELL', 'curl -fsS http://127.0.0.1:9200 >/dev/null']
       interval: 10s
@@ -244,7 +244,7 @@ services:
       xpack.security.enabled: 'false'
       ES_JAVA_OPTS: -Xms512m -Xmx512m
     ports:
-      - '9202:9200'
+      - '${UNIVERSALITY_ELASTICSEARCH_PORT:-9202}:9200'
     healthcheck:
       test: ['CMD-SHELL', 'curl -fsS http://127.0.0.1:9200 >/dev/null']
       interval: 10s
@@ -260,8 +260,8 @@ services:
       NEO4J_server_memory_heap_initial__size: 512m
       NEO4J_server_memory_heap_max__size: 512m
     ports:
-      - '7475:7474'
-      - '7688:7687'
+      - '${UNIVERSALITY_NEO4J_HTTP_PORT:-7475}:7474'
+      - '${UNIVERSALITY_NEO4J_BOLT_PORT:-7688}:7687'
     healthcheck:
       test: ['CMD-SHELL', "cypher-shell -u neo4j -p universality 'RETURN 1'"]
       interval: 10s
@@ -275,7 +275,7 @@ services:
     environment:
       ARANGO_ROOT_PASSWORD: universality
     ports:
-      - '8529:8529'
+      - '${UNIVERSALITY_ARANGODB_PORT:-8529}:8529'
     healthcheck:
       test: ['CMD-SHELL', "arangosh --server.password universality --javascript.execute-string 'db._version()'"]
       interval: 10s
@@ -287,7 +287,7 @@ services:
     container_name: universality-janusgraph
     profiles: ['graph']
     ports:
-      - '8183:8182'
+      - '${UNIVERSALITY_JANUSGRAPH_PORT:-8183}:8182'
 
   cassandra:
     image: cassandra:5
@@ -300,7 +300,7 @@ services:
       MAX_HEAP_SIZE: 768M
       HEAP_NEWSIZE: 256M
     ports:
-      - '9043:9042'
+      - '${UNIVERSALITY_CASSANDRA_PORT:-9043}:9042'
     healthcheck:
       test: ['CMD-SHELL', 'cqlsh -e "describe keyspaces"']
       interval: 15s
@@ -318,7 +318,7 @@ services:
       APP_USER: universality
       APP_USER_PASSWORD: universality
     ports:
-      - '1522:1521'
+      - '${UNIVERSALITY_ORACLE_PORT:-1522}:1521'
     healthcheck:
       test: ['CMD-SHELL', 'healthcheck.sh']
       interval: 15s
@@ -333,7 +333,7 @@ services:
     profiles: ['cloud-contract']
     command: ['-jar', 'DynamoDBLocal.jar', '-sharedDb', '-inMemory']
     ports:
-      - '8001:8000'
+      - '${UNIVERSALITY_DYNAMODB_PORT:-8001}:8000'
 
   cloud-contract:
     image: node:24-alpine
@@ -342,10 +342,10 @@ services:
     working_dir: /work
     command: ['node', '/work/server.mjs']
     ports:
-      - '19050:19050'
-      - '19060:19060'
-      - '19070:19070'
-      - '19080:19080'
+      - '${UNIVERSALITY_BIGQUERY_MOCK_PORT:-19050}:19050'
+      - '${UNIVERSALITY_SNOWFLAKE_MOCK_PORT:-19060}:19060'
+      - '${UNIVERSALITY_COSMOSDB_MOCK_PORT:-19070}:19070'
+      - '${UNIVERSALITY_NEPTUNE_MOCK_PORT:-19080}:19080'
     healthcheck:
       test:
         [

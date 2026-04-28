@@ -198,6 +198,7 @@ export function BottomPanel({
         {safePanelTab === 'results' ? (
           <ResultsView
             capabilities={capabilities}
+            connection={activeConnection}
             payload={activePayload}
             renderer={activeRenderer}
             result={activeTab?.result}

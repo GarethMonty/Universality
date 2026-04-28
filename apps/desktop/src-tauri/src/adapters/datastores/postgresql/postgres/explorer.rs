@@ -121,11 +121,77 @@ pub(super) async fn inspect_postgres_explorer_node(
         query_template: Some(if request.node_id.contains('.') {
             format!("select * from {} limit 100;", request.node_id)
         } else {
-            "select * from public.accounts limit 100;".into()
+            "select 1;".into()
         }),
         payload: Some(json!({
             "nodeId": request.node_id,
             "engine": connection.engine,
         })),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn inspect_postgres_explorer_node_uses_select_1_for_unresolved_nodes() {
+        let connection = ResolvedConnectionProfile {
+            id: "conn".into(),
+            name: "Postgres".into(),
+            engine: "postgresql".into(),
+            family: "sql".into(),
+            host: "localhost".into(),
+            port: Some(5432),
+            database: Some("test_db".into()),
+            username: None,
+            password: None,
+            connection_string: None,
+            read_only: false,
+        };
+        let response = inspect_postgres_explorer_node(
+            &connection,
+            &ExplorerInspectRequest {
+                connection_id: "conn".into(),
+                environment_id: "env".into(),
+                node_id: "accounts".into(),
+            },
+        )
+        .await
+        .expect("inspection response");
+
+        assert_eq!(response.query_template.as_deref(), Some("select 1;"));
+    }
+
+    #[tokio::test]
+    async fn inspect_postgres_explorer_node_keeps_explicit_table_when_available() {
+        let connection = ResolvedConnectionProfile {
+            id: "conn".into(),
+            name: "Postgres".into(),
+            engine: "postgresql".into(),
+            family: "sql".into(),
+            host: "localhost".into(),
+            port: Some(5432),
+            database: Some("test_db".into()),
+            username: None,
+            password: None,
+            connection_string: None,
+            read_only: false,
+        };
+        let response = inspect_postgres_explorer_node(
+            &connection,
+            &ExplorerInspectRequest {
+                connection_id: "conn".into(),
+                environment_id: "env".into(),
+                node_id: "public.accounts".into(),
+            },
+        )
+        .await
+        .expect("inspection response");
+
+        assert_eq!(
+            response.query_template.as_deref(),
+            Some("select * from public.accounts limit 100;")
+        );
+    }
 }

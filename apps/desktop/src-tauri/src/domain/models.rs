@@ -426,6 +426,10 @@ pub struct UiState {
     pub active_tab_id: String,
     pub explorer_filter: String,
     pub explorer_view: String,
+    #[serde(default = "default_connection_group_mode")]
+    pub connection_group_mode: String,
+    #[serde(default)]
+    pub sidebar_section_states: HashMap<String, bool>,
     pub active_activity: String,
     pub sidebar_collapsed: bool,
     pub active_sidebar_pane: String,
@@ -437,6 +441,10 @@ pub struct UiState {
     pub right_drawer_width: u32,
 }
 
+fn default_connection_group_mode() -> String {
+    "none".into()
+}
+
 impl Default for UiState {
     fn default() -> Self {
         Self {
@@ -445,6 +453,8 @@ impl Default for UiState {
             active_tab_id: String::new(),
             explorer_filter: String::new(),
             explorer_view: "structure".into(),
+            connection_group_mode: default_connection_group_mode(),
+            sidebar_section_states: HashMap::new(),
             active_activity: "connections".into(),
             sidebar_collapsed: false,
             active_sidebar_pane: "connections".into(),
@@ -833,6 +843,8 @@ pub struct UpdateUiStateRequest {
     pub sidebar_width: Option<u32>,
     pub explorer_filter: Option<String>,
     pub explorer_view: Option<String>,
+    pub connection_group_mode: Option<String>,
+    pub sidebar_section_states: Option<HashMap<String, bool>>,
     pub bottom_panel_visible: Option<bool>,
     pub active_bottom_panel_tab: Option<String>,
     pub bottom_panel_height: Option<u32>,

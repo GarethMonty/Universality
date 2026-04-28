@@ -1,8 +1,9 @@
-import { useDeferredValue, useEffect, useState } from 'react'
-import type { ComponentType, CSSProperties } from 'react'
+import { useDeferredValue, useEffect, useRef, useState } from 'react'
+import type { ComponentType, CSSProperties, DragEvent } from 'react'
 import type {
   ConnectionProfile,
   EnvironmentProfile,
+  ExecutionRequest,
   ExecutionCapabilities,
   QueryBuilderState,
   QueryTabState,
@@ -21,6 +22,13 @@ import { SideBar } from './components/workbench/SideBar'
 import { StatusBar } from './components/workbench/StatusBar'
 import { StructureWorkspace } from './components/workbench/StructureWorkspace'
 import { QueryBuilderPanel } from './components/workbench/query-builder/QueryBuilderPanel'
+import {
+  buildMongoFindQueryText,
+  createDefaultMongoFindBuilderState,
+  isMongoFindBuilderState,
+  parseMongoFindQueryText,
+} from './components/workbench/query-builder/mongo-find'
+import { readFieldDragData } from './components/workbench/results/field-drag'
 import { AppStateProvider, useAppState } from './state/app-state'
 import {
   defaultRowLimitForConnection,
@@ -66,6 +74,15 @@ function DesktopWorkspace() {
     renderer?: string
     tabId?: string
   }>({})
+  const [queryWindowMode, setQueryWindowMode] = useState<'both' | 'builder' | 'raw'>(
+    'both',
+  )
+  const hasBuilderTabEverLoaded = useRef(false)
+  const builderStateDraftRef = useRef<Record<string, QueryBuilderState>>({})
+  const [builderStateDrafts, setBuilderStateDrafts] = useState<
+    Record<string, QueryBuilderState>
+  >({})
+  const queryTextDraftRef = useRef<Record<string, string>>({})
   const [pendingTabClose, setPendingTabClose] = useState<
     | {
         tab: QueryTabState
@@ -92,12 +109,24 @@ function DesktopWorkspace() {
     document.documentElement.dataset.theme = theme
   }, [payload])
 
+  useEffect(() => {
+    builderStateDraftRef.current = builderStateDrafts
+  }, [builderStateDrafts])
+
   const snapshot = payload?.snapshot
   const activeConnection =
     snapshot?.connections.find((item) => item.id === snapshot.ui.activeConnectionId) ??
     snapshot?.connections[0]
+  const activeTabFromSelection = snapshot?.tabs.find(
+    (item) =>
+      item.id === snapshot.ui.activeTabId &&
+      (!activeConnection || item.connectionId === activeConnection.id),
+  )
   const activeTab =
-    snapshot?.tabs.find((item) => item.id === snapshot.ui.activeTabId) ?? snapshot?.tabs[0]
+    activeTabFromSelection ??
+    (activeConnection
+      ? snapshot?.tabs.find((item) => item.connectionId === activeConnection.id)
+      : undefined)
   const activeEnvironment =
     snapshot?.environments.find((item) => item.id === snapshot.ui.activeEnvironmentId) ??
     snapshot?.environments[0]
@@ -106,6 +135,136 @@ function DesktopWorkspace() {
   const sidebarCollapsed = snapshot?.ui.sidebarCollapsed
   const activeConnectionId = activeConnection?.id
   const activeEnvironmentId = activeEnvironment?.id
+  const activeBuilderState =
+    activeTab && activeConnection
+      ? builderStateForTab(activeTab, activeConnection, builderStateDrafts)
+      : undefined
+  const hasBuilderQuery = Boolean(activeBuilderState)
+  const activeQueryWindowMode: 'both' | 'builder' | 'raw' = hasBuilderQuery
+    ? queryWindowMode
+    : 'raw'
+  const activeEditorQueryText =
+    activeTab &&
+    activeBuilderState &&
+    isMongoFindBuilderState(activeBuilderState) &&
+    activeQueryWindowMode !== 'raw'
+      ? buildMongoFindQueryText(activeBuilderState)
+      : activeTab?.queryText
+
+  const resolveBuilderQueryText = (tab: QueryTabState): string | undefined => {
+    const builderState =
+      activeConnection && builderStateForTab(tab, activeConnection, builderStateDraftRef.current)
+
+    if (!builderState) {
+      return undefined
+    }
+
+    if (!isMongoFindBuilderState(builderState)) {
+      return undefined
+    }
+
+    if (activeQueryWindowMode === 'raw') {
+      return undefined
+    }
+
+    return buildMongoFindQueryText(builderState)
+  }
+  const resolveQueryText = (tab: QueryTabState): string => {
+    const hasDraftText =
+      Object.prototype.hasOwnProperty.call(queryTextDraftRef.current, tab.id) &&
+      typeof queryTextDraftRef.current[tab.id] === 'string'
+
+    return hasDraftText ? (queryTextDraftRef.current[tab.id] ?? tab.queryText) : tab.queryText
+  }
+
+  const runCurrentTabQuery = (mode?: ExecutionRequest['mode'], guardrailId?: string) => {
+    if (!activeTab) {
+      return
+    }
+
+    const generatedQueryText = resolveBuilderQueryText(activeTab)
+    const builderState =
+      activeConnection &&
+      builderStateForTab(activeTab, activeConnection, builderStateDraftRef.current)
+
+    if (!generatedQueryText) {
+      void actions.executeQuery(activeTab.id, mode, guardrailId, resolveQueryText(activeTab))
+      return
+    }
+
+    if (!isMongoFindBuilderState(builderState)) {
+      void actions.executeQuery(activeTab.id, mode, guardrailId)
+      return
+    }
+
+    void actions.updateQueryBuilderState({
+      tabId: activeTab.id,
+      builderState: {
+        ...builderState,
+        lastAppliedQueryText: generatedQueryText,
+      },
+      queryText: generatedQueryText,
+    })
+    void actions.executeQuery(activeTab.id, mode, guardrailId, generatedQueryText)
+  }
+
+  const persistBuilderState = (tabId: string, builderState: QueryBuilderState) => {
+    if (!snapshot) {
+      return
+    }
+
+    const targetTab = snapshot.tabs.find((item) => item.id === tabId)
+
+    if (!targetTab) {
+      return
+    }
+
+    const liveQueryText = isMongoFindBuilderState(builderState)
+      ? buildMongoFindQueryText(builderState)
+      : undefined
+    const nextBuilderState =
+      isMongoFindBuilderState(builderState) && liveQueryText
+        ? {
+            ...builderState,
+            lastAppliedQueryText: liveQueryText,
+          }
+        : builderState
+
+    builderStateDraftRef.current[tabId] = nextBuilderState
+    if (liveQueryText !== undefined) {
+      queryTextDraftRef.current[tabId] = liveQueryText
+    }
+    setBuilderStateDrafts((current) => ({
+      ...current,
+      [tabId]: nextBuilderState,
+    }))
+    const currentBuilderState = targetTab.builderState
+
+    if (
+      currentBuilderState &&
+      JSON.stringify(currentBuilderState) === JSON.stringify(nextBuilderState) &&
+      liveQueryText === targetTab.queryText
+    ) {
+      return
+    }
+
+    void actions.updateQueryBuilderState({
+      tabId,
+      builderState: nextBuilderState,
+      queryText: liveQueryText,
+    })
+  }
+
+  useEffect(() => {
+    if (!hasBuilderQuery) {
+      return
+    }
+
+    if (!hasBuilderTabEverLoaded.current) {
+      setQueryWindowMode('both')
+      hasBuilderTabEverLoaded.current = true
+    }
+  }, [activeTab?.id, hasBuilderQuery])
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -139,7 +298,7 @@ function DesktopWorkspace() {
 
       if (key === 'enter') {
         event.preventDefault()
-        void actions.executeQuery(activeTab.id)
+        runCurrentTabQuery()
         return
       }
 
@@ -161,13 +320,13 @@ function DesktopWorkspace() {
 
       if (key === 'e' && event.shiftKey) {
         event.preventDefault()
-        void actions.executeQuery(activeTab.id, 'explain')
+        runCurrentTabQuery('explain')
       }
     }
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [actions, activeTab, commandPaletteOpen, snapshot])
+  }, [activeTab, commandPaletteOpen, runCurrentTabQuery, snapshot])
 
   useEffect(() => {
     if (
@@ -358,12 +517,31 @@ function DesktopWorkspace() {
   }
 
   const openConnectionDrawer = () => {
-    void actions.updateUiState({
-      activeActivity: 'connections',
-      activeSidebarPane: 'connections',
-      sidebarCollapsed: false,
-      rightDrawer: 'connection',
-    })
+    if (snapshot?.ui.activeConnectionId) {
+      void actions.updateUiState({
+        activeActivity: 'connections',
+        activeSidebarPane: 'connections',
+        sidebarCollapsed: false,
+        rightDrawer: 'connection',
+      })
+    }
+  }
+
+  const openConnectionDrawerFor = (connectionId: string) => {
+    if (connectionId === snapshot?.ui.activeConnectionId) {
+      openConnectionDrawer()
+      return
+    }
+
+    void (async () => {
+      await actions.selectConnection(connectionId)
+      await actions.updateUiState({
+        activeActivity: 'connections',
+        activeSidebarPane: 'connections',
+        sidebarCollapsed: false,
+        rightDrawer: 'connection',
+      })
+    })()
   }
 
   const openOperationsDrawer = (connectionId: string) => {
@@ -444,16 +622,34 @@ function DesktopWorkspace() {
     })()
   }
 
+  const openQueryTab = (connectionId: string | undefined) => {
+    if (!connectionId) {
+      return
+    }
+
+    void (async () => {
+      await actions.createTab(connectionId)
+      await actions.updateUiState({
+        rightDrawer: 'none',
+      })
+    })()
+  }
+
   const openScopedQuery = (connectionId: string, target: ScopedQueryTarget) => {
     const environmentId =
       snapshot.ui.activeEnvironmentId ||
       snapshot.connections.find((connection) => connection.id === connectionId)?.environmentIds[0]
 
-    void actions.createScopedTab({
-      connectionId,
-      environmentId,
-      target,
-    })
+    void (async () => {
+      await actions.createScopedTab({
+        connectionId,
+        environmentId,
+        target,
+      })
+      await actions.updateUiState({
+        rightDrawer: 'none',
+      })
+    })()
   }
 
   const runCommand = (command: string) => {
@@ -517,7 +713,7 @@ function DesktopWorkspace() {
 
     if (command === 'Create query tab') {
       if (activeConnection) {
-        void actions.createTab(activeConnection.id)
+        openQueryTab(activeConnection.id)
       }
       return
     }
@@ -548,14 +744,14 @@ function DesktopWorkspace() {
 
     if (command === 'Run current query') {
       if (activeTab) {
-        void actions.executeQuery(activeTab.id)
+        runCurrentTabQuery()
       }
       return
     }
 
     if (command === 'Explain current query') {
       if (activeTab) {
-        void actions.executeQuery(activeTab.id, 'explain')
+        runCurrentTabQuery('explain')
       }
       return
     }
@@ -725,18 +921,26 @@ function DesktopWorkspace() {
             }
             onCreateConnection={() => void actions.createConnection()}
             onCreateEnvironment={() => void actions.createEnvironment()}
+            onConnectionGroupModeChange={(connectionGroupMode) =>
+              void actions.updateUiState({ connectionGroupMode })
+            }
+            onSidebarSectionExpandedChange={(sectionId, expanded) =>
+              void actions.updateUiState({
+                sidebarSectionStates: {
+                  ...(snapshot.ui.sidebarSectionStates ?? {}),
+                  [sectionId]: expanded,
+                },
+              })
+            }
             onDuplicateConnection={(connectionId) =>
               void actions.duplicateConnection(connectionId)
             }
             onDeleteConnection={requestDeleteConnection}
             onOpenConnectionOperations={openOperationsDrawer}
             onOpenConnectionExplorer={openConnectionExplorer}
+            onOpenConnectionDrawer={openConnectionDrawerFor}
             onOpenScopedQuery={openScopedQuery}
-            onCreateTab={(connectionId) =>
-              connectionId || activeConnection
-                ? void actions.createTab(connectionId ?? activeConnection?.id ?? '')
-                : undefined
-            }
+            onCreateTab={(connectionId) => openQueryTab(connectionId ?? activeConnection?.id)}
             onSaveCurrentQuery={() =>
               activeTab ? void actions.saveCurrentQuery(activeTab.id) : undefined
             }
@@ -818,9 +1022,7 @@ function DesktopWorkspace() {
                   onSelectTab={(tabId) => void actions.selectTab(tabId)}
                   onCloseTab={requestCloseTab}
                   onCloseTabs={requestCloseTabs}
-                  onCreateTab={() =>
-                    activeConnection ? void actions.createTab(activeConnection.id) : undefined
-                  }
+                  onCreateTab={() => openQueryTab(activeConnection?.id)}
                   onRenameTab={(tabId, title) => void actions.renameTab(tabId, title)}
                   onSaveTab={(tabId) => void actions.saveCurrentQuery(tabId)}
                   onReorderTabs={(orderedTabIds) =>
@@ -839,8 +1041,8 @@ function DesktopWorkspace() {
                       capabilities={runtimeCapabilities}
                       canCancelExecution={canCancelExecution}
                       bottomPanelVisible={snapshot.ui.bottomPanelVisible}
-                      onExecute={() => void actions.executeQuery(activeTab.id)}
-                      onExplain={() => void actions.executeQuery(activeTab.id, 'explain')}
+                      onExecute={() => runCurrentTabQuery()}
+                      onExplain={() => runCurrentTabQuery('explain')}
                       onCancel={() =>
                         lastExecution?.executionId
                           ? void actions.cancelExecution(lastExecution.executionId, activeTab.id)
@@ -853,6 +1055,9 @@ function DesktopWorkspace() {
                         void actions.selectEnvironment(activeTab.id, environmentId)
                       }
                       onOpenConnectionDrawer={openConnectionDrawer}
+                      canToggleBuilderView={hasBuilderQuery}
+                      queryWindowMode={queryWindowMode}
+                      onToggleQueryWindowMode={setQueryWindowMode}
                       onToggleBottomPanel={() =>
                         void actions.updateUiState({
                           bottomPanelVisible: !snapshot.ui.bottomPanelVisible,
@@ -867,22 +1072,51 @@ function DesktopWorkspace() {
                           {activeConnection.name} / {activeEnvironment.label}
                         </span>
                       </div>
-                      <QueryBuilderPanel
-                        tab={activeTab}
-                        onApply={(builderState: QueryBuilderState, queryText: string) =>
-                          void actions.updateQueryBuilderState({
-                            tabId: activeTab.id,
-                            builderState,
-                            queryText,
-                          })
-                        }
-                      />
-                      <DesktopCodeEditor
-                        value={activeTab.queryText}
-                        language={runtimeCapabilities.editorLanguage}
-                        theme={resolvedTheme}
-                        onChange={(value) => void actions.updateQuery(activeTab.id, value)}
-                      />
+                      <div
+                        className={`editor-query-layout query-layout--${activeQueryWindowMode}`}
+                        role="presentation"
+                      >
+                        {hasBuilderQuery && activeQueryWindowMode !== 'raw' ? (
+                          <QueryBuilderPanel
+                            tab={activeTab}
+                            builderState={activeBuilderState}
+                            onBuilderStateChange={persistBuilderState}
+                          />
+                        ) : null}
+                        {!hasBuilderQuery || activeQueryWindowMode !== 'builder' ? (
+                          <DesktopCodeEditor
+                            value={activeEditorQueryText ?? activeTab.queryText}
+                            language={runtimeCapabilities.editorLanguage}
+                            theme={resolvedTheme}
+                            onChange={(value) => {
+                              const nextQueryText = value ?? ''
+                              queryTextDraftRef.current[activeTab.id] = nextQueryText
+                              if (
+                                activeBuilderState &&
+                                isMongoFindBuilderState(activeBuilderState) &&
+                                activeQueryWindowMode === 'both'
+                              ) {
+                                const parsedBuilderState =
+                                  parseMongoFindQueryText(nextQueryText)
+
+                                if (parsedBuilderState) {
+                                  persistBuilderState(activeTab.id, parsedBuilderState)
+                                  return
+                                }
+                              }
+                              void actions.updateQuery(activeTab.id, nextQueryText)
+                            }}
+                            onDropField={(fieldPath) => {
+                              const nextQueryText = appendFieldToQueryText(
+                                activeTab.queryText,
+                                fieldPath,
+                              )
+                              queryTextDraftRef.current[activeTab.id] = nextQueryText
+                              void actions.updateQuery(activeTab.id, nextQueryText)
+                            }}
+                          />
+                        ) : null}
+                      </div>
                     </div>
                   </>
                 ) : (
@@ -939,7 +1173,7 @@ function DesktopWorkspace() {
               }
               onConfirmExecution={(guardrailId, mode) =>
                 activeTab
-                  ? void actions.executeQuery(activeTab.id, mode, guardrailId)
+                  ? runCurrentTabQuery(mode, guardrailId)
                   : undefined
               }
               onRestoreHistory={(queryText) =>
@@ -1601,6 +1835,51 @@ function resolveThemeMode(theme: WorkspaceSnapshot['preferences']['theme']) {
   return theme
 }
 
+function builderStateForTab(
+  tab: QueryTabState,
+  connection: ConnectionProfile,
+  draftStates: Record<string, QueryBuilderState>,
+): QueryBuilderState | undefined {
+  if (connection.engine !== 'mongodb') {
+    return undefined
+  }
+
+  const draftState = draftStates[tab.id]
+
+  if (isMongoFindBuilderState(draftState)) {
+    return draftState
+  }
+
+  if (isMongoFindBuilderState(tab.builderState)) {
+    return tab.builderState
+  }
+
+  return createDefaultMongoFindBuilderState(
+    mongoCollectionFromQueryText(tab.queryText),
+    mongoLimitFromQueryText(tab.queryText),
+  )
+}
+
+function mongoCollectionFromQueryText(queryText: string) {
+  try {
+    const parsed = JSON.parse(queryText) as { collection?: unknown }
+    return typeof parsed.collection === 'string' ? parsed.collection : ''
+  } catch {
+    return ''
+  }
+}
+
+function mongoLimitFromQueryText(queryText: string) {
+  try {
+    const parsed = JSON.parse(queryText) as { limit?: unknown }
+    return typeof parsed.limit === 'number' && Number.isFinite(parsed.limit) && parsed.limit > 0
+      ? Math.floor(parsed.limit)
+      : 50
+  } catch {
+    return 50
+  }
+}
+
 function defaultCapabilities(): ExecutionCapabilities {
   return {
     canCancel: false,
@@ -1645,16 +1924,32 @@ function selectPayload(payloads: ResultPayload[], selectedRenderer?: string) {
   )
 }
 
+function appendFieldToQueryText(queryText: string, fieldPath: string) {
+  const trimmedField = fieldPath.trim()
+
+  if (!trimmedField) {
+    return queryText
+  }
+
+  if (!queryText.trim()) {
+    return trimmedField
+  }
+
+  return `${queryText.trimEnd()}\n${trimmedField}`
+}
+
 function DesktopCodeEditor({
   value,
   language,
   theme,
   onChange,
+  onDropField,
 }: {
   value: string
   language: string
   theme: 'light' | 'dark'
   onChange(value: string): void
+  onDropField?(fieldPath: string): void
 }) {
   const [LoadedEditor, setLoadedEditor] = useState<null | ComponentType<{
     height: string
@@ -1685,19 +1980,42 @@ function DesktopCodeEditor({
     }
   }, [])
 
+  const handleDragOver = (event: DragEvent<HTMLElement>) => {
+    if (!onDropField) {
+      return
+    }
+
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'copy'
+  }
+  const handleDrop = (event: DragEvent<HTMLElement>) => {
+    if (!onDropField) {
+      return
+    }
+
+    event.preventDefault()
+    const fieldPath = readFieldDragData(event)
+
+    if (fieldPath) {
+      onDropField(fieldPath)
+    }
+  }
+
   if (!LoadedEditor) {
     return (
       <textarea
         aria-label="Query editor"
         className="editor-textarea"
         value={value}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
         onChange={(event) => onChange(event.target.value)}
       />
     )
   }
 
   return (
-    <div className="editor-monaco-frame">
+    <div className="editor-monaco-frame" onDragOver={handleDragOver} onDrop={handleDrop}>
       <LoadedEditor
         height="100%"
         language={language}

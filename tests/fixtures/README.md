@@ -34,9 +34,19 @@ npm run rust:test
 
 ## Default Ports And Credentials
 
+The fixture runner writes the actual ports it selected to `tests/fixtures/.generated.env`.
+If a default port is blocked or reserved by Windows, the runner automatically chooses a nearby
+available fallback and the debug fixture workspace reads that generated file. You can still force
+a port by setting the matching environment variable before running `fixtures:up`, for example:
+
+```powershell
+$env:UNIVERSALITY_POSTGRES_PORT='55432'
+npm run fixtures:up
+```
+
 | Engine | Host Port | Database | User | Password |
 | --- | ---: | --- | --- | --- |
-| PostgreSQL | 54329 | universality | universality | universality |
+| PostgreSQL | `UNIVERSALITY_POSTGRES_PORT` or 54329 | universality | universality | universality |
 | MySQL | 33060 | commerce | universality | universality |
 | SQL Server | 14333 | universality | sa | Universality_pwd_123 |
 | MongoDB | 27018 | catalog | universality | universality |

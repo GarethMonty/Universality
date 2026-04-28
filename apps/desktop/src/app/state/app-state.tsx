@@ -7,6 +7,7 @@ import {
   useEffect,
   useMemo,
   useReducer,
+  useRef,
 } from 'react'
 import type { ReactNode } from 'react'
 import type {
@@ -657,6 +658,7 @@ interface Actions {
     tabId: string,
     mode?: ExecutionRequest['mode'],
     confirmedGuardrailId?: string,
+    overrideQueryText?: string,
   ): Promise<void>
   fetchResultPage(tabId: string, renderer?: string): Promise<void>
   cancelExecution(executionId: string, tabId?: string): Promise<void>
@@ -744,6 +746,11 @@ const AppStateContext = createContext<AppContextValue>({
 
 export function AppStateProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState)
+  const stateRef = useRef<StateShape>(state)
+
+  useEffect(() => {
+    stateRef.current = state
+  }, [state])
 
   useEffect(() => {
     let mounted = true
@@ -1189,14 +1196,16 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   )
 
   const executeQuery = useCallback<Actions['executeQuery']>(
-    async (tabId, mode = 'full', confirmedGuardrailId) => {
+    async (tabId, mode = 'full', confirmedGuardrailId, overrideQueryText) => {
       try {
-        if (!state.payload) {
+        const latest = stateRef.current
+
+        if (!latest.payload) {
           throw new Error('Workspace is not ready for query execution.')
         }
-        ensureWorkspaceUnlocked(state.payload)
+        ensureWorkspaceUnlocked(latest.payload)
 
-        const tab = state.payload.snapshot.tabs.find((item) => item.id === tabId)
+        const tab = latest.payload.snapshot.tabs.find((item) => item.id === tabId)
 
         if (!tab) {
           throw new Error('Query tab was not found.')
@@ -1208,7 +1217,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           connectionId: tab.connectionId,
           environmentId: tab.environmentId,
           language: tab.language,
-          queryText: tab.queryText,
+          queryText: overrideQueryText ?? tab.queryText,
           mode,
           rowLimit: 500,
           confirmedGuardrailId,
@@ -1221,7 +1230,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         handleError(error)
       }
     },
-    [handleError, state.payload],
+    [handleError],
   )
 
   const fetchResultPage = useCallback<Actions['fetchResultPage']>(

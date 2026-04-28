@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, MouseEvent, ReactNode } from 'react'
 import type {
   ClosedQueryTabSnapshot,
+  ConnectionGroupMode,
   ConnectionProfile,
   EnvironmentProfile,
   ExplorerNode,
@@ -27,11 +28,10 @@ import {
   ReadOnlyIcon,
   SearchIcon,
   SettingsIcon,
+  RenameIcon,
   TableIcon,
   TrashIcon,
 } from './icons'
-
-type ConnectionGroupMode = 'environment' | 'database-type' | 'none'
 
 const CONNECTION_GROUP_OPTIONS = [
   {
@@ -99,10 +99,13 @@ interface SideBarProps {
   onSelectEnvironment(environmentId: string): void
   onCreateConnection(): void
   onCreateEnvironment(): void
+  onConnectionGroupModeChange(value: ConnectionGroupMode): void
+  onSidebarSectionExpandedChange(sectionId: string, expanded: boolean): void
   onDuplicateConnection(connectionId: string): void
   onDeleteConnection(connectionId: string): void
   onOpenConnectionOperations(connectionId: string): void
   onOpenConnectionExplorer(connectionId: string): void
+  onOpenConnectionDrawer(connectionId: string): void
   onOpenScopedQuery(connectionId: string, target: ScopedQueryTarget): void
   onCreateTab(connectionId?: string): void
   onSaveCurrentQuery(): void
@@ -136,10 +139,13 @@ export function SideBar({
   onSelectEnvironment,
   onCreateConnection,
   onCreateEnvironment,
+  onConnectionGroupModeChange,
+  onSidebarSectionExpandedChange,
   onDuplicateConnection,
   onDeleteConnection,
   onOpenConnectionOperations,
   onOpenConnectionExplorer,
+  onOpenConnectionDrawer,
   onOpenScopedQuery,
   onCreateTab,
   onSaveCurrentQuery,
@@ -152,12 +158,12 @@ export function SideBar({
   onResize,
 }: SideBarProps) {
   const [connectionFilter, setConnectionFilter] = useState('')
-  const [connectionGroupMode, setConnectionGroupMode] =
-    useState<ConnectionGroupMode>('none')
+  const connectionGroupMode = ui.connectionGroupMode ?? 'none'
   const [environmentFilter, setEnvironmentFilter] = useState('')
   const [savedWorkFilter, setSavedWorkFilter] = useState('')
   const [isResizing, setIsResizing] = useState(false)
   const lastPointerX = useRef(0)
+  const sidebarSectionStates = ui.sidebarSectionStates ?? {}
   const connectionGroups = useMemo(() => {
     const filtered = connections.filter((connection) => {
       const haystack = `${connection.name} ${connection.engine} ${connection.group ?? ''} ${connection.tags.join(' ')}`.toLowerCase()
@@ -241,13 +247,16 @@ export function SideBar({
           connectionGroupMode={connectionGroupMode}
           connectionGroups={connectionGroups}
           environments={environments}
+          sectionStates={sidebarSectionStates}
           onConnectionFilterChange={setConnectionFilter}
-          onConnectionGroupModeChange={setConnectionGroupMode}
+          onConnectionGroupModeChange={onConnectionGroupModeChange}
+          onSidebarSectionExpandedChange={onSidebarSectionExpandedChange}
           onCreateConnection={onCreateConnection}
           onDeleteConnection={onDeleteConnection}
           onOpenConnectionOperations={onOpenConnectionOperations}
           onDuplicateConnection={onDuplicateConnection}
           onOpenConnectionExplorer={onOpenConnectionExplorer}
+          onOpenConnectionDrawer={onOpenConnectionDrawer}
           onOpenScopedQuery={onOpenScopedQuery}
           onCreateTab={onCreateTab}
           onSelectConnection={onSelectConnection}
@@ -259,8 +268,10 @@ export function SideBar({
           activeEnvironmentId={activeEnvironmentId}
           environmentFilter={environmentFilter}
           environments={filteredEnvironments}
+          sectionStates={sidebarSectionStates}
           onCreateEnvironment={onCreateEnvironment}
           onEnvironmentFilterChange={setEnvironmentFilter}
+          onSidebarSectionExpandedChange={onSidebarSectionExpandedChange}
           onSelectEnvironment={onSelectEnvironment}
         />
       ) : null}
@@ -284,9 +295,11 @@ export function SideBar({
           closedTabs={closedTabs}
           savedWorkFilter={savedWorkFilter}
           savedWorkGroups={savedWorkGroups}
+          sectionStates={sidebarSectionStates}
           onDeleteSavedWork={onDeleteSavedWork}
           onOpenSavedWork={onOpenSavedWork}
           onReopenClosedTab={onReopenClosedTab}
+          onSidebarSectionExpandedChange={onSidebarSectionExpandedChange}
           onSaveCurrentQuery={onSaveCurrentQuery}
           onSavedWorkFilterChange={setSavedWorkFilter}
         />
@@ -299,12 +312,14 @@ export function SideBar({
           commandQuery={commandQuery}
           connections={connections}
           environments={environments}
+          sectionStates={sidebarSectionStates}
           savedWork={savedWork}
           closedTabs={closedTabs}
           onCommandQueryChange={onCommandQueryChange}
           onRunCommand={onRunCommand}
           onOpenSavedWork={onOpenSavedWork}
           onReopenClosedTab={onReopenClosedTab}
+          onSidebarSectionExpandedChange={onSidebarSectionExpandedChange}
           onSelectConnection={onSelectConnection}
           onSelectEnvironment={onSelectEnvironment}
         />
@@ -319,13 +334,16 @@ function ConnectionsPane({
   connectionGroupMode,
   connectionGroups,
   environments,
+  sectionStates,
   onConnectionFilterChange,
   onConnectionGroupModeChange,
+  onSidebarSectionExpandedChange,
   onCreateConnection,
   onDeleteConnection,
   onOpenConnectionOperations,
   onDuplicateConnection,
   onOpenConnectionExplorer,
+  onOpenConnectionDrawer,
   onOpenScopedQuery,
   onCreateTab,
   onSelectConnection,
@@ -335,11 +353,14 @@ function ConnectionsPane({
   connectionGroupMode: ConnectionGroupMode
   connectionGroups: Record<string, ConnectionProfile[]>
   environments: EnvironmentProfile[]
+  sectionStates: Record<string, boolean>
   onConnectionFilterChange(value: string): void
   onConnectionGroupModeChange(value: ConnectionGroupMode): void
+  onSidebarSectionExpandedChange(sectionId: string, expanded: boolean): void
   onCreateConnection(): void
   onDeleteConnection(connectionId: string): void
   onOpenConnectionOperations(connectionId: string): void
+  onOpenConnectionDrawer(connectionId: string): void
   onDuplicateConnection(connectionId: string): void
   onOpenConnectionExplorer(connectionId: string): void
   onOpenScopedQuery(connectionId: string, target: ScopedQueryTarget): void
@@ -409,6 +430,60 @@ function ConnectionsPane({
       <div className="sidebar-header">
         <h1>Connections</h1>
         <div className="sidebar-actions">
+          <div
+            className="sidebar-group-dropdown sidebar-group-dropdown--header"
+            onBlur={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                setGroupDropdownOpen(false)
+              }
+            }}
+          >
+            <button
+              type="button"
+              className="sidebar-group-trigger"
+              aria-haspopup="menu"
+              aria-expanded={groupDropdownOpen}
+              aria-label={`Group connections: ${activeGroupOption.label}`}
+              title="Choose how the connection list is grouped."
+              onClick={() => setGroupDropdownOpen((current) => !current)}
+            >
+              <ActiveGroupIcon className="sidebar-group-icon" />
+              <span>
+                <strong>Group</strong>
+                <small>{activeGroupOption.label}</small>
+              </span>
+              <ChevronDownIcon className="sidebar-group-chevron" />
+            </button>
+
+            {groupDropdownOpen ? (
+              <div className="sidebar-group-menu" role="menu" aria-label="Connection grouping">
+                {CONNECTION_GROUP_OPTIONS.map((option) => {
+                  const OptionIcon = option.Icon
+                  const selected = option.mode === connectionGroupMode
+
+                  return (
+                    <button
+                      key={option.mode}
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked={selected}
+                      className={`sidebar-group-menu-item${selected ? ' is-active' : ''}`}
+                      onClick={() => {
+                        onConnectionGroupModeChange(option.mode)
+                        setGroupDropdownOpen(false)
+                      }}
+                    >
+                      <OptionIcon className="sidebar-group-icon" />
+                      <span>
+                        <strong>{option.label}</strong>
+                        <small>{option.description}</small>
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            ) : null}
+          </div>
           <button
             type="button"
             className="sidebar-icon-button"
@@ -441,61 +516,6 @@ function ConnectionsPane({
         />
       </label>
 
-      <div
-        className="sidebar-group-dropdown"
-        onBlur={(event) => {
-          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-            setGroupDropdownOpen(false)
-          }
-        }}
-      >
-        <button
-          type="button"
-          className="sidebar-group-trigger"
-          aria-haspopup="menu"
-          aria-expanded={groupDropdownOpen}
-          aria-label={`Group connections: ${activeGroupOption.label}`}
-          title="Choose how the connection list is grouped."
-          onClick={() => setGroupDropdownOpen((current) => !current)}
-        >
-          <ActiveGroupIcon className="sidebar-group-icon" />
-          <span>
-            <strong>Group</strong>
-            <small>{activeGroupOption.label}</small>
-          </span>
-          <ChevronDownIcon className="sidebar-group-chevron" />
-        </button>
-
-        {groupDropdownOpen ? (
-          <div className="sidebar-group-menu" role="menu" aria-label="Connection grouping">
-            {CONNECTION_GROUP_OPTIONS.map((option) => {
-              const OptionIcon = option.Icon
-              const selected = option.mode === connectionGroupMode
-
-              return (
-                <button
-                  key={option.mode}
-                  type="button"
-                  role="menuitemradio"
-                  aria-checked={selected}
-                  className={`sidebar-group-menu-item${selected ? ' is-active' : ''}`}
-                  onClick={() => {
-                    onConnectionGroupModeChange(option.mode)
-                    setGroupDropdownOpen(false)
-                  }}
-                >
-                  <OptionIcon className="sidebar-group-icon" />
-                  <span>
-                    <strong>{option.label}</strong>
-                    <small>{option.description}</small>
-                  </span>
-                </button>
-              )
-            })}
-          </div>
-        ) : null}
-      </div>
-
       <div className="sidebar-scroll">
         {Object.keys(connectionGroups).length === 0 ? (
           <div className="sidebar-empty">
@@ -507,13 +527,20 @@ function ConnectionsPane({
           </div>
         ) : null}
 
-        {Object.entries(connectionGroups).map(([group, items]) => (
-          <section key={group} className="sidebar-section">
-            <div className="sidebar-section-header">
-              <span>{group}</span>
-            </div>
+        {Object.entries(connectionGroups).map(([group, items], index) => {
+          const sectionId = sidebarSectionId('connections', connectionGroupMode, group)
 
-            {items.map((connection) => {
+          return (
+            <SidebarSection
+              key={sectionId}
+              count={items.length}
+              index={index}
+              label={group}
+              sectionId={sectionId}
+              sectionStates={sectionStates}
+              onExpandedChange={onSidebarSectionExpandedChange}
+            >
+              {items.map((connection) => {
               const environment = environments.find((item) =>
                 connection.environmentIds.includes(item.id),
               )
@@ -607,9 +634,10 @@ function ConnectionsPane({
                   ) : null}
                 </div>
               )
-            })}
-          </section>
-        ))}
+              })}
+            </SidebarSection>
+          )
+        })}
       </div>
 
       {contextMenu && contextConnection ? (
@@ -636,6 +664,19 @@ function ConnectionsPane({
           >
             <ExplorerIcon className="connection-context-menu-icon" />
             <span>Open Explorer</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="connection-context-menu-item"
+            aria-label={`Edit connection ${contextConnection.name}`}
+            onClick={() => {
+              setContextMenu(undefined)
+              onOpenConnectionDrawer(contextConnection.id)
+            }}
+          >
+            <RenameIcon className="connection-context-menu-icon" />
+            <span>Edit connection</span>
           </button>
           <button
             type="button"
@@ -696,6 +737,56 @@ function ConnectionsPane({
   )
 }
 
+function SidebarSection({
+  children,
+  count,
+  index,
+  label,
+  sectionId,
+  sectionStates,
+  onExpandedChange,
+}: {
+  children: ReactNode
+  count?: number
+  index: number
+  label: string
+  sectionId: string
+  sectionStates: Record<string, boolean>
+  onExpandedChange(sectionId: string, expanded: boolean): void
+}) {
+  const expanded = sectionStates[sectionId] ?? index === 0
+  const contentId = `sidebar-section-${sectionId.replace(/[^a-z0-9_-]/gi, '-')}`
+
+  return (
+    <section className={`sidebar-section${expanded ? ' is-expanded' : ' is-collapsed'}`}>
+      <button
+        type="button"
+        className="sidebar-section-header sidebar-section-header--button"
+        aria-label={`${expanded ? 'Collapse' : 'Expand'} ${label} section${typeof count === 'number' ? ` (${count})` : ''}`}
+        aria-expanded={expanded}
+        aria-controls={contentId}
+        onClick={() => onExpandedChange(sectionId, !expanded)}
+      >
+        <span className="sidebar-section-title">
+          {expanded ? (
+            <ChevronDownIcon className="sidebar-section-chevron" />
+          ) : (
+            <ChevronRightIcon className="sidebar-section-chevron" />
+          )}
+          <span>{label}</span>
+        </span>
+        {typeof count === 'number' ? <span>{count}</span> : null}
+      </button>
+
+      {expanded ? (
+        <div id={contentId} className="sidebar-section-body">
+          {children}
+        </div>
+      ) : null}
+    </section>
+  )
+}
+
 function ConnectionObjectTree({
   connection,
   onOpenScopedQuery,
@@ -705,51 +796,18 @@ function ConnectionObjectTree({
 }) {
   const nodes = useMemo(() => buildConnectionObjectTree(connection), [connection])
   const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({})
-  const [contextMenu, setContextMenu] = useState<{
-    node: ConnectionTreeNode
-    x: number
-    y: number
-  }>()
   const toggleNode = (nodeKey: string) =>
     setExpandedNodes((current) => ({
       ...current,
       [nodeKey]: !current[nodeKey],
     }))
-  const openNodeContextMenu = (event: MouseEvent, node: ConnectionTreeNode) => {
+  const openNodeQuery = (node: ConnectionTreeNode) => {
     if (!isScopedQueryable(node)) {
       return
     }
 
-    event.preventDefault()
-    event.stopPropagation()
-    setContextMenu({
-      node,
-      x: event.clientX,
-      y: event.clientY,
-    })
+    onOpenScopedQuery(connection.id, connectionTreeNodeTarget(node))
   }
-
-  useEffect(() => {
-    if (!contextMenu) {
-      return
-    }
-
-    const close = () => setContextMenu(undefined)
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        close()
-      }
-    }
-
-    window.addEventListener('pointerdown', close)
-    window.addEventListener('resize', close)
-    window.addEventListener('keydown', onKeyDown)
-    return () => {
-      window.removeEventListener('pointerdown', close)
-      window.removeEventListener('resize', close)
-      window.removeEventListener('keydown', onKeyDown)
-    }
-  }, [contextMenu])
 
   return (
     <>
@@ -761,22 +819,11 @@ function ConnectionObjectTree({
             expandedNodes={expandedNodes}
             node={node}
             nodeKey={node.id}
-            onOpenContextMenu={openNodeContextMenu}
+            onOpenQuery={openNodeQuery}
             onToggleNode={toggleNode}
           />
         ))}
       </div>
-      {contextMenu ? (
-        <ScopedQueryContextMenu
-          ariaLabel={`Object options for ${contextMenu.node.label}`}
-          connectionId={connection.id}
-          target={connectionTreeNodeTarget(contextMenu.node)}
-          x={contextMenu.x}
-          y={contextMenu.y}
-          onClose={() => setContextMenu(undefined)}
-          onOpenScopedQuery={onOpenScopedQuery}
-        />
-      ) : null}
     </>
   )
 }
@@ -786,14 +833,14 @@ function ConnectionObjectTreeNode({
   expandedNodes,
   node,
   nodeKey,
-  onOpenContextMenu,
+  onOpenQuery,
   onToggleNode,
 }: {
   depth: number
   expandedNodes: Record<string, boolean>
   node: ConnectionTreeNode
   nodeKey: string
-  onOpenContextMenu(event: MouseEvent, node: ConnectionTreeNode): void
+  onOpenQuery(node: ConnectionTreeNode): void
   onToggleNode(nodeKey: string): void
 }) {
   const children = node.children ?? []
@@ -816,7 +863,7 @@ function ConnectionObjectTreeNode({
         style={{ '--tree-depth': depth } as CSSProperties}
         title={node.detail ? `${node.label}: ${node.detail}` : node.label}
         onClick={toggleNode}
-        onContextMenu={(event) => onOpenContextMenu(event, node)}
+        onDoubleClick={() => onOpenQuery(node)}
         onKeyDown={(event) => {
           if (hasChildren && (event.key === 'Enter' || event.key === ' ')) {
             event.preventDefault()
@@ -869,73 +916,13 @@ function ConnectionObjectTreeNode({
                 expandedNodes={expandedNodes}
                 node={child}
                 nodeKey={childKey}
-                onOpenContextMenu={onOpenContextMenu}
+                onOpenQuery={onOpenQuery}
                 onToggleNode={onToggleNode}
               />
             )
           })
         : null}
     </>
-  )
-}
-
-function ScopedQueryContextMenu({
-  ariaLabel,
-  connectionId,
-  onClose,
-  onOpenScopedQuery,
-  target,
-  x,
-  y,
-}: {
-  ariaLabel: string
-  connectionId: string
-  onClose(): void
-  onOpenScopedQuery(connectionId: string, target: ScopedQueryTarget): void
-  target: ScopedQueryTarget
-  x: number
-  y: number
-}) {
-  const canOpenBuilder = target.preferredBuilder === 'mongo-find'
-
-  return (
-    <div
-      className="connection-context-menu"
-      role="menu"
-      aria-label={ariaLabel}
-      style={{ left: x, top: y }}
-      onClick={(event) => event.stopPropagation()}
-      onPointerDown={(event) => event.stopPropagation()}
-    >
-      <button
-        type="button"
-        role="menuitem"
-        className="connection-context-menu-item"
-        aria-label={`Open query for ${target.label}`}
-        onClick={() => {
-          onClose()
-          onOpenScopedQuery(connectionId, { ...target, preferredBuilder: undefined })
-        }}
-      >
-        <PlayIcon className="connection-context-menu-icon" />
-        <span>Open Query</span>
-      </button>
-      {canOpenBuilder ? (
-        <button
-          type="button"
-          role="menuitem"
-          className="connection-context-menu-item"
-          aria-label={`Open query builder for ${target.label}`}
-          onClick={() => {
-            onClose()
-            onOpenScopedQuery(connectionId, target)
-          }}
-        >
-          <JsonIcon className="connection-context-menu-icon" />
-          <span>Open Query Builder</span>
-        </button>
-      ) : null}
-    </div>
   )
 }
 
@@ -1067,6 +1054,10 @@ function documentCollectionLeaf(connection: ConnectionProfile, collection: strin
 }
 
 function sqlObjectQueryTemplate(connection: ConnectionProfile, schema: string, objectName: string) {
+  if (!objectName.includes('.')) {
+    return 'select 1;'
+  }
+
   if (connection.engine === 'sqlserver') {
     return `select top 100 * from ${schema}.${objectName};`
   }
@@ -1273,6 +1264,10 @@ function connectionsCount(connectionGroups: Record<string, ConnectionProfile[]>)
   return Object.values(connectionGroups).reduce((count, items) => count + items.length, 0)
 }
 
+function sidebarSectionId(pane: string, scope: string, label: string) {
+  return `${pane}:${scope}:${label.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'section'}`
+}
+
 function connectionGroupLabel(
   connection: ConnectionProfile,
   mode: ConnectionGroupMode,
@@ -1375,15 +1370,19 @@ function EnvironmentsPane({
   activeEnvironmentId,
   environmentFilter,
   environments,
+  sectionStates,
   onCreateEnvironment,
   onEnvironmentFilterChange,
+  onSidebarSectionExpandedChange,
   onSelectEnvironment,
 }: {
   activeEnvironmentId: string
   environmentFilter: string
   environments: EnvironmentProfile[]
+  sectionStates: Record<string, boolean>
   onCreateEnvironment(): void
   onEnvironmentFilterChange(value: string): void
+  onSidebarSectionExpandedChange(sectionId: string, expanded: boolean): void
   onSelectEnvironment(environmentId: string): void
 }) {
   return (
@@ -1425,12 +1424,14 @@ function EnvironmentsPane({
         ) : null}
 
         {environments.length > 0 ? (
-          <section className="sidebar-section">
-            <div className="sidebar-section-header">
-              <span>Workspace</span>
-              <span>{environments.length}</span>
-            </div>
-
+          <SidebarSection
+            count={environments.length}
+            index={0}
+            label="Workspace"
+            sectionId="environments:workspace"
+            sectionStates={sectionStates}
+            onExpandedChange={onSidebarSectionExpandedChange}
+          >
             {environments.map((environment) => (
               <button
                 key={environment.id}
@@ -1461,7 +1462,7 @@ function EnvironmentsPane({
                 </span>
               </button>
             ))}
-          </section>
+          </SidebarSection>
         ) : null}
       </div>
     </>
@@ -1489,33 +1490,13 @@ function ExplorerPane({
   onRefreshExplorer(): void
   onSelectExplorerNode(node: ExplorerNode): void
 }) {
-  const [contextMenu, setContextMenu] = useState<{
-    item: ExplorerNode
-    x: number
-    y: number
-  }>()
-
-  useEffect(() => {
-    if (!contextMenu) {
+  const openNodeQuery = (item: ExplorerNode) => {
+    if (!isExplorerNodeQueryable(item)) {
       return
     }
 
-    const close = () => setContextMenu(undefined)
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        close()
-      }
-    }
-
-    window.addEventListener('pointerdown', close)
-    window.addEventListener('resize', close)
-    window.addEventListener('keydown', onKeyDown)
-    return () => {
-      window.removeEventListener('pointerdown', close)
-      window.removeEventListener('resize', close)
-      window.removeEventListener('keydown', onKeyDown)
-    }
-  }, [contextMenu])
+    onOpenScopedQuery(explorerNodeTarget(item, activeConnection))
+  }
 
   return (
     <>
@@ -1572,18 +1553,7 @@ function ExplorerPane({
                   : `${item.label}: inspect this ${item.kind}.`
               }
               onClick={() => onSelectExplorerNode(item)}
-              onContextMenu={(event) => {
-                if (!isExplorerNodeQueryable(item)) {
-                  return
-                }
-
-                event.preventDefault()
-                setContextMenu({
-                  item,
-                  x: event.clientX,
-                  y: event.clientY,
-                })
-              }}
+               onDoubleClick={() => openNodeQuery(item)}
             >
               <span className="tree-item-chevron">
                 {item.expandable ? (
@@ -1606,17 +1576,6 @@ function ExplorerPane({
           )
         })}
       </div>
-      {contextMenu ? (
-        <ScopedQueryContextMenu
-          ariaLabel={`Object options for ${contextMenu.item.label}`}
-          connectionId=""
-          target={explorerNodeTarget(contextMenu.item, activeConnection)}
-          x={contextMenu.x}
-          y={contextMenu.y}
-          onClose={() => setContextMenu(undefined)}
-          onOpenScopedQuery={(_connectionId, target) => onOpenScopedQuery(target)}
-        />
-      ) : null}
     </>
   )
 }
@@ -1625,18 +1584,22 @@ function SavedWorkPane({
   closedTabs,
   savedWorkFilter,
   savedWorkGroups,
+  sectionStates,
   onDeleteSavedWork,
   onOpenSavedWork,
   onReopenClosedTab,
+  onSidebarSectionExpandedChange,
   onSaveCurrentQuery,
   onSavedWorkFilterChange,
 }: {
   closedTabs: ClosedQueryTabSnapshot[]
   savedWorkFilter: string
   savedWorkGroups: Record<string, SavedWorkItem[]>
+  sectionStates: Record<string, boolean>
   onDeleteSavedWork(savedWorkId: string): void
   onOpenSavedWork(savedWorkId: string): void
   onReopenClosedTab(closedTabId: string): void
+  onSidebarSectionExpandedChange(sectionId: string, expanded: boolean): void
   onSaveCurrentQuery(): void
   onSavedWorkFilterChange(value: string): void
 }) {
@@ -1677,12 +1640,16 @@ function SavedWorkPane({
           </div>
         ) : null}
 
-        {Object.entries(savedWorkGroups).map(([folder, items]) => (
-          <section key={folder} className="sidebar-section">
-            <div className="sidebar-section-header">
-              <span>{folder}</span>
-            </div>
-
+        {Object.entries(savedWorkGroups).map(([folder, items], index) => (
+          <SidebarSection
+            key={folder}
+            count={items.length}
+            index={index}
+            label={folder}
+            sectionId={sidebarSectionId('saved-work', 'folder', folder)}
+            sectionStates={sectionStates}
+            onExpandedChange={onSidebarSectionExpandedChange}
+          >
             {items.map((item) => (
               <div key={item.id} className="saved-work-row">
                 <div className="saved-work-title-row">
@@ -1716,15 +1683,18 @@ function SavedWorkPane({
                 </div>
               </div>
             ))}
-          </section>
+          </SidebarSection>
         ))}
 
         {closedTabs.length > 0 ? (
-          <section className="sidebar-section">
-            <div className="sidebar-section-header">
-              <span>Closed Tabs</span>
-            </div>
-
+          <SidebarSection
+            count={closedTabs.length}
+            index={Object.keys(savedWorkGroups).length}
+            label="Closed Tabs"
+            sectionId="saved-work:closed-tabs"
+            sectionStates={sectionStates}
+            onExpandedChange={onSidebarSectionExpandedChange}
+          >
             {closedTabs.slice(0, 8).map((tab) => (
               <div key={`${tab.id}-${tab.closedAt}`} className="saved-work-row">
                 <div className="saved-work-title-row">
@@ -1748,7 +1718,7 @@ function SavedWorkPane({
                 </div>
               </div>
             ))}
-          </section>
+          </SidebarSection>
         ) : null}
       </div>
     </>
@@ -1771,12 +1741,14 @@ function SearchPane({
   commandQuery,
   connections,
   environments,
+  sectionStates,
   savedWork,
   closedTabs,
   onCommandQueryChange,
   onRunCommand,
   onOpenSavedWork,
   onReopenClosedTab,
+  onSidebarSectionExpandedChange,
   onSelectConnection,
   onSelectEnvironment,
 }: {
@@ -1785,12 +1757,14 @@ function SearchPane({
   commandQuery: string
   connections: ConnectionProfile[]
   environments: EnvironmentProfile[]
+  sectionStates: Record<string, boolean>
   savedWork: SavedWorkItem[]
   closedTabs: ClosedQueryTabSnapshot[]
   onCommandQueryChange(value: string): void
   onRunCommand(command: string): void
   onOpenSavedWork(savedWorkId: string): void
   onReopenClosedTab(closedTabId: string): void
+  onSidebarSectionExpandedChange(sectionId: string, expanded: boolean): void
   onSelectConnection(connectionId: string): void
   onSelectEnvironment(environmentId: string): void
 }) {
@@ -1852,7 +1826,14 @@ function SearchPane({
       ) : (
         <div className="sidebar-scroll sidebar-scroll--tight">
           {hasCommandResults ? (
-            <SearchResultGroup label="Commands" count={commandItems.length}>
+            <SearchResultGroup
+              count={commandItems.length}
+              index={0}
+              label="Commands"
+              sectionId="search:commands"
+              sectionStates={sectionStates}
+              onExpandedChange={onSidebarSectionExpandedChange}
+            >
               {commandItems.map((item) => (
                 <SearchResultRow
                   key={item}
@@ -1866,7 +1847,14 @@ function SearchPane({
           ) : null}
 
           {connectionResults.length > 0 ? (
-            <SearchResultGroup label="Connections" count={connectionResults.length}>
+            <SearchResultGroup
+              count={connectionResults.length}
+              index={hasCommandResults ? 1 : 0}
+              label="Connections"
+              sectionId="search:connections"
+              sectionStates={sectionStates}
+              onExpandedChange={onSidebarSectionExpandedChange}
+            >
               {connectionResults.map((connection) => (
                 <SearchResultRow
                   key={connection.id}
@@ -1880,7 +1868,14 @@ function SearchPane({
           ) : null}
 
           {savedWorkResults.length > 0 ? (
-            <SearchResultGroup label="Saved Work" count={savedWorkResults.length}>
+            <SearchResultGroup
+              count={savedWorkResults.length}
+              index={(hasCommandResults ? 1 : 0) + (connectionResults.length > 0 ? 1 : 0)}
+              label="Saved Work"
+              sectionId="search:saved-work"
+              sectionStates={sectionStates}
+              onExpandedChange={onSidebarSectionExpandedChange}
+            >
               {savedWorkResults.map((item) => (
                 <SearchResultRow
                   key={item.id}
@@ -1895,7 +1890,18 @@ function SearchPane({
           ) : null}
 
           {closedTabResults.length > 0 ? (
-            <SearchResultGroup label="Closed Tabs" count={closedTabResults.length}>
+            <SearchResultGroup
+              count={closedTabResults.length}
+              index={
+                (hasCommandResults ? 1 : 0) +
+                (connectionResults.length > 0 ? 1 : 0) +
+                (savedWorkResults.length > 0 ? 1 : 0)
+              }
+              label="Closed Tabs"
+              sectionId="search:closed-tabs"
+              sectionStates={sectionStates}
+              onExpandedChange={onSidebarSectionExpandedChange}
+            >
               {closedTabResults.map((tab) => (
                 <SearchResultRow
                   key={`${tab.id}-${tab.closedAt}`}
@@ -1909,7 +1915,19 @@ function SearchPane({
           ) : null}
 
           {environmentResults.length > 0 ? (
-            <SearchResultGroup label="Environments" count={environmentResults.length}>
+            <SearchResultGroup
+              count={environmentResults.length}
+              index={
+                (hasCommandResults ? 1 : 0) +
+                (connectionResults.length > 0 ? 1 : 0) +
+                (savedWorkResults.length > 0 ? 1 : 0) +
+                (closedTabResults.length > 0 ? 1 : 0)
+              }
+              label="Environments"
+              sectionId="search:environments"
+              sectionStates={sectionStates}
+              onExpandedChange={onSidebarSectionExpandedChange}
+            >
               {environmentResults.map((environment) => (
                 <SearchResultRow
                   key={environment.id}
@@ -1937,20 +1955,31 @@ function SearchPane({
 function SearchResultGroup({
   children,
   count,
+  index,
   label,
+  sectionId,
+  sectionStates,
+  onExpandedChange,
 }: {
   children: ReactNode
   count: number
+  index: number
   label: string
+  sectionId: string
+  sectionStates: Record<string, boolean>
+  onExpandedChange(sectionId: string, expanded: boolean): void
 }) {
   return (
-    <section className="search-result-group">
-      <div className="sidebar-section-header">
-        <span>{label}</span>
-        <span>{count}</span>
-      </div>
+    <SidebarSection
+      count={count}
+      index={index}
+      label={label}
+      sectionId={sectionId}
+      sectionStates={sectionStates}
+      onExpandedChange={onExpandedChange}
+    >
       {children}
-    </section>
+    </SidebarSection>
   )
 }
 

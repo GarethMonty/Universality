@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type {
+  ConnectionProfile,
   ExecutionCapabilities,
   ExecutionResultEnvelope,
   ResultPayload,
@@ -10,6 +11,7 @@ import { copyText, exportPayload, payloadToText } from './payload-export'
 
 interface ResultsViewProps {
   capabilities: ExecutionCapabilities
+  connection?: ConnectionProfile
   payload?: ResultPayload
   renderer?: string
   result?: ExecutionResultEnvelope
@@ -19,6 +21,7 @@ interface ResultsViewProps {
 
 export function ResultsView({
   capabilities,
+  connection,
   payload,
   renderer,
   result,
@@ -51,11 +54,7 @@ export function ResultsView({
 
   return (
     <div className="panel-body-frame panel-body-frame--results">
-      <div className="panel-title-row">
-        <div>
-          <strong>Results</strong>
-          <p>{result?.summary ?? 'No results.'}</p>
-        </div>
+      <div className="panel-title-row panel-title-row--compact">
         <div className="panel-title-actions">
           <div className="renderer-switcher">
             {(result?.rendererModes ?? []).map((mode) => (
@@ -93,7 +92,11 @@ export function ResultsView({
         </div>
       </div>
 
-      <ResultPayloadView payload={payload} />
+      <ResultPayloadView
+        connection={connection}
+        payload={payload}
+        resultSummary={result?.summary}
+      />
 
       {result?.pageInfo?.hasMore ? (
         <div className="panel-page-row">
@@ -109,6 +112,10 @@ export function ResultsView({
             Load next page
           </button>
         </div>
+      ) : null}
+
+      {result?.summary && payload?.renderer !== 'document' ? (
+        <p className="panel-footnote panel-footnote--result-summary">{result.summary}</p>
       ) : null}
 
       {result?.truncated && !result.pageInfo?.hasMore ? (

@@ -6,10 +6,15 @@ import type {
 import {
   ExplainIcon,
   PanelIcon,
+  ColumnIcon,
   PlayIcon,
   SettingsIcon,
   StopIcon,
+  TableIcon,
+  JsonIcon,
 } from './icons'
+
+type QueryWindowMode = 'both' | 'builder' | 'raw'
 
 interface EditorToolbarProps {
   connections: ConnectionProfile[]
@@ -27,6 +32,9 @@ interface EditorToolbarProps {
   onSelectEnvironment(environmentId: string): void
   onOpenConnectionDrawer(): void
   onToggleBottomPanel(): void
+  canToggleBuilderView: boolean
+  queryWindowMode: QueryWindowMode
+  onToggleQueryWindowMode(mode: QueryWindowMode): void
 }
 
 export function EditorToolbar({
@@ -45,7 +53,19 @@ export function EditorToolbar({
   onSelectEnvironment,
   onOpenConnectionDrawer,
   onToggleBottomPanel,
+  canToggleBuilderView,
+  queryWindowMode,
+  onToggleQueryWindowMode,
 }: EditorToolbarProps) {
+  const queryWindowModeButtonLabels: Record<
+    QueryWindowMode,
+    { icon: typeof PlayIcon; text: string }
+  > = {
+    both: { icon: ColumnIcon, text: 'Show builder and raw' },
+    builder: { icon: JsonIcon, text: 'Show builder only' },
+    raw: { icon: TableIcon, text: 'Show raw query only' },
+  }
+
   return (
     <div className="editor-toolbar" aria-label="Editor toolbar">
       <div className="toolbar-group" aria-label="Execution controls">
@@ -91,6 +111,36 @@ export function EditorToolbar({
           <ExplainIcon className="toolbar-icon" />
         </button>
       </div>
+
+      {canToggleBuilderView ? (
+        <div className="toolbar-group toolbar-group--query-layout" aria-label="Query window mode">
+          {(
+            [
+              { mode: 'both', icon: ColumnIcon },
+              { mode: 'builder', icon: JsonIcon },
+              { mode: 'raw', icon: TableIcon },
+            ] as const
+          ).map(({ mode, icon: Icon }) => {
+            const label = queryWindowModeButtonLabels[mode].text
+
+            return (
+              <button
+                type="button"
+                key={mode}
+                className={`toolbar-icon-action${
+                  mode === queryWindowMode ? ' is-active' : ''
+                }`}
+                aria-label={label}
+                title={label}
+                aria-pressed={mode === queryWindowMode}
+                onClick={() => onToggleQueryWindowMode(mode)}
+              >
+                <Icon className="toolbar-icon" />
+              </button>
+            )
+          })}
+        </div>
+      ) : null}
 
       <div className="toolbar-spacer" />
 

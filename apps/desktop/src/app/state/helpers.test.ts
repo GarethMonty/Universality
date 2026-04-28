@@ -87,6 +87,29 @@ describe('migrateWorkspaceSnapshot', () => {
     expect(migrated.ui.rightDrawer).toBe('none')
     expect(migrated.ui.rightDrawerWidth).toBe(360)
     expect(migrated.ui.explorerFilter).toBe('orders')
+    expect(migrated.ui.connectionGroupMode).toBe('none')
+    expect(migrated.ui.sidebarSectionStates).toEqual({})
+  })
+
+  it('preserves persisted sidebar display state when migrating workspace state', () => {
+    const snapshot = createSeedSnapshot()
+    const migrated = migrateWorkspaceSnapshot({
+      ...snapshot,
+      ui: {
+        ...snapshot.ui,
+        connectionGroupMode: 'database-type',
+        sidebarSectionStates: {
+          'connections:database-type:sql': false,
+          'search:commands': true,
+        },
+      },
+    })
+
+    expect(migrated.ui.connectionGroupMode).toBe('database-type')
+    expect(migrated.ui.sidebarSectionStates).toEqual({
+      'connections:database-type:sql': false,
+      'search:commands': true,
+    })
   })
 
   it('strips known demo records from untouched seeded snapshots', () => {

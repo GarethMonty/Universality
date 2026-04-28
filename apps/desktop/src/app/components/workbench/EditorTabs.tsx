@@ -46,6 +46,37 @@ interface EditorTabsProps {
   onCloseTabs(tabIds: string[]): void
 }
 
+const QUERY_TITLE_SUFFIXES = [
+  'sql',
+  'json',
+  'text',
+  'mongodb',
+  'cql',
+  'cypher',
+  'flux',
+  'redis',
+  'aql',
+  'gremlin',
+  'sparql',
+  'promql',
+  'influxql',
+  'opentsdb',
+  'query-dsl',
+  'esql',
+  'google-sql',
+  'snowflake-sql',
+  'clickhouse-sql',
+]
+
+const QUERY_TITLE_SUFFIX_PATTERN = new RegExp(
+  `(?:\\.(${QUERY_TITLE_SUFFIXES.join('|')}))$`,
+  'i',
+)
+
+function normalizeTabDisplayTitle(title: string) {
+  return title.replace(QUERY_TITLE_SUFFIX_PATTERN, '')
+}
+
 export function EditorTabs({
   tabs,
   activeTabId,
@@ -433,7 +464,9 @@ export function EditorTabs({
                   }}
                 />
               ) : (
-                <span className="editor-tab-label">{tab.title}</span>
+                <span className="editor-tab-label">
+                  {normalizeTabDisplayTitle(tab.title)}
+                </span>
               )}
               {tab.dirty ? (
                 <span className="editor-tab-dirty" title="Unsaved changes" aria-hidden="true" />

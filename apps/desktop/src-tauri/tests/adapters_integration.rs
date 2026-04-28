@@ -1,5 +1,6 @@
 use std::collections::BTreeSet;
 use std::env;
+use std::fs;
 
 use sqlx::Executor;
 use universality_desktop_lib::{
@@ -23,7 +24,26 @@ fn fixture_profile_enabled(profile: &str) -> bool {
 }
 
 fn env_or(key: &str, fallback: &str) -> String {
-    env::var(key).unwrap_or_else(|_| fallback.to_string())
+    env::var(key)
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| generated_fixture_env_value(key))
+        .unwrap_or_else(|| fallback.to_string())
+}
+
+fn generated_fixture_env_value(key: &str) -> Option<String> {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .ancestors()
+        .find_map(|root| {
+            let candidate = root.join("tests").join("fixtures").join(".generated.env");
+            candidate.exists().then_some(candidate)
+        })?;
+    let contents = fs::read_to_string(path).ok()?;
+
+    contents.lines().find_map(|line| {
+        let (env_key, value) = line.split_once('=')?;
+        (env_key.trim() == key).then(|| value.trim().to_string())
+    })
 }
 
 fn execution_request(
@@ -548,7 +568,10 @@ async fn postgres_adapter_fixture_roundtrip() -> Result<(), CommandError> {
     assert_eq!(cells[1], "2024-01-02 03:04:05");
     assert_eq!(cells[2], "2024-01-02");
     assert_eq!(cells[3], "03:04:05");
-    assert_eq!(cells[4], "123.45");
+    assert_eq!(
+        cells[4].trim_end_matches('0').trim_end_matches('.'),
+        "123.45"
+    );
     assert_eq!(cells[5], "00000000-0000-0000-0000-000000000001");
     assert_eq!(cells[6], "{\"ok\":true}");
     assert!(

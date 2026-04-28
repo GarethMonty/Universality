@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
+import { computeRenderedColumnWidths } from './data-grid-layout'
+import { writeFieldDragData } from './field-drag'
 import { copyText } from './payload-export'
 
 const DEFAULT_COLUMN_WIDTH = 160
@@ -61,13 +63,12 @@ export function DataGridView({ columns, rows }: DataGridViewProps) {
     estimateSize: () => 30,
     overscan: 16,
   })
-  const gridWidth =
-    ROW_NUMBER_WIDTH +
-    columns.reduce(
-      (total, _column, index) => total + (columnWidths[index] ?? DEFAULT_COLUMN_WIDTH),
-      0,
-    )
-  const renderedGridWidth = Math.max(gridWidth, viewportWidth)
+  const renderedColumnWidths = useMemo(
+    () => computeRenderedColumnWidths(columns, columnWidths, viewportWidth),
+    [columns, columnWidths, viewportWidth],
+  )
+  const renderedGridWidth =
+    ROW_NUMBER_WIDTH + renderedColumnWidths.reduce((total, width) => total + width, 0)
   const virtualItems = virtualizer.getVirtualItems()
   const renderedRows =
     virtualItems.length > 0
@@ -251,13 +252,15 @@ export function DataGridView({ columns, rows }: DataGridViewProps) {
               <div
                 key={column}
                 className="data-grid-cell data-grid-cell--header"
-                style={{ width: columnWidths[columnIndex] ?? DEFAULT_COLUMN_WIDTH }}
+                style={{ width: renderedColumnWidths[columnIndex] ?? DEFAULT_COLUMN_WIDTH }}
               >
                 <button
                   type="button"
                   className="data-grid-header-button"
                   title={`Sort by ${column}`}
+                  draggable
                   onClick={() => toggleSort(columnIndex)}
+                  onDragStart={(event) => writeFieldDragData(event, column)}
                   onDoubleClick={() => autoFitColumn(columnIndex)}
                 >
                   <span>{column}</span>
@@ -302,7 +305,7 @@ export function DataGridView({ columns, rows }: DataGridViewProps) {
                       key={`${virtualRow.key}-${column}`}
                       type="button"
                       className={`data-grid-cell data-grid-cell--value${selected ? ' is-selected' : ''}${focused ? ' is-focused' : ''}${cell === '' ? ' is-empty' : ''}`}
-                      style={{ width: columnWidths[columnIndex] ?? DEFAULT_COLUMN_WIDTH }}
+                      style={{ width: renderedColumnWidths[columnIndex] ?? DEFAULT_COLUMN_WIDTH }}
                       title={cell || 'NULL / empty'}
                       onPointerDown={() => beginSelection(virtualRow.index, columnIndex)}
                       onPointerEnter={() => updateSelection(virtualRow.index, columnIndex)}

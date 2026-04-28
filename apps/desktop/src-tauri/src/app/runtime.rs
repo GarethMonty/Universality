@@ -3,8 +3,8 @@ use std::{
     sync::Mutex,
 };
 
-use sha2::{Digest, Sha256};
 use serde_json::json;
+use sha2::{Digest, Sha256};
 use tauri::AppHandle;
 
 use crate::{
@@ -15,17 +15,17 @@ use crate::{
             AdapterDiagnosticsRequest, AdapterDiagnosticsResponse, AppHealth, AppPreferences,
             BootstrapPayload, CancelExecutionRequest, CancelExecutionResult,
             ClosedQueryTabSnapshot, ConnectionAuth, ConnectionProfile, ConnectionTestRequest,
-            ConnectionTestResult, CreateScopedQueryTabRequest, DiagnosticsCounts, DiagnosticsReport,
-            EnvironmentProfile,
-            ExecutionRequest, ExecutionResponse, ExplorerInspectRequest, ExplorerInspectResponse,
-            ExplorerRequest, ExplorerResponse, ExportBundle, LockState, OperationExecutionRequest,
-            OperationExecutionResponse, OperationManifestRequest, OperationManifestResponse,
-            OperationPlanRequest, OperationPlanResponse, PermissionInspectionRequest,
-            PermissionInspectionResponse, QueryExecutionNotice, QueryHistoryEntry,
-            QueryTabReorderRequest, QueryTabState, ResolvedConnectionProfile, ResolvedEnvironment,
-            ResultPageRequest, ResultPageResponse, SavedWorkItem, SecretRef, StructureRequest,
-            StructureResponse, UiState, UpdateUiStateRequest, UserFacingError, WorkspaceSnapshot,
-            UpdateQueryBuilderStateRequest,
+            ConnectionTestResult, CreateScopedQueryTabRequest, DiagnosticsCounts,
+            DiagnosticsReport, EnvironmentProfile, ExecutionRequest, ExecutionResponse,
+            ExplorerInspectRequest, ExplorerInspectResponse, ExplorerRequest, ExplorerResponse,
+            ExportBundle, LockState, OperationExecutionRequest, OperationExecutionResponse,
+            OperationManifestRequest, OperationManifestResponse, OperationPlanRequest,
+            OperationPlanResponse, PermissionInspectionRequest, PermissionInspectionResponse,
+            QueryExecutionNotice, QueryHistoryEntry, QueryTabReorderRequest, QueryTabState,
+            ResolvedConnectionProfile, ResolvedEnvironment, ResultPageRequest, ResultPageResponse,
+            SavedWorkItem, SecretRef, StructureRequest, StructureResponse, UiState,
+            UpdateQueryBuilderStateRequest, UpdateUiStateRequest, UserFacingError,
+            WorkspaceSnapshot,
         },
     },
     persistence, security,
@@ -155,25 +155,26 @@ impl ManagedAppState {
             .find(|item| item.id == connection_id)
             .cloned()
             .ok_or_else(|| CommandError::new("connection-missing", "Connection was not found."))?;
-        let tab = match self
+        let tab = self
             .snapshot
             .tabs
             .iter()
             .find(|item| item.connection_id == connection.id)
-            .cloned()
-        {
-            Some(tab) => tab,
-            None => {
-                let title = self.next_query_tab_title(&connection);
-                let tab = build_query_tab(&connection, true, title);
-                self.snapshot.tabs.push(tab.clone());
-                tab
-            }
-        };
+            .cloned();
+        let active_environment_id = tab
+            .as_ref()
+            .map(|tab| tab.environment_id.clone())
+            .unwrap_or_else(|| {
+                connection
+                    .environment_ids
+                    .first()
+                    .cloned()
+                    .unwrap_or_default()
+            });
 
-        self.snapshot.ui.active_connection_id = tab.connection_id;
-        self.snapshot.ui.active_environment_id = tab.environment_id;
-        self.snapshot.ui.active_tab_id = tab.id;
+        self.snapshot.ui.active_connection_id = connection.id;
+        self.snapshot.ui.active_environment_id = active_environment_id;
+        self.snapshot.ui.active_tab_id = tab.map_or(String::new(), |tab| tab.id);
         self.snapshot.updated_at = timestamp_now();
         self.persist()?;
         Ok(self.bootstrap_payload())
@@ -483,10 +484,11 @@ impl ManagedAppState {
             .ok_or_else(|| CommandError::new("tab-missing", "Tab was not found."))?;
         tab.query_text = query_text.into();
         tab.dirty = true;
-        tab.status = "idle".into();
-        tab.result = None;
         tab.error = None;
-        tab.last_run_at = None;
+        if tab.result.is_none() {
+            tab.status = "idle".into();
+            tab.last_run_at = None;
+        }
         self.snapshot.updated_at = timestamp_now();
         self.persist()?;
         Ok(self.bootstrap_payload())
@@ -508,10 +510,11 @@ impl ManagedAppState {
             tab.query_text = query_text;
         }
         tab.dirty = true;
-        tab.status = "idle".into();
-        tab.result = None;
         tab.error = None;
-        tab.last_run_at = None;
+        if tab.result.is_none() {
+            tab.status = "idle".into();
+            tab.last_run_at = None;
+        }
         self.snapshot.updated_at = timestamp_now();
         self.persist()?;
         Ok(self.bootstrap_payload())
@@ -1015,7 +1018,7 @@ impl ManagedAppState {
             }
         }
 
-        let notices = if guardrail.status == "confirm" {
+        let mut execution_notices = if guardrail.status == "confirm" {
             vec![QueryExecutionNotice {
                 code: "guardrail-confirm".into(),
                 level: "warning".into(),
@@ -1028,11 +1031,28 @@ impl ManagedAppState {
         } else {
             Vec::new()
         };
+        execution_notices.push(QueryExecutionNotice {
+            code: "sql-syntax-hint".into(),
+            level: "info".into(),
+            message: sql_dialect_hint_message(&resolved_connection, &query_text)
+                .unwrap_or_default(),
+        });
+        execution_notices.retain(|notice| !notice.message.is_empty());
 
         let result = if guardrail.status == "block" {
             None
         } else {
-            Some(adapters::execute(&resolved_connection, &request, notices.clone()).await?)
+            match adapters::execute(&resolved_connection, &request, execution_notices.clone()).await
+            {
+                Ok(result) => Some(result),
+                Err(error) => {
+                    return Err(enrich_sql_execution_error(
+                        &resolved_connection,
+                        &query_text,
+                        error,
+                    ))
+                }
+            }
         };
 
         let status = if guardrail.status == "block" {
@@ -1086,7 +1106,10 @@ impl ManagedAppState {
             tab: tab_response,
             result,
             guardrail,
-            diagnostics: notices.into_iter().map(|notice| notice.message).collect(),
+            diagnostics: execution_notices
+                .into_iter()
+                .map(|notice| notice.message)
+                .collect(),
         })
     }
 
@@ -1169,6 +1192,17 @@ impl ManagedAppState {
             self.snapshot.ui.explorer_view = explorer_view;
         }
 
+        if let Some(connection_group_mode) = patch
+            .connection_group_mode
+            .filter(|value| is_connection_group_mode(value))
+        {
+            self.snapshot.ui.connection_group_mode = connection_group_mode;
+        }
+
+        if let Some(sidebar_section_states) = patch.sidebar_section_states {
+            self.snapshot.ui.sidebar_section_states = sidebar_section_states;
+        }
+
         if let Some(bottom_panel_visible) = patch.bottom_panel_visible {
             self.snapshot.ui.bottom_panel_visible = bottom_panel_visible;
         }
@@ -1208,6 +1242,150 @@ impl ManagedAppState {
         self.persist()?;
         Ok(self.bootstrap_payload())
     }
+}
+
+fn sql_dialect_hint_message(
+    connection: &ResolvedConnectionProfile,
+    query_text: &str,
+) -> Option<String> {
+    if connection.family != "sql" || connection.engine == "sqlserver" {
+        return None;
+    }
+
+    if contains_sqlserver_bracket_identifier(query_text) {
+        Some(
+            "[ ] identifiers are SQL Server syntax; use schema.table or double-quoted identifiers for this engine."
+                .to_string(),
+        )
+    } else {
+        None
+    }
+}
+
+fn contains_sqlserver_bracket_identifier(query_text: &str) -> bool {
+    let mut in_single_quote = false;
+    let mut in_double_quote = false;
+    let bytes = query_text.as_bytes();
+    let mut index = 0usize;
+
+    while let Some(&byte) = bytes.get(index) {
+        match byte {
+            b'\'' if !in_double_quote => {
+                in_single_quote = !in_single_quote;
+            }
+            b'"' if !in_single_quote => {
+                in_double_quote = !in_double_quote;
+            }
+            b'[' if !in_single_quote && !in_double_quote => {
+                if let Some(end) = bytes[index + 1..].iter().position(|value| *value == b']') {
+                    let identifier = &query_text[index + 1..index + 1 + end];
+                    if identifier.chars().any(|char| !char.is_whitespace()) {
+                        return true;
+                    }
+                }
+            }
+            _ => {}
+        }
+
+        index += 1;
+    }
+
+    false
+}
+
+fn enrich_sql_execution_error(
+    connection: &ResolvedConnectionProfile,
+    query_text: &str,
+    error: CommandError,
+) -> CommandError {
+    let relation_hint = relation_does_not_exist_hint(connection, query_text, &error.message);
+    let bracket_hint = sql_dialect_hint_message(connection, query_text);
+
+    match (bracket_hint, relation_hint) {
+        (None, None) => error,
+        (Some(primary), None) => {
+            CommandError::new(error.code, format!("{}. {}", error.message, primary))
+        }
+        (None, Some(hint)) => CommandError::new(error.code, format!("{}. {}", error.message, hint)),
+        (Some(hint_a), Some(hint_b)) => CommandError::new(
+            error.code,
+            format!("{}. {} {}", error.message, hint_a, hint_b),
+        ),
+    }
+}
+
+fn relation_does_not_exist_hint(
+    connection: &ResolvedConnectionProfile,
+    _query_text: &str,
+    error_message: &str,
+) -> Option<String> {
+    let lowered = error_message.to_lowercase();
+    let relation = if lowered.contains("relation") && lowered.contains("does not exist") {
+        let marker = "relation \"";
+        let start = lowered.find(marker)?;
+        let relation_with_quote = &lowered[start + marker.len()..];
+        relation_with_quote.find('"').and_then(|end| {
+            let relation = &relation_with_quote[..end];
+            if relation.trim().is_empty() {
+                None
+            } else {
+                Some(relation.to_string())
+            }
+        })?
+    } else {
+        let marker = "invalid object name '";
+        let start = lowered.find(marker)?;
+        let relation_with_quote = &lowered[start + marker.len()..];
+        relation_with_quote.find('\'').and_then(|end| {
+            let relation = &relation_with_quote[..end];
+            if relation.trim().is_empty() {
+                None
+            } else {
+                Some(relation.to_string())
+            }
+        })?
+    };
+
+    if relation.is_empty() {
+        return None;
+    }
+
+    let relation = relation.replace("[", "").replace("]", "");
+    let target_hint = if connection.engine == "sqlserver" {
+        if relation.contains('.') {
+            "Use `schema.object`-style naming when possible, for example [dbo].[orders]."
+                .to_string()
+        } else {
+            "Use `schema.table` naming and verify the object exists in the active database.".to_string()
+        }
+    } else {
+        "Try using the schema-qualified form: `schema.table` (or \"schema\".\"table\" for case-sensitive names)."
+            .to_string()
+    };
+
+    let mut parts = Vec::new();
+    parts.push(format!(
+        "Detected missing relation `{relation}`. Ensure the relation exists and is in the active schema."
+    ));
+    parts.push(target_hint);
+    parts.push(
+        "Check available schemas/tables in the Explorer panel if the object should exist."
+            .to_string(),
+    );
+    if connection.engine == "postgresql"
+        && connection
+            .database
+            .as_deref()
+            .is_none_or(|database| database.eq_ignore_ascii_case("postgres"))
+    {
+        parts.push(
+            "This connection did not define an explicit database, so the driver may be using a default database. "
+                .to_string()
+                + "Verify the target database (for example observability) and open the table from an Explorer-generated query template."
+        );
+    }
+
+    Some(parts.join(" "))
 }
 
 fn confirmation_guardrail_id(
@@ -1438,7 +1616,8 @@ fn build_scoped_query_tab(
     let builder_state = builder_kind
         .filter(|kind| kind == "mongo-find")
         .map(|_| mongo_find_builder_state(&target_label, &query_text, limit));
-    let title = scoped_query_tab_title(snapshot, connection, &target_label, builder_state.is_some());
+    let title =
+        scoped_query_tab_title(snapshot, connection, &target_label, builder_state.is_some());
     let environment_id = request
         .environment_id
         .or_else(|| connection.environment_ids.first().cloned())
@@ -1482,7 +1661,11 @@ fn scoped_query_tab_title(
     target_label: &str,
     has_builder: bool,
 ) -> String {
-    let extension = if connection.family == "document" { "json" } else { "sql" };
+    let extension = if connection.family == "document" {
+        "json"
+    } else {
+        "sql"
+    };
     let candidate = if has_builder {
         format!("{target_label}.find.{extension}")
     } else {
@@ -1596,6 +1779,10 @@ fn is_explorer_view(value: &str) -> bool {
     matches!(value, "tree" | "structure")
 }
 
+fn is_connection_group_mode(value: &str) -> bool {
+    matches!(value, "none" | "environment" | "database-type")
+}
+
 fn is_right_drawer(value: &str) -> bool {
     matches!(
         value,
@@ -1685,6 +1872,12 @@ fn normalize_ui_state(snapshot: &WorkspaceSnapshot) -> UiState {
         } else {
             "structure".into()
         },
+        connection_group_mode: if is_connection_group_mode(&snapshot.ui.connection_group_mode) {
+            snapshot.ui.connection_group_mode.clone()
+        } else {
+            "none".into()
+        },
+        sidebar_section_states: snapshot.ui.sidebar_section_states.clone(),
         active_activity,
         sidebar_collapsed: snapshot.ui.sidebar_collapsed,
         active_sidebar_pane,
@@ -1907,6 +2100,8 @@ fn fixture_workspace_seed_for_profile(
                 active_tab_id,
                 explorer_filter: String::new(),
                 explorer_view: "structure".into(),
+                connection_group_mode: "none".into(),
+                sidebar_section_states: HashMap::new(),
                 active_activity: "connections".into(),
                 sidebar_collapsed: false,
                 active_sidebar_pane: "connections".into(),
@@ -2014,7 +2209,9 @@ fn build_fixture_connection(
             host: seed.host.into(),
             port: seed.port,
             database,
-            connection_string: seed.connection_string.map(str::to_string),
+            connection_string: seed
+                .connection_string
+                .map(|value| resolve_fixture_connection_string(value, seed)),
             connection_mode: Some(
                 if seed.use_sqlite_fixture {
                     "file"
@@ -2190,7 +2387,7 @@ fn fixture_connection_seeds() -> Vec<FixtureConnectionSeed> {
             engine: "postgresql",
             family: "sql",
             host: "127.0.0.1",
-            port: Some(54329),
+            port: Some(fixture_port("UNIVERSALITY_POSTGRES_PORT", 54329)),
             database: Some("universality"),
             use_sqlite_fixture: false,
             username: Some("universality"),
@@ -2212,7 +2409,7 @@ fn fixture_connection_seeds() -> Vec<FixtureConnectionSeed> {
             engine: "sqlserver",
             family: "sql",
             host: "127.0.0.1",
-            port: Some(14333),
+            port: Some(fixture_port("UNIVERSALITY_SQLSERVER_PORT", 14333)),
             database: Some("universality"),
             use_sqlite_fixture: false,
             username: Some("sa"),
@@ -2234,7 +2431,7 @@ fn fixture_connection_seeds() -> Vec<FixtureConnectionSeed> {
             engine: "mysql",
             family: "sql",
             host: "127.0.0.1",
-            port: Some(33060),
+            port: Some(fixture_port("UNIVERSALITY_MYSQL_PORT", 33060)),
             database: Some("commerce"),
             use_sqlite_fixture: false,
             username: Some("universality"),
@@ -2278,7 +2475,7 @@ fn fixture_connection_seeds() -> Vec<FixtureConnectionSeed> {
             engine: "mongodb",
             family: "document",
             host: "127.0.0.1",
-            port: Some(27018),
+            port: Some(fixture_port("UNIVERSALITY_MONGODB_PORT", 27018)),
             database: Some("catalog"),
             use_sqlite_fixture: false,
             username: Some("universality"),
@@ -2300,7 +2497,7 @@ fn fixture_connection_seeds() -> Vec<FixtureConnectionSeed> {
             engine: "redis",
             family: "keyvalue",
             host: "127.0.0.1",
-            port: Some(6380),
+            port: Some(fixture_port("UNIVERSALITY_REDIS_PORT", 6380)),
             database: Some("0"),
             use_sqlite_fixture: false,
             username: None,
@@ -2322,7 +2519,7 @@ fn fixture_connection_seeds() -> Vec<FixtureConnectionSeed> {
             engine: "valkey",
             family: "keyvalue",
             host: "127.0.0.1",
-            port: Some(6381),
+            port: Some(fixture_port("UNIVERSALITY_VALKEY_PORT", 6381)),
             database: Some("0"),
             use_sqlite_fixture: false,
             username: None,
@@ -2344,7 +2541,7 @@ fn fixture_connection_seeds() -> Vec<FixtureConnectionSeed> {
             engine: "memcached",
             family: "keyvalue",
             host: "127.0.0.1",
-            port: Some(11212),
+            port: Some(fixture_port("UNIVERSALITY_MEMCACHED_PORT", 11212)),
             database: None,
             use_sqlite_fixture: false,
             username: None,
@@ -2366,7 +2563,7 @@ fn fixture_connection_seeds() -> Vec<FixtureConnectionSeed> {
             engine: "mariadb",
             family: "sql",
             host: "127.0.0.1",
-            port: Some(33061),
+            port: Some(fixture_port("UNIVERSALITY_MARIADB_PORT", 33061)),
             database: Some("commerce"),
             use_sqlite_fixture: false,
             username: Some("universality"),
@@ -2388,7 +2585,7 @@ fn fixture_connection_seeds() -> Vec<FixtureConnectionSeed> {
             engine: "cockroachdb",
             family: "sql",
             host: "127.0.0.1",
-            port: Some(26257),
+            port: Some(fixture_port("UNIVERSALITY_COCKROACH_PORT", 26257)),
             database: Some("universality"),
             use_sqlite_fixture: false,
             username: Some("root"),
@@ -2410,7 +2607,7 @@ fn fixture_connection_seeds() -> Vec<FixtureConnectionSeed> {
             engine: "timescaledb",
             family: "timeseries",
             host: "127.0.0.1",
-            port: Some(54330),
+            port: Some(fixture_port("UNIVERSALITY_TIMESCALE_PORT", 54330)),
             database: Some("metrics"),
             use_sqlite_fixture: false,
             username: Some("universality"),
@@ -2432,7 +2629,7 @@ fn fixture_connection_seeds() -> Vec<FixtureConnectionSeed> {
             engine: "clickhouse",
             family: "warehouse",
             host: "127.0.0.1",
-            port: Some(8124),
+            port: Some(fixture_port("UNIVERSALITY_CLICKHOUSE_HTTP_PORT", 8124)),
             database: Some("analytics"),
             use_sqlite_fixture: false,
             username: Some("universality"),
@@ -2454,7 +2651,7 @@ fn fixture_connection_seeds() -> Vec<FixtureConnectionSeed> {
             engine: "influxdb",
             family: "timeseries",
             host: "127.0.0.1",
-            port: Some(8087),
+            port: Some(fixture_port("UNIVERSALITY_INFLUXDB_PORT", 8087)),
             database: Some("metrics"),
             use_sqlite_fixture: false,
             username: None,
@@ -2476,7 +2673,7 @@ fn fixture_connection_seeds() -> Vec<FixtureConnectionSeed> {
             engine: "prometheus",
             family: "timeseries",
             host: "127.0.0.1",
-            port: Some(9091),
+            port: Some(fixture_port("UNIVERSALITY_PROMETHEUS_PORT", 9091)),
             database: None,
             use_sqlite_fixture: false,
             username: None,
@@ -2498,7 +2695,7 @@ fn fixture_connection_seeds() -> Vec<FixtureConnectionSeed> {
             engine: "opensearch",
             family: "search",
             host: "127.0.0.1",
-            port: Some(9201),
+            port: Some(fixture_port("UNIVERSALITY_OPENSEARCH_PORT", 9201)),
             database: None,
             use_sqlite_fixture: false,
             username: None,
@@ -2520,7 +2717,7 @@ fn fixture_connection_seeds() -> Vec<FixtureConnectionSeed> {
             engine: "elasticsearch",
             family: "search",
             host: "127.0.0.1",
-            port: Some(9202),
+            port: Some(fixture_port("UNIVERSALITY_ELASTICSEARCH_PORT", 9202)),
             database: None,
             use_sqlite_fixture: false,
             username: None,
@@ -2542,7 +2739,7 @@ fn fixture_connection_seeds() -> Vec<FixtureConnectionSeed> {
             engine: "neo4j",
             family: "graph",
             host: "127.0.0.1",
-            port: Some(7688),
+            port: Some(fixture_port("UNIVERSALITY_NEO4J_BOLT_PORT", 7688)),
             database: Some("neo4j"),
             use_sqlite_fixture: false,
             username: Some("neo4j"),
@@ -2564,7 +2761,7 @@ fn fixture_connection_seeds() -> Vec<FixtureConnectionSeed> {
             engine: "arango",
             family: "graph",
             host: "127.0.0.1",
-            port: Some(8529),
+            port: Some(fixture_port("UNIVERSALITY_ARANGODB_PORT", 8529)),
             database: Some("universality"),
             use_sqlite_fixture: false,
             username: Some("root"),
@@ -2586,7 +2783,7 @@ fn fixture_connection_seeds() -> Vec<FixtureConnectionSeed> {
             engine: "janusgraph",
             family: "graph",
             host: "127.0.0.1",
-            port: Some(8183),
+            port: Some(fixture_port("UNIVERSALITY_JANUSGRAPH_PORT", 8183)),
             database: None,
             use_sqlite_fixture: false,
             username: None,
@@ -2608,7 +2805,7 @@ fn fixture_connection_seeds() -> Vec<FixtureConnectionSeed> {
             engine: "cassandra",
             family: "widecolumn",
             host: "127.0.0.1",
-            port: Some(9043),
+            port: Some(fixture_port("UNIVERSALITY_CASSANDRA_PORT", 9043)),
             database: Some("universality"),
             use_sqlite_fixture: false,
             username: None,
@@ -2630,7 +2827,7 @@ fn fixture_connection_seeds() -> Vec<FixtureConnectionSeed> {
             engine: "oracle",
             family: "sql",
             host: "127.0.0.1",
-            port: Some(1522),
+            port: Some(fixture_port("UNIVERSALITY_ORACLE_PORT", 1522)),
             database: Some("FREEPDB1"),
             use_sqlite_fixture: false,
             username: Some("universality"),
@@ -2652,7 +2849,7 @@ fn fixture_connection_seeds() -> Vec<FixtureConnectionSeed> {
             engine: "dynamodb",
             family: "widecolumn",
             host: "127.0.0.1",
-            port: Some(8001),
+            port: Some(fixture_port("UNIVERSALITY_DYNAMODB_PORT", 8001)),
             database: Some("sharedDb"),
             use_sqlite_fixture: false,
             username: Some("local"),
@@ -2674,14 +2871,14 @@ fn fixture_connection_seeds() -> Vec<FixtureConnectionSeed> {
             engine: "bigquery",
             family: "warehouse",
             host: "127.0.0.1",
-            port: Some(19050),
+            port: Some(fixture_port("UNIVERSALITY_BIGQUERY_MOCK_PORT", 19050)),
             database: Some("analytics"),
             use_sqlite_fixture: false,
             username: Some("universality-project"),
             password: Some("fixture-token"),
             auth_mechanism: Some("mock-token"),
             ssl_mode: None,
-            connection_string: Some("http://127.0.0.1:19050"),
+            connection_string: Some("http://127.0.0.1:${UNIVERSALITY_BIGQUERY_MOCK_PORT}"),
             group: "Cloud Contract Fixtures",
             color: "#669df6",
             icon: "bigquery",
@@ -2696,14 +2893,14 @@ fn fixture_connection_seeds() -> Vec<FixtureConnectionSeed> {
             engine: "snowflake",
             family: "warehouse",
             host: "127.0.0.1",
-            port: Some(19060),
+            port: Some(fixture_port("UNIVERSALITY_SNOWFLAKE_MOCK_PORT", 19060)),
             database: Some("UNIVERSALITY"),
             use_sqlite_fixture: false,
             username: Some("PUBLIC"),
             password: Some("fixture-token"),
             auth_mechanism: Some("mock-token"),
             ssl_mode: None,
-            connection_string: Some("http://127.0.0.1:19060"),
+            connection_string: Some("http://127.0.0.1:${UNIVERSALITY_SNOWFLAKE_MOCK_PORT}"),
             group: "Cloud Contract Fixtures",
             color: "#7dd3fc",
             icon: "snowflake",
@@ -2718,14 +2915,14 @@ fn fixture_connection_seeds() -> Vec<FixtureConnectionSeed> {
             engine: "cosmosdb",
             family: "document",
             host: "127.0.0.1",
-            port: Some(19070),
+            port: Some(fixture_port("UNIVERSALITY_COSMOSDB_MOCK_PORT", 19070)),
             database: Some("universality"),
             use_sqlite_fixture: false,
             username: None,
             password: Some("fixture-token"),
             auth_mechanism: Some("mock-token"),
             ssl_mode: None,
-            connection_string: Some("http://127.0.0.1:19070"),
+            connection_string: Some("http://127.0.0.1:${UNIVERSALITY_COSMOSDB_MOCK_PORT}"),
             group: "Cloud Contract Fixtures",
             color: "#58a6ff",
             icon: "cosmosdb",
@@ -2740,14 +2937,14 @@ fn fixture_connection_seeds() -> Vec<FixtureConnectionSeed> {
             engine: "neptune",
             family: "graph",
             host: "127.0.0.1",
-            port: Some(19080),
+            port: Some(fixture_port("UNIVERSALITY_NEPTUNE_MOCK_PORT", 19080)),
             database: None,
             use_sqlite_fixture: false,
             username: None,
             password: None,
             auth_mechanism: None,
             ssl_mode: None,
-            connection_string: Some("http://127.0.0.1:19080"),
+            connection_string: Some("http://127.0.0.1:${UNIVERSALITY_NEPTUNE_MOCK_PORT}"),
             group: "Cloud Contract Fixtures",
             color: "#64d2ff",
             icon: "neptune",
@@ -2756,6 +2953,55 @@ fn fixture_connection_seeds() -> Vec<FixtureConnectionSeed> {
             tags: &["fixtures", "cloud-contract", "graph"],
         },
     ]
+}
+
+fn fixture_port(env_key: &str, default: u16) -> u16 {
+    fixture_env_value(env_key)
+        .and_then(|value| value.parse::<u16>().ok())
+        .unwrap_or(default)
+}
+
+fn fixture_env_value(env_key: &str) -> Option<String> {
+    std::env::var(env_key)
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| fixture_generated_env_value(env_key))
+}
+
+fn fixture_generated_env_value(env_key: &str) -> Option<String> {
+    let current_dir = std::env::current_dir().ok();
+    let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let roots = current_dir
+        .iter()
+        .flat_map(|path| path.ancestors().map(std::path::Path::to_path_buf))
+        .chain(manifest_dir.ancestors().map(std::path::Path::to_path_buf));
+
+    for root in roots {
+        let path = root.join("tests").join("fixtures").join(".generated.env");
+        let Ok(contents) = std::fs::read_to_string(path) else {
+            continue;
+        };
+
+        for line in contents.lines() {
+            let Some((key, value)) = line.split_once('=') else {
+                continue;
+            };
+
+            if key.trim() == env_key {
+                return Some(value.trim().to_string());
+            }
+        }
+    }
+
+    None
+}
+
+fn resolve_fixture_connection_string(value: &str, seed: &FixtureConnectionSeed) -> String {
+    if value.contains("${") {
+        return format!("http://{}:{}", seed.host, seed.port.unwrap_or_default());
+    }
+
+    value.to_string()
 }
 
 pub fn resolve_environment(
@@ -2910,6 +3156,8 @@ pub fn blank_workspace_snapshot() -> WorkspaceSnapshot {
             active_tab_id: String::new(),
             explorer_filter: String::new(),
             explorer_view: "structure".into(),
+            connection_group_mode: "none".into(),
+            sidebar_section_states: HashMap::new(),
             active_activity: "connections".into(),
             sidebar_collapsed: false,
             active_sidebar_pane: "connections".into(),
@@ -3126,6 +3374,190 @@ mod tests {
         assert_eq!(tab.title, "accounts.sql");
         assert_eq!(tab.query_text, "select * from public.accounts limit 100;");
         assert!(tab.builder_state.is_none());
+    }
+
+    #[test]
+    fn sql_dialect_hint_detects_sqlserver_brackets_for_non_sqlserver_sql_family() {
+        let connection = ResolvedConnectionProfile {
+            id: "conn-postgres".into(),
+            name: "Postgres".into(),
+            engine: "postgresql".into(),
+            family: "sql".into(),
+            host: "localhost".into(),
+            port: Some(5432),
+            database: Some("observability".into()),
+            username: Some("universality".into()),
+            password: Some("pw".into()),
+            connection_string: None,
+            read_only: false,
+        };
+
+        let hint =
+            sql_dialect_hint_message(&connection, "select * from [public].[accounts] limit 100;");
+
+        assert!(hint.is_some());
+        assert!(hint
+            .unwrap()
+            .contains("use schema.table or double-quoted identifiers"));
+    }
+
+    #[test]
+    fn sql_dialect_hint_skips_sqlserver_engine() {
+        let connection = ResolvedConnectionProfile {
+            id: "conn-sqlserver".into(),
+            name: "SQL Server".into(),
+            engine: "sqlserver".into(),
+            family: "sql".into(),
+            host: "localhost".into(),
+            port: Some(1433),
+            database: Some("master".into()),
+            username: Some("sa".into()),
+            password: Some("pw".into()),
+            connection_string: None,
+            read_only: false,
+        };
+
+        let hint = sql_dialect_hint_message(&connection, "select * from [dbo].[orders];");
+
+        assert!(hint.is_none());
+    }
+
+    #[test]
+    fn sql_dialect_hint_skips_brackets_in_sql_server_style_only() {
+        let connection = ResolvedConnectionProfile {
+            id: "conn-postgres".into(),
+            name: "Postgres".into(),
+            engine: "postgresql".into(),
+            family: "sql".into(),
+            host: "localhost".into(),
+            port: Some(5432),
+            database: Some("observability".into()),
+            username: Some("universality".into()),
+            password: Some("pw".into()),
+            connection_string: None,
+            read_only: false,
+        };
+
+        let hint = sql_dialect_hint_message(
+            &connection,
+            "select * from logs where payload like '[public]'",
+        );
+
+        assert!(
+            hint.is_none(),
+            "did not expect SQL Server-style hint for bracket text inside string literals"
+        );
+    }
+
+    #[test]
+    fn relation_missing_hint_includes_schema_and_explorer_guidance() {
+        let connection = ResolvedConnectionProfile {
+            id: "conn-postgres".into(),
+            name: "Postgres".into(),
+            engine: "postgresql".into(),
+            family: "sql".into(),
+            host: "localhost".into(),
+            port: Some(5432),
+            database: None,
+            username: Some("universality".into()),
+            password: Some("pw".into()),
+            connection_string: None,
+            read_only: false,
+        };
+
+        let base_error = CommandError::new(
+            "sql-execution-error",
+            "error returned from database: relation \"accounts\" does not exist",
+        );
+        let enriched =
+            enrich_sql_execution_error(&connection, "select * from accounts", base_error);
+
+        assert!(enriched
+            .message
+            .contains("Detected missing relation `accounts`"));
+        assert!(enriched.message.contains("schema.table"));
+        assert!(enriched.message.contains("Explorer"));
+    }
+
+    #[test]
+    fn relation_missing_hint_mentions_default_database_for_postgres() {
+        let connection = ResolvedConnectionProfile {
+            id: "conn-postgres".into(),
+            name: "Postgres".into(),
+            engine: "postgresql".into(),
+            family: "sql".into(),
+            host: "localhost".into(),
+            port: Some(5432),
+            database: Some("postgres".into()),
+            username: Some("universality".into()),
+            password: Some("pw".into()),
+            connection_string: None,
+            read_only: false,
+        };
+
+        let base_error = CommandError::new(
+            "sql-execution-error",
+            "error returned from database: relation \"public.accounts\" does not exist",
+        );
+        let enriched =
+            enrich_sql_execution_error(&connection, "select * from public.accounts", base_error);
+
+        assert!(enriched.message.contains("default database"));
+    }
+
+    #[test]
+    fn relation_missing_hint_supports_sqlserver_invalid_object_name() {
+        let connection = ResolvedConnectionProfile {
+            id: "conn-sqlserver".into(),
+            name: "SQL Server".into(),
+            engine: "sqlserver".into(),
+            family: "sql".into(),
+            host: "localhost".into(),
+            port: Some(1433),
+            database: Some("universality".into()),
+            username: Some("sa".into()),
+            password: Some("pw".into()),
+            connection_string: None,
+            read_only: false,
+        };
+
+        let base_error = CommandError::new(
+            "sql-execution-error",
+            "error returned from database: Invalid object name 'dbo.accounts'.",
+        );
+        let enriched =
+            enrich_sql_execution_error(&connection, "select * from dbo.accounts", base_error);
+
+        assert!(enriched.message.contains("Detected missing relation `dbo.accounts`"));
+        assert!(enriched.message.contains("schema.object"));
+        assert!(enriched.message.contains("Explorer"));
+    }
+
+    #[test]
+    fn relation_missing_hint_retains_original_error_when_not_matching() {
+        let connection = ResolvedConnectionProfile {
+            id: "conn-postgres".into(),
+            name: "Postgres".into(),
+            engine: "postgresql".into(),
+            family: "sql".into(),
+            host: "localhost".into(),
+            port: Some(5432),
+            database: Some("observability".into()),
+            username: Some("universality".into()),
+            password: Some("pw".into()),
+            connection_string: None,
+            read_only: false,
+        };
+        let base_error = CommandError::new(
+            "sql-execution-error",
+            "error returned from database: syntax error at or near \"SELECT\"",
+        );
+        let enriched = enrich_sql_execution_error(&connection, "select foo", base_error);
+
+        assert_eq!(
+            enriched.message,
+            "error returned from database: syntax error at or near \"SELECT\""
+        );
     }
 
     #[test]

@@ -1,11 +1,19 @@
-import type { ResultPayload } from '@universality/shared-types'
+import type { ConnectionProfile, ResultPayload } from '@universality/shared-types'
 import { DataGridView } from './DataGridView'
 import { DocumentResultsView } from './DocumentResultsView'
 import { JsonTreeView } from './JsonTreeView'
 import { RawResultView } from './RawResultView'
 import { parseJsonValue } from './json-utils'
 
-export function ResultPayloadView({ payload }: { payload?: ResultPayload }) {
+export function ResultPayloadView({
+  connection,
+  payload,
+  resultSummary,
+}: {
+  connection?: ConnectionProfile
+  payload?: ResultPayload
+  resultSummary?: string
+}) {
   if (!payload) {
     return <p className="panel-footnote">No result payload yet.</p>
   }
@@ -15,7 +23,14 @@ export function ResultPayloadView({ payload }: { payload?: ResultPayload }) {
   }
 
   if (payload.renderer === 'document') {
-    return <DocumentResultsView documents={payload.documents} />
+    return (
+      <DocumentResultsView
+        key={documentPayloadKey(payload.documents)}
+        connection={connection}
+        documents={payload.documents}
+        resultSummary={resultSummary}
+      />
+    )
   }
 
   if (payload.renderer === 'keyvalue') {
@@ -52,6 +67,15 @@ export function ResultPayloadView({ payload }: { payload?: ResultPayload }) {
   }
 
   return <RawResultView text={payload.renderer === 'raw' ? payload.text : JSON.stringify(payload, null, 2)} />
+}
+
+function documentPayloadKey(documents: Array<Record<string, unknown>>) {
+  return documents
+    .map((document, index) => {
+      const id = document._id ?? document.id ?? document.key
+      return `${index}:${typeof id === 'string' || typeof id === 'number' ? id : Object.keys(document).join(',')}`
+    })
+    .join('|')
 }
 
 function KeyValueTreeList({ entries }: { entries: Record<string, string> }) {

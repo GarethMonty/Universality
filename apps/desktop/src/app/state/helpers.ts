@@ -110,6 +110,23 @@ function isExplorerView(value: unknown): value is UiState['explorerView'] {
   return value === 'tree' || value === 'structure'
 }
 
+function isConnectionGroupMode(value: unknown): value is UiState['connectionGroupMode'] {
+  return value === 'none' || value === 'environment' || value === 'database-type'
+}
+
+function normalizeSidebarSectionStates(value: unknown): Record<string, boolean> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {}
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).filter(
+      (entry): entry is [string, boolean] =>
+        typeof entry[0] === 'string' && typeof entry[1] === 'boolean',
+    ),
+  )
+}
+
 export function normalizeUiState(snapshot: WorkspaceSnapshot): UiState {
   const firstTab = snapshot.tabs[0]
   const firstConnection = snapshot.connections[0]
@@ -148,6 +165,10 @@ export function normalizeUiState(snapshot: WorkspaceSnapshot): UiState {
     explorerFilter:
       typeof legacyUi?.explorerFilter === 'string' ? legacyUi.explorerFilter : '',
     explorerView: isExplorerView(legacyUi?.explorerView) ? legacyUi.explorerView : 'structure',
+    connectionGroupMode: isConnectionGroupMode(legacyUi?.connectionGroupMode)
+      ? legacyUi.connectionGroupMode
+      : 'none',
+    sidebarSectionStates: normalizeSidebarSectionStates(legacyUi?.sidebarSectionStates),
     activeActivity,
     sidebarCollapsed: Boolean(legacyUi?.sidebarCollapsed),
     activeSidebarPane,

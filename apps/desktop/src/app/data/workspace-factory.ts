@@ -44,6 +44,8 @@ export function createBlankSnapshot(): WorkspaceSnapshot {
       activeTabId: '',
       explorerFilter: '',
       explorerView: 'structure',
+      connectionGroupMode: 'none',
+      sidebarSectionStates: {},
       activeActivity: 'connections',
       sidebarCollapsed: false,
       activeSidebarPane: 'connections',

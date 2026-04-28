@@ -1117,6 +1117,11 @@ function createExplorerNodes(
   connection: ConnectionProfile,
   scope?: string,
 ): ExplorerNode[] {
+  const sqlTableListQueryForSchema = (schema: string) =>
+    connection.engine === 'sqlite'
+      ? `select name from sqlite_master where type = 'table' and name not like 'sqlite_%' order by name;`
+      : `select table_name from information_schema.tables where table_schema = '${schema}' order by table_name;`
+
   if (connection.family === 'document') {
     if (scope?.startsWith('collection:')) {
       const collection = scope.replace('collection:', '')
@@ -1229,22 +1234,20 @@ function createExplorerNodes(
         family: 'sql',
         label: 'accounts',
         kind: 'table',
-        detail: 'Columns, indexes, and row estimates',
+        detail: 'Open a query to verify this sample table exists.',
         scope: `table:${schema}.accounts`,
         path: [connection.name, schema],
         expandable: true,
-        queryTemplate: `select * from ${schema}.accounts limit 100;`,
       },
       {
         id: `${schema}.transactions`,
         family: 'sql',
         label: 'transactions',
         kind: 'table',
-        detail: 'Large fact table with hot ingestion path',
+        detail: 'Open a query to verify this sample table exists.',
         scope: `table:${schema}.transactions`,
         path: [connection.name, schema],
         expandable: true,
-        queryTemplate: `select * from ${schema}.transactions order by created_at desc limit 100;`,
       },
     ]
   }
@@ -1272,7 +1275,23 @@ function createExplorerNodes(
     ]
   }
 
-  return [
+  if (connection.engine === 'sqlite') {
+    return [
+      {
+        id: 'schema-main',
+        family: 'sql',
+        label: 'main',
+        kind: 'schema',
+        detail: 'SQLite object tables and indexes',
+        scope: 'schema:main',
+        path: [connection.name],
+        expandable: true,
+        queryTemplate: sqlTableListQueryForSchema('main'),
+      },
+    ]
+  }
+
+  const sqlSchemaNodes: ExplorerNode[] = [
     {
       id: 'schema-public',
       family: 'sql',
@@ -1282,7 +1301,7 @@ function createExplorerNodes(
       scope: 'schema:public',
       path: [connection.name],
       expandable: true,
-      queryTemplate: 'select table_name from information_schema.tables where table_schema = \'public\';',
+      queryTemplate: sqlTableListQueryForSchema('public'),
     },
     {
       id: 'schema-observability',
@@ -1293,8 +1312,26 @@ function createExplorerNodes(
       scope: 'schema:observability',
       path: [connection.name],
       expandable: true,
-      queryTemplate: 'select table_name from information_schema.views where table_schema = \'observability\';',
+      queryTemplate: sqlTableListQueryForSchema('observability'),
     },
+  ]
+
+  if (connection.engine === 'sqlserver') {
+    sqlSchemaNodes.push({
+      id: 'schema-dbo',
+      family: 'sql',
+      label: 'dbo',
+      kind: 'schema',
+      detail: 'Default SQL Server schema',
+      scope: 'schema:dbo',
+      path: [connection.name],
+      expandable: true,
+      queryTemplate: sqlTableListQueryForSchema('dbo'),
+    })
+  }
+
+  return [
+    ...sqlSchemaNodes,
   ]
 }
 
@@ -1497,7 +1534,7 @@ function inspectExplorerNodeLocally(
     ? '{\n  "collection": "products",\n  "filter": {},\n  "limit": 100\n}'
     : request.nodeId.includes('prefix') || request.nodeId.includes('session')
       ? 'SCAN 0 MATCH session:* COUNT 50'
-      : 'select * from public.accounts limit 100;'
+      : 'select 1;'
 
   return {
     nodeId: request.nodeId,
@@ -1890,10 +1927,11 @@ export const desktopClient = {
     if (tab) {
       tab.queryText = queryText
       tab.dirty = true
-      tab.status = 'idle'
       tab.error = undefined
-      tab.result = undefined
-      tab.lastRunAt = undefined
+      if (!tab.result) {
+        tab.status = 'idle'
+        tab.lastRunAt = undefined
+      }
     }
 
     next.updatedAt = new Date().toISOString()
@@ -1917,10 +1955,11 @@ export const desktopClient = {
         tab.queryText = request.queryText
       }
       tab.dirty = true
-      tab.result = undefined
       tab.error = undefined
-      tab.status = 'idle'
-      tab.lastRunAt = undefined
+      if (!tab.result) {
+        tab.status = 'idle'
+        tab.lastRunAt = undefined
+      }
       next.updatedAt = new Date().toISOString()
     }
 

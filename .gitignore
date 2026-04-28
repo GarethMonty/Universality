@@ -13,3 +13,4 @@ apps/desktop/src-tauri/gen/
 
 packages/*/dist/
 tests/fixtures/sqlite/universality.sqlite3
+tests/fixtures/.generated.env

@@ -1,8 +1,30 @@
 import { strict as assert } from 'node:assert'
+import { existsSync, readFileSync } from 'node:fs'
 
 const sqliteFixture =
   process.env.UNIVERSALITY_SQLITE_FIXTURE ??
   'tests/fixtures/sqlite/universality.sqlite3'
+const generatedFixtureEnv = readGeneratedFixtureEnv()
+
+function readGeneratedFixtureEnv() {
+  const path = 'tests/fixtures/.generated.env'
+
+  if (!existsSync(path)) {
+    return {}
+  }
+
+  return Object.fromEntries(
+    readFileSync(path, 'utf8')
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line && !line.startsWith('#') && line.includes('='))
+      .map((line) => line.split(/=(.*)/s).slice(0, 2)),
+  )
+}
+
+function fixturePort(envKey, defaultPort) {
+  return process.env[envKey] ?? generatedFixtureEnv[envKey] ?? defaultPort
+}
 
 function fixtureProfileEnabled(profile) {
   return (process.env.UNIVERSALITY_FIXTURE_PROFILE ?? '')
@@ -16,7 +38,7 @@ const CORE_CONNECTIONS = [
     name: 'Fixture PostgreSQL',
     engine: 'postgresql',
     server: '127.0.0.1',
-    port: '54329',
+    port: fixturePort('UNIVERSALITY_POSTGRES_PORT', '54329'),
     database: 'universality',
     username: 'universality',
     secret: 'universality',
@@ -26,7 +48,7 @@ const CORE_CONNECTIONS = [
     name: 'Fixture SQL Server',
     engine: 'sqlserver',
     server: '127.0.0.1',
-    port: '14333',
+    port: fixturePort('UNIVERSALITY_SQLSERVER_PORT', '14333'),
     database: 'universality',
     username: 'sa',
     secret: 'Universality_pwd_123',
@@ -36,7 +58,7 @@ const CORE_CONNECTIONS = [
     name: 'Fixture MySQL',
     engine: 'mysql',
     server: '127.0.0.1',
-    port: '33060',
+    port: fixturePort('UNIVERSALITY_MYSQL_PORT', '33060'),
     database: 'commerce',
     username: 'universality',
     secret: 'universality',
@@ -55,7 +77,7 @@ const CORE_CONNECTIONS = [
     name: 'Fixture MongoDB',
     engine: 'mongodb',
     server: '127.0.0.1',
-    port: '27018',
+    port: fixturePort('UNIVERSALITY_MONGODB_PORT', '27018'),
     database: 'catalog',
     username: 'universality',
     secret: 'universality',
@@ -65,7 +87,7 @@ const CORE_CONNECTIONS = [
     name: 'Fixture Redis',
     engine: 'redis',
     server: '127.0.0.1',
-    port: '6380',
+    port: fixturePort('UNIVERSALITY_REDIS_PORT', '6380'),
     database: '',
     username: '',
     secret: '',
@@ -79,7 +101,7 @@ const PROFILE_CONNECTIONS = [
     name: 'Fixture Valkey',
     engine: 'valkey',
     server: '127.0.0.1',
-    port: '6381',
+    port: fixturePort('UNIVERSALITY_VALKEY_PORT', '6381'),
     database: '0',
     username: '',
     secret: '',
@@ -90,7 +112,7 @@ const PROFILE_CONNECTIONS = [
     name: 'Fixture Memcached',
     engine: 'memcached',
     server: '127.0.0.1',
-    port: '11212',
+    port: fixturePort('UNIVERSALITY_MEMCACHED_PORT', '11212'),
     database: '',
     username: '',
     secret: '',
@@ -101,7 +123,7 @@ const PROFILE_CONNECTIONS = [
     name: 'Fixture MariaDB',
     engine: 'mariadb',
     server: '127.0.0.1',
-    port: '33061',
+    port: fixturePort('UNIVERSALITY_MARIADB_PORT', '33061'),
     database: 'commerce',
     username: 'universality',
     secret: 'universality',
@@ -112,7 +134,7 @@ const PROFILE_CONNECTIONS = [
     name: 'Fixture CockroachDB',
     engine: 'cockroachdb',
     server: '127.0.0.1',
-    port: '26257',
+    port: fixturePort('UNIVERSALITY_COCKROACH_PORT', '26257'),
     database: 'universality',
     username: 'root',
     secret: '',
@@ -123,7 +145,7 @@ const PROFILE_CONNECTIONS = [
     name: 'Fixture TimescaleDB',
     engine: 'timescaledb',
     server: '127.0.0.1',
-    port: '54330',
+    port: fixturePort('UNIVERSALITY_TIMESCALE_PORT', '54330'),
     database: 'metrics',
     username: 'universality',
     secret: 'universality',
@@ -134,7 +156,7 @@ const PROFILE_CONNECTIONS = [
     name: 'Fixture ClickHouse',
     engine: 'clickhouse',
     server: '127.0.0.1',
-    port: '8124',
+    port: fixturePort('UNIVERSALITY_CLICKHOUSE_HTTP_PORT', '8124'),
     database: 'analytics',
     username: 'universality',
     secret: 'universality',
@@ -145,7 +167,7 @@ const PROFILE_CONNECTIONS = [
     name: 'Fixture Prometheus',
     engine: 'prometheus',
     server: '127.0.0.1',
-    port: '9091',
+    port: fixturePort('UNIVERSALITY_PROMETHEUS_PORT', '9091'),
     database: '',
     username: '',
     secret: '',
@@ -156,7 +178,7 @@ const PROFILE_CONNECTIONS = [
     name: 'Fixture OpenSearch',
     engine: 'opensearch',
     server: '127.0.0.1',
-    port: '9201',
+    port: fixturePort('UNIVERSALITY_OPENSEARCH_PORT', '9201'),
     database: '',
     username: '',
     secret: '',
@@ -167,7 +189,7 @@ const PROFILE_CONNECTIONS = [
     name: 'Fixture Elasticsearch',
     engine: 'elasticsearch',
     server: '127.0.0.1',
-    port: '9202',
+    port: fixturePort('UNIVERSALITY_ELASTICSEARCH_PORT', '9202'),
     database: '',
     username: '',
     secret: '',
@@ -178,7 +200,7 @@ const PROFILE_CONNECTIONS = [
     name: 'Fixture Neo4j',
     engine: 'neo4j',
     server: '127.0.0.1',
-    port: '7475',
+    port: fixturePort('UNIVERSALITY_NEO4J_HTTP_PORT', '7475'),
     database: 'neo4j',
     username: 'neo4j',
     secret: 'universality',

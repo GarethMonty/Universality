@@ -134,11 +134,77 @@ pub(super) async fn inspect_sqlserver_explorer_node(
         query_template: Some(if request.node_id.contains('.') {
             format!("select top 100 * from {};", request.node_id)
         } else {
-            "select top 100 * from dbo.orders;".into()
+            "select 1;".into()
         }),
         payload: Some(json!({
             "nodeId": request.node_id,
             "engine": connection.engine,
         })),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn inspect_sqlserver_explorer_node_uses_select_1_for_unresolved_nodes() {
+        let connection = ResolvedConnectionProfile {
+            id: "conn".into(),
+            name: "SQL Server".into(),
+            engine: "sqlserver".into(),
+            family: "sql".into(),
+            host: "localhost".into(),
+            port: Some(1433),
+            database: Some("master".into()),
+            username: None,
+            password: None,
+            connection_string: None,
+            read_only: false,
+        };
+        let response = inspect_sqlserver_explorer_node(
+            &connection,
+            &ExplorerInspectRequest {
+                connection_id: "conn".into(),
+                environment_id: "env".into(),
+                node_id: "orders".into(),
+            },
+        )
+        .await
+        .expect("inspection response");
+
+        assert_eq!(response.query_template.as_deref(), Some("select 1;"));
+    }
+
+    #[tokio::test]
+    async fn inspect_sqlserver_explorer_node_keeps_explicit_table_when_available() {
+        let connection = ResolvedConnectionProfile {
+            id: "conn".into(),
+            name: "SQL Server".into(),
+            engine: "sqlserver".into(),
+            family: "sql".into(),
+            host: "localhost".into(),
+            port: Some(1433),
+            database: Some("master".into()),
+            username: None,
+            password: None,
+            connection_string: None,
+            read_only: false,
+        };
+        let response = inspect_sqlserver_explorer_node(
+            &connection,
+            &ExplorerInspectRequest {
+                connection_id: "conn".into(),
+                environment_id: "env".into(),
+                node_id: "dbo.orders".into(),
+            },
+        )
+        .await
+        .expect("inspection response");
+
+        assert_eq!(
+            response.query_template.as_deref(),
+            Some("select top 100 * from dbo.orders;")
+        );
+    }
 }

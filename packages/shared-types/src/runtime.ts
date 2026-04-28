@@ -1,4 +1,10 @@
-import type { BottomPanelTab, RightDrawerView, SidebarPane, UiActivity } from './app'
+import type {
+  BottomPanelTab,
+  ConnectionGroupMode,
+  RightDrawerView,
+  SidebarPane,
+  UiActivity,
+} from './app'
 import type { ConnectionProfile, DatastoreEngine, DatastoreFamily } from './connection'
 import type { AdapterCapability, ExecutionCapabilities } from './capabilities'
 import type { GuardrailDecision } from './security'
@@ -355,6 +361,8 @@ export interface UpdateUiStateRequest {
   sidebarWidth?: number
   explorerFilter?: string
   explorerView?: 'tree' | 'structure'
+  connectionGroupMode?: ConnectionGroupMode
+  sidebarSectionStates?: Record<string, boolean>
   bottomPanelVisible?: boolean
   activeBottomPanelTab?: BottomPanelTab
   bottomPanelHeight?: number

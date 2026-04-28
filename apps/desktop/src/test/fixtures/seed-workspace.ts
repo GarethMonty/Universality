@@ -262,7 +262,7 @@ const explorerNodes: ExplorerNode[] = [
     scope: 'schema:public',
     path: ['Analytics Postgres'],
     expandable: true,
-    queryTemplate: 'select * from public.accounts limit 100;',
+    queryTemplate: 'select table_name from information_schema.tables where table_schema = \'public\' order by table_name;',
   },
   {
     id: 'explorer-postgres-index',
@@ -513,6 +513,8 @@ export function createSeedSnapshot(): WorkspaceSnapshot {
       activeTabId: 'tab-sql-ops',
       explorerFilter: '',
       explorerView: 'structure',
+      connectionGroupMode: 'none',
+      sidebarSectionStates: {},
       activeActivity: 'connections',
       sidebarCollapsed: false,
       activeSidebarPane: 'connections',
