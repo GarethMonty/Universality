@@ -367,7 +367,6 @@ function ConnectionsPane({
   onCreateTab(connectionId?: string): void
   onSelectConnection(connectionId: string): void
 }) {
-  const totalConnections = connectionsCount(connectionGroups)
   const [expandedConnections, setExpandedConnections] = useState<Record<string, boolean>>({})
   const [groupDropdownOpen, setGroupDropdownOpen] = useState(false)
   const [contextMenu, setContextMenu] = useState<ConnectionContextMenuState>()
@@ -448,10 +447,7 @@ function ConnectionsPane({
               onClick={() => setGroupDropdownOpen((current) => !current)}
             >
               <ActiveGroupIcon className="sidebar-group-icon" />
-              <span>
-                <strong>Group</strong>
-                <small>{activeGroupOption.label}</small>
-              </span>
+              <span>{activeGroupOption.label}</span>
               <ChevronDownIcon className="sidebar-group-chevron" />
             </button>
 
@@ -484,16 +480,6 @@ function ConnectionsPane({
               </div>
             ) : null}
           </div>
-          <button
-            type="button"
-            className="sidebar-icon-button"
-            aria-label="New query tab"
-            title="Open a new scratch query tab for the selected connection."
-            disabled={totalConnections === 0}
-            onClick={() => onCreateTab()}
-          >
-            <PlusIcon className="sidebar-icon" />
-          </button>
           <button
             type="button"
             className="sidebar-icon-button"
@@ -1049,7 +1035,7 @@ function documentCollectionLeaf(connection: ConnectionProfile, collection: strin
     scope: `collection:${collection}`,
     queryable: true,
     builderKind: connection.engine === 'mongodb' ? 'mongo-find' : undefined,
-    queryTemplate: `{\n  "collection": "${collection}",\n  "filter": {},\n  "limit": 50\n}`,
+    queryTemplate: `{\n  "collection": "${collection}",\n  "filter": {},\n  "limit": 20\n}`,
   })
 }
 
@@ -1258,10 +1244,6 @@ function leaf(
   options: Partial<ConnectionTreeNode> = {},
 ): ConnectionTreeNode {
   return { id, label, kind, detail, ...options }
-}
-
-function connectionsCount(connectionGroups: Record<string, ConnectionProfile[]>) {
-  return Object.values(connectionGroups).reduce((count, items) => count + items.length, 0)
 }
 
 function sidebarSectionId(pane: string, scope: string, label: string) {

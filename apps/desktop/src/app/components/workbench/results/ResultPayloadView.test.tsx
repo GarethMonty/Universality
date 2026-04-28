@@ -65,6 +65,7 @@ describe('ResultPayloadView', () => {
   it('shows the execution summary in the document grid footer', () => {
     render(
       <ResultPayloadView
+        resultDurationMs={1234}
         resultSummary="2 document(s) returned from Copy of Fixture MongoDB."
         payload={{
           renderer: 'document',
@@ -73,9 +74,11 @@ describe('ResultPayloadView', () => {
       />,
     )
 
-    expect(
-      screen.getByText('2 document(s) returned from Copy of Fixture MongoDB.'),
-    ).toBeInTheDocument()
+    expect(screen.getByText('2 documents(s)')).toBeInTheDocument()
+    expect(screen.getByText('00:00:01.234')).toBeInTheDocument()
+    expect(screen.queryByText(/returned from Copy of Fixture MongoDB/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/visible row\(s\)/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/editable document result/i)).not.toBeInTheDocument()
   })
 
   it('copies document values from the expandable table', async () => {

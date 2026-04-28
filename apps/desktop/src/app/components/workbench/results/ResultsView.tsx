@@ -5,9 +5,13 @@ import type {
   ExecutionResultEnvelope,
   ResultPayload,
 } from '@universality/shared-types'
-import { CopyIcon, DownloadIcon } from '../icons'
+import { ClockIcon, CopyIcon, DownloadIcon } from '../icons'
 import { ResultPayloadView } from './ResultPayloadView'
 import { copyText, exportPayload, payloadToText } from './payload-export'
+import { formatDurationClock } from './result-runtime'
+
+const RESULT_PAGE_SIZES = [10, 20, 50, 100]
+const DEFAULT_RESULT_PAGE_SIZE = 20
 
 interface ResultsViewProps {
   capabilities: ExecutionCapabilities
@@ -29,6 +33,32 @@ export function ResultsView({
   onLoadNextPage,
 }: ResultsViewProps) {
   const [operationMessage, setOperationMessage] = useState('')
+  const [pagination, setPagination] = useState({
+    pageIndex: 0,
+    pageSize: DEFAULT_RESULT_PAGE_SIZE,
+    resultId: '',
+  })
+  const resultId = result?.id ?? ''
+  const usesDocumentPaging = connection?.family === 'document' && payload?.renderer === 'document'
+  const pageSize = pagination.pageSize
+  const pageIndex = usesDocumentPaging && pagination.resultId === resultId ? pagination.pageIndex : 0
+  const itemCount = payloadItemCount(payload)
+  const pageCount = usesDocumentPaging ? Math.max(1, Math.ceil(itemCount / pageSize)) : 1
+  const safePageIndex = Math.min(pageIndex, pageCount - 1)
+  const firstVisibleItem = itemCount === 0 ? 0 : safePageIndex * pageSize + 1
+  const lastVisibleItem = usesDocumentPaging
+    ? Math.min(itemCount, (safePageIndex + 1) * pageSize)
+    : itemCount
+  const footerMessages = [
+    result?.summary && payload?.renderer !== 'document' ? result.summary : undefined,
+    result?.truncated && !result.pageInfo?.hasMore
+      ? `Result set truncated at ${result.rowLimit ?? capabilities.defaultRowLimit} rows.`
+      : undefined,
+    operationMessage || undefined,
+  ].filter((message): message is string => Boolean(message))
+  const runtimeLabel = result && payload?.renderer !== 'document'
+    ? formatDurationClock(result.durationMs)
+    : ''
 
   const copyResult = async () => {
     if (!payload) {
@@ -94,37 +124,121 @@ export function ResultsView({
 
       <ResultPayloadView
         connection={connection}
+        pageIndex={safePageIndex}
+        pageSize={usesDocumentPaging ? pageSize : undefined}
         payload={payload}
+        resultDurationMs={result?.durationMs}
         resultSummary={result?.summary}
       />
 
-      {result?.pageInfo?.hasMore ? (
+      {payload ? (
         <div className="panel-page-row">
-          <span>
-            Showing {result.pageInfo.bufferedRows} buffered item(s). Copy/export uses the buffered result only.
-          </span>
+          {usesDocumentPaging ? (
+            <div className="results-pagination-controls">
+              <button
+                type="button"
+                className="drawer-button"
+                disabled={safePageIndex <= 0}
+                onClick={() =>
+                  setPagination((current) => ({
+                    ...current,
+                    pageIndex: Math.max(0, safePageIndex - 1),
+                    resultId,
+                  }))
+                }
+              >
+                Previous
+              </button>
+              <span>
+                {firstVisibleItem}-{lastVisibleItem} of {itemCount}
+              </span>
+              <button
+                type="button"
+                className="drawer-button"
+                disabled={safePageIndex >= pageCount - 1}
+                onClick={() =>
+                  setPagination((current) => ({
+                    ...current,
+                    pageIndex: Math.min(pageCount - 1, safePageIndex + 1),
+                    resultId,
+                  }))
+                }
+              >
+                Next
+              </button>
+              <label className="results-page-size">
+                <span>Page size</span>
+                <select
+                  value={pageSize}
+                  onChange={(event) =>
+                    setPagination({
+                      pageIndex: 0,
+                      pageSize: Number(event.target.value),
+                      resultId,
+                    })
+                  }
+                >
+                  {RESULT_PAGE_SIZES.map((size) => (
+                    <option key={size} value={size}>
+                      {size}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          ) : null}
+          {result?.pageInfo?.hasMore ? (
+            <span>
+              Showing {result.pageInfo.bufferedRows} buffered item(s). Copy/export uses the buffered result only.
+            </span>
+          ) : null}
           <button
             type="button"
             className="drawer-button"
+            hidden={!result?.pageInfo?.hasMore}
             title="Fetch the next bounded page of results and append it to the buffered view."
             onClick={onLoadNextPage}
           >
-            Load next page
+            Load More
           </button>
         </div>
       ) : null}
 
-      {result?.summary && payload?.renderer !== 'document' ? (
-        <p className="panel-footnote panel-footnote--result-summary">{result.summary}</p>
+      {footerMessages.length > 0 || runtimeLabel ? (
+        <div className="results-status-footer">
+          <span>{footerMessages.join(' / ')}</span>
+          {runtimeLabel ? (
+            <strong className="result-runtime-label" title="Query runtime">
+              <ClockIcon className="panel-inline-icon" />
+              {runtimeLabel}
+            </strong>
+          ) : null}
+        </div>
       ) : null}
-
-      {result?.truncated && !result.pageInfo?.hasMore ? (
-        <p className="panel-footnote">
-          Result set truncated at {result.rowLimit ?? capabilities.defaultRowLimit} rows.
-        </p>
-      ) : null}
-
-      {operationMessage ? <p className="panel-footnote">{operationMessage}</p> : null}
     </div>
   )
+}
+
+function payloadItemCount(payload: ResultPayload | undefined) {
+  if (!payload) {
+    return 0
+  }
+
+  if (payload.renderer === 'table') {
+    return payload.rows.length
+  }
+
+  if (payload.renderer === 'document') {
+    return payload.documents.length
+  }
+
+  if (payload.renderer === 'searchHits') {
+    return payload.hits.length
+  }
+
+  if (payload.renderer === 'keyvalue') {
+    return Object.keys(payload.entries).length
+  }
+
+  return 1
 }

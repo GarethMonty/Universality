@@ -13,11 +13,30 @@ describe('QueryBuilderPanel', () => {
 
     render(<BuilderHarness onBuilderStateChange={onBuilderStateChange} tab={tab} />)
 
+    expect(screen.queryByText('Live query')).not.toBeInTheDocument()
+    expect(screen.queryByText('Mongo Find Builder')).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'products' })).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Collection')).toHaveValue('products')
+
     dropField(section('Filters'), 'profile.status')
     expect(screen.getByLabelText('Filter field')).toHaveValue('profile.status')
+    expect(screen.getByLabelText('Apply filter profile.status')).toBeChecked()
+    fireEvent.click(screen.getByLabelText('Apply filter profile.status'))
+    expect(screen.getByLabelText('Apply filter profile.status')).not.toBeChecked()
+    fireEvent.change(screen.getByLabelText('Filter group logic Group 1'), {
+      target: { value: 'or' },
+    })
+    expect(screen.getByLabelText('Filter group logic Group 1')).toHaveValue('or')
+    fireEvent.click(screen.getByRole('button', { name: 'Add Group' }))
+    expect(screen.getByLabelText('Filter group logic Group 2')).toHaveValue('and')
 
     dropField(section('Projection'), 'profile.name')
     expect(screen.getByLabelText('Projection field')).toHaveValue('profile.name')
+    expect(screen.getByLabelText('Projection mode profile.name')).toHaveValue('include')
+    fireEvent.change(screen.getByLabelText('Projection mode profile.name'), {
+      target: { value: 'exclude' },
+    })
+    expect(screen.getByLabelText('Projection mode profile.name')).toHaveValue('exclude')
 
     dropField(section('Sort'), 'createdAt')
     expect(screen.getByLabelText('Sort field')).toHaveValue('createdAt')
@@ -40,6 +59,7 @@ function BuilderHarness({
     <QueryBuilderPanel
       tab={tab}
       builderState={builderState}
+      collectionOptions={['products', 'inventory', 'orders']}
       onBuilderStateChange={(tabId, nextBuilderState) => {
         setBuilderState(nextBuilderState)
         onBuilderStateChange(tabId, nextBuilderState)

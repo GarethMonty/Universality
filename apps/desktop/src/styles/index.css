@@ -504,7 +504,7 @@ button:disabled:hover {
 }
 
 .sidebar-group-dropdown--header {
-  width: 126px;
+  width: auto;
   padding: 0;
 }
 
@@ -523,8 +523,12 @@ button:disabled:hover {
 }
 
 .sidebar-group-trigger {
-  min-height: 32px;
-  padding: 4px 7px;
+  width: auto;
+  min-height: 26px;
+  grid-template-columns: 14px auto 12px;
+  gap: 5px;
+  padding: 3px 6px;
+  white-space: nowrap;
 }
 
 .sidebar-group-trigger:hover,
@@ -537,12 +541,18 @@ button:disabled:hover {
 .sidebar-group-trigger span,
 .sidebar-group-menu-item span {
   min-width: 0;
-  display: grid;
+  display: block;
   gap: 1px;
 }
 
 .sidebar-group-trigger strong,
 .sidebar-group-menu-item strong {
+  color: var(--heading);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.sidebar-group-trigger span {
   color: var(--heading);
   font-size: 11px;
   font-weight: 600;
@@ -2034,7 +2044,7 @@ button:disabled:hover {
 
 .query-builder-grid {
   display: grid;
-  grid-template-columns: minmax(180px, 2fr) minmax(90px, 1fr) minmax(90px, 1fr);
+  grid-template-columns: minmax(180px, 1fr);
   gap: 6px;
 }
 
@@ -2051,6 +2061,7 @@ button:disabled:hover {
 }
 
 .query-builder-field input,
+.query-builder-field select,
 .query-builder-inline-field select,
 .query-builder-row input,
 .query-builder-row select {
@@ -2095,8 +2106,22 @@ button:disabled:hover {
   align-items: center;
 }
 
+.query-builder-row--filter {
+  grid-template-columns:
+    minmax(54px, 0.35fr) minmax(120px, 1.3fr) minmax(76px, 0.6fr)
+    minmax(92px, 0.7fr) minmax(140px, 1.6fr) auto;
+}
+
+.query-builder-row.is-disabled {
+  opacity: 0.58;
+}
+
 .query-builder-row--simple {
   grid-template-columns: minmax(160px, 1fr) auto;
+}
+
+.query-builder-row--projection {
+  grid-template-columns: minmax(160px, 1fr) minmax(110px, 0.45fr) auto;
 }
 
 .query-builder-row--sort {
@@ -2116,6 +2141,48 @@ button:disabled:hover {
 .query-builder-remove:focus-visible {
   background: rgba(255, 255, 255, 0.06);
   color: var(--heading);
+}
+
+.query-builder-filter-group {
+  display: grid;
+  gap: 5px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  background: var(--panel-bg);
+}
+
+.query-builder-filter-group-header {
+  min-height: 26px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.query-builder-filter-group-header strong {
+  color: var(--heading);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.query-builder-filter-group-header label,
+.query-builder-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.query-builder-filter-group-header select {
+  min-height: 24px;
+  border: 1px solid var(--border);
+  background: var(--input-bg);
+  color: var(--heading);
+  font: inherit;
+}
+
+.query-builder-toggle {
+  justify-content: center;
 }
 
 .query-builder-empty {
@@ -2310,6 +2377,31 @@ button:disabled:hover {
 .panel-footnote--result-summary {
   justify-self: end;
   text-align: right;
+}
+
+.results-status-footer {
+  min-height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.results-status-footer span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.results-status-footer strong {
+  margin-left: auto;
+  color: var(--heading);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
 }
 
 .panel-confirmation {
@@ -2534,6 +2626,27 @@ button:disabled:hover {
   border: 1px solid var(--border);
   color: var(--muted);
   font-size: 12px;
+}
+
+.results-pagination-controls,
+.results-page-size {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.results-pagination-controls span,
+.results-page-size span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.results-page-size select {
+  height: 24px;
+  border: 1px solid var(--border);
+  background: var(--input-bg);
+  color: var(--heading);
+  font-size: 11px;
 }
 
 .virtual-table,
@@ -2852,12 +2965,30 @@ button:disabled:hover {
   white-space: nowrap;
 }
 
-.document-data-grid-footer strong {
+.document-data-grid-footer-right {
   margin-left: auto;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.document-data-grid-footer-right strong {
   color: var(--heading);
   font-size: 11px;
   font-weight: 500;
   text-align: right;
+  white-space: nowrap;
+}
+
+.result-runtime-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--heading);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .document-data-grid {

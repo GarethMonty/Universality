@@ -1,10 +1,17 @@
 import type {
   MongoBuilderValueType,
+  MongoFindFilterGroup,
   MongoFilterOperator,
   MongoFindBuilderState,
   MongoFindFilterRow,
   QueryBuilderState,
 } from '@universality/shared-types'
+import {
+  defaultFilterGroup,
+  normalizeFilterGroups,
+} from './mongo-find-defaults'
+export { defaultFilterGroup, normalizeFilterGroups } from './mongo-find-defaults'
+export { parseMongoFindQueryText } from './mongo-find-parser'
 
 const OPERATOR_MAP: Record<Exclude<MongoFilterOperator, 'eq'>, string> = {
   ne: '$ne',
@@ -19,12 +26,13 @@ const OPERATOR_MAP: Record<Exclude<MongoFilterOperator, 'eq'>, string> = {
 
 export function createDefaultMongoFindBuilderState(
   collection: string,
-  limit = 50,
+  limit = 20,
 ): MongoFindBuilderState {
   const queryText = buildMongoFindQueryText({
     kind: 'mongo-find',
     collection,
     filters: [],
+    filterGroups: [defaultFilterGroup()],
     projectionMode: 'all',
     projectionFields: [],
     sort: [],
@@ -36,6 +44,7 @@ export function createDefaultMongoFindBuilderState(
     kind: 'mongo-find',
     collection,
     filters: [],
+    filterGroups: [defaultFilterGroup()],
     projectionMode: 'all',
     projectionFields: [],
     sort: [],
@@ -54,7 +63,7 @@ export function isMongoFindBuilderState(
 export function buildMongoFindQueryText(state: MongoFindBuilderState): string {
   const query: Record<string, unknown> = {
     collection: state.collection.trim(),
-    filter: buildMongoFilter(state.filters),
+    filter: buildMongoFilter(state),
   }
   const projection = buildMongoProjection(state)
   const sort = buildMongoSort(state)
@@ -78,66 +87,71 @@ export function buildMongoFindQueryText(state: MongoFindBuilderState): string {
   return JSON.stringify(query, null, 2)
 }
 
-export function parseMongoFindQueryText(queryText: string): MongoFindBuilderState | undefined {
-  let parsed: unknown
+export function buildMongoFilter(state: Pick<MongoFindBuilderState, 'filters' | 'filterGroups'>): Record<string, unknown> {
+  const groups = normalizeFilterGroups(state.filterGroups)
+  const groupExpressions = groups
+    .map((group) => {
+      const rowExpressions = state.filters
+        .filter((row) => (row.enabled ?? true) && (row.groupId ?? groups[0]?.id) === group.id)
+        .map(buildMongoFilterExpression)
+        .filter((expression) => Object.keys(expression).length > 0)
 
-  try {
-    parsed = JSON.parse(queryText)
-  } catch {
-    return undefined
+      return combineFilterExpressions(rowExpressions, group.logic)
+    })
+    .filter((expression) => Object.keys(expression).length > 0)
+
+  if (groupExpressions.length === 0) {
+    return {}
   }
 
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    return undefined
+  if (groupExpressions.length === 1) {
+    return groupExpressions[0]!
   }
 
-  const query = parsed as Record<string, unknown>
-  const collection = typeof query.collection === 'string' ? query.collection : ''
-  const filters = filterRowsFromQuery(query.filter)
-  const projection = projectionFromQuery(query.projection)
-
-  return {
-    kind: 'mongo-find',
-    collection,
-    filters,
-    projectionMode: projection.mode,
-    projectionFields: projection.fields,
-    sort: sortRowsFromQuery(query.sort),
-    skip: numberOrUndefined(query.skip) ?? 0,
-    limit: numberOrUndefined(query.limit) ?? 50,
-    lastAppliedQueryText: queryText,
-  }
+  return { $and: groupExpressions }
 }
 
-export function buildMongoFilter(rows: MongoFindFilterRow[]): Record<string, unknown> {
-  const filter: Record<string, unknown> = {}
+function buildMongoFilterExpression(row: MongoFindFilterRow): Record<string, unknown> {
+  const field = row.field.trim()
 
-  for (const row of rows) {
-    const field = row.field.trim()
-
-    if (!field) {
-      continue
-    }
-
-    const value = coerceMongoValue(row.value, row.valueType, row.operator)
-
-    if (row.operator === 'eq') {
-      filter[field] = value
-      continue
-    }
-
-    const operator = OPERATOR_MAP[row.operator]
-    const existing = filter[field]
-    const operatorExpression =
-      existing && typeof existing === 'object' && !Array.isArray(existing)
-        ? { ...(existing as Record<string, unknown>) }
-        : {}
-
-    operatorExpression[operator] = value
-    filter[field] = operatorExpression
+  if (!field) {
+    return {}
   }
 
-  return filter
+  const value = coerceMongoValue(row.value, row.valueType, row.operator)
+
+  if (row.operator === 'eq') {
+    return { [field]: value }
+  }
+
+  return { [field]: { [OPERATOR_MAP[row.operator]]: value } }
+}
+
+function combineFilterExpressions(
+  expressions: Array<Record<string, unknown>>,
+  logic: MongoFindFilterGroup['logic'],
+) {
+  if (expressions.length === 0) {
+    return {}
+  }
+
+  if (logic === 'or') {
+    return expressions.length === 1 ? expressions[0]! : { $or: expressions }
+  }
+
+  return expressions.reduce<Record<string, unknown>>((merged, expression) => {
+    for (const [field, value] of Object.entries(expression)) {
+      const existing = merged[field]
+
+      if (isPlainObject(existing) && isPlainObject(value)) {
+        merged[field] = { ...existing, ...value }
+      } else {
+        merged[field] = value
+      }
+    }
+
+    return merged
+  }, {})
 }
 
 function buildMongoProjection(
@@ -234,139 +248,6 @@ function parseBoolean(value: string, fallback: boolean) {
   return fallback
 }
 
-function filterRowsFromQuery(filter: unknown): MongoFindBuilderState['filters'] {
-  if (!filter || typeof filter !== 'object' || Array.isArray(filter)) {
-    return []
-  }
-
-  return Object.entries(filter as Record<string, unknown>).flatMap(([field, value]) => {
-    if (isPlainObject(value)) {
-      const operators = Object.entries(value)
-        .map(([operator, operatorValue]) => filterRowForOperator(field, operator, operatorValue))
-        .filter(Boolean)
-      return operators as MongoFindBuilderState['filters']
-    }
-
-    return [
-      {
-        id: rowId('filter'),
-        field,
-        operator: 'eq',
-        value: valueToBuilderInput(value),
-        valueType: valueTypeForBuilder(value),
-      },
-    ]
-  })
-}
-
-function filterRowForOperator(field: string, operator: string, value: unknown) {
-  const operatorMap: Record<string, MongoFilterOperator> = {
-    $ne: 'ne',
-    $gt: 'gt',
-    $gte: 'gte',
-    $lt: 'lt',
-    $lte: 'lte',
-    $regex: 'regex',
-    $exists: 'exists',
-    $in: 'in',
-  }
-  const builderOperator = operatorMap[operator]
-
-  if (!builderOperator) {
-    return undefined
-  }
-
-  return {
-    id: rowId('filter'),
-    field,
-    operator: builderOperator,
-    value: builderOperator === 'in' && Array.isArray(value)
-      ? value.map(valueToBuilderInput).join(', ')
-      : valueToBuilderInput(value),
-    valueType: valueTypeForBuilder(value),
-  }
-}
-
-function projectionFromQuery(projection: unknown): {
-  mode: MongoFindBuilderState['projectionMode']
-  fields: MongoFindBuilderState['projectionFields']
-} {
-  if (!projection || typeof projection !== 'object' || Array.isArray(projection)) {
-    return { mode: 'all', fields: [] }
-  }
-
-  const entries = Object.entries(projection as Record<string, unknown>).filter(([field]) =>
-    Boolean(field.trim()),
-  )
-
-  if (entries.length === 0) {
-    return { mode: 'all', fields: [] }
-  }
-
-  const includeCount = entries.filter(([, value]) => Number(value) === 1).length
-  const mode = includeCount >= entries.length / 2 ? 'include' : 'exclude'
-
-  return {
-    mode,
-    fields: entries.map(([field]) => ({ id: rowId('projection'), field })),
-  }
-}
-
-function sortRowsFromQuery(sort: unknown): MongoFindBuilderState['sort'] {
-  if (!sort || typeof sort !== 'object' || Array.isArray(sort)) {
-    return []
-  }
-
-  return Object.entries(sort as Record<string, unknown>)
-    .filter(([field]) => Boolean(field.trim()))
-    .map(([field, direction]) => ({
-      id: rowId('sort'),
-      field,
-      direction: Number(direction) === -1 ? 'desc' : 'asc',
-    }))
-}
-
-function valueTypeForBuilder(value: unknown): MongoBuilderValueType {
-  if (value === null) {
-    return 'null'
-  }
-
-  if (typeof value === 'number') {
-    return 'number'
-  }
-
-  if (typeof value === 'boolean') {
-    return 'boolean'
-  }
-
-  if (typeof value === 'object') {
-    return 'json'
-  }
-
-  return 'string'
-}
-
-function valueToBuilderInput(value: unknown) {
-  if (value === null) {
-    return ''
-  }
-
-  if (typeof value === 'string') {
-    return value
-  }
-
-  return JSON.stringify(value)
-}
-
-function numberOrUndefined(value: unknown) {
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : undefined
-}
-
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function rowId(prefix: string) {
-  return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`
 }

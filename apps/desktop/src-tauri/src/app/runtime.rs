@@ -7,6 +7,8 @@ use serde_json::json;
 use sha2::{Digest, Sha256};
 use tauri::AppHandle;
 
+mod ui;
+
 use crate::{
     adapters,
     domain::{
@@ -29,6 +31,12 @@ use crate::{
         },
     },
     persistence, security,
+};
+
+use ui::{
+    clamp_bottom_panel_height, clamp_right_drawer_width, clamp_sidebar_width, focus_query_tab,
+    is_activity, is_bottom_panel_tab, is_connection_group_mode, is_explorer_view, is_right_drawer,
+    is_sidebar_pane, normalize_ui_state,
 };
 
 pub struct ManagedAppState {
@@ -346,9 +354,7 @@ impl ManagedAppState {
         let title = self.next_query_tab_title(&connection);
         let tab = build_query_tab(&connection, true, title);
         self.snapshot.tabs.push(tab.clone());
-        self.snapshot.ui.active_connection_id = tab.connection_id;
-        self.snapshot.ui.active_environment_id = tab.environment_id;
-        self.snapshot.ui.active_tab_id = tab.id;
+        focus_query_tab(&mut self.snapshot.ui, &tab);
         self.snapshot.updated_at = timestamp_now();
         self.persist()?;
         Ok(self.bootstrap_payload())
@@ -368,9 +374,7 @@ impl ManagedAppState {
         let tab = build_scoped_query_tab(&self.snapshot, &connection, request);
 
         self.snapshot.tabs.push(tab.clone());
-        self.snapshot.ui.active_connection_id = tab.connection_id.clone();
-        self.snapshot.ui.active_environment_id = tab.environment_id.clone();
-        self.snapshot.ui.active_tab_id = tab.id.clone();
+        focus_query_tab(&mut self.snapshot.ui, &tab);
         self.snapshot.ui.active_activity = "connections".into();
         self.snapshot.ui.active_sidebar_pane = "connections".into();
         self.snapshot.updated_at = timestamp_now();
@@ -1356,7 +1360,8 @@ fn relation_does_not_exist_hint(
             "Use `schema.object`-style naming when possible, for example [dbo].[orders]."
                 .to_string()
         } else {
-            "Use `schema.table` naming and verify the object exists in the active database.".to_string()
+            "Use `schema.table` naming and verify the object exists in the active database."
+                .to_string()
         }
     } else {
         "Try using the schema-qualified form: `schema.table` (or \"schema\".\"table\" for case-sensitive names)."
@@ -1755,144 +1760,6 @@ pub fn generate_id(prefix: &str) -> String {
         .unwrap_or_default()
         .as_nanos();
     format!("{prefix}-{nanos}")
-}
-
-fn is_activity(value: &str) -> bool {
-    matches!(
-        value,
-        "connections" | "environments" | "explorer" | "saved-work" | "search" | "settings"
-    )
-}
-
-fn is_sidebar_pane(value: &str) -> bool {
-    matches!(
-        value,
-        "connections" | "environments" | "explorer" | "saved-work" | "search"
-    )
-}
-
-fn is_bottom_panel_tab(value: &str) -> bool {
-    matches!(value, "results" | "messages" | "details")
-}
-
-fn is_explorer_view(value: &str) -> bool {
-    matches!(value, "tree" | "structure")
-}
-
-fn is_connection_group_mode(value: &str) -> bool {
-    matches!(value, "none" | "environment" | "database-type")
-}
-
-fn is_right_drawer(value: &str) -> bool {
-    matches!(
-        value,
-        "none" | "connection" | "inspection" | "diagnostics" | "operations"
-    )
-}
-
-fn clamp_bottom_panel_height(value: u32) -> u32 {
-    value.clamp(120, 900)
-}
-
-fn clamp_sidebar_width(value: u32) -> u32 {
-    value.clamp(220, 420)
-}
-
-fn clamp_right_drawer_width(value: u32) -> u32 {
-    value.clamp(320, 560)
-}
-
-fn normalize_ui_state(snapshot: &WorkspaceSnapshot) -> UiState {
-    let active_tab = snapshot
-        .tabs
-        .iter()
-        .find(|item| item.id == snapshot.ui.active_tab_id)
-        .cloned()
-        .or_else(|| snapshot.tabs.first().cloned());
-    let active_connection = snapshot
-        .connections
-        .iter()
-        .find(|item| item.id == snapshot.ui.active_connection_id)
-        .cloned()
-        .or_else(|| {
-            active_tab
-                .as_ref()
-                .and_then(|tab| {
-                    snapshot
-                        .connections
-                        .iter()
-                        .find(|item| item.id == tab.connection_id)
-                })
-                .cloned()
-        })
-        .or_else(|| snapshot.connections.first().cloned());
-    let active_environment = snapshot
-        .environments
-        .iter()
-        .find(|item| item.id == snapshot.ui.active_environment_id)
-        .cloned()
-        .or_else(|| {
-            active_tab
-                .as_ref()
-                .and_then(|tab| {
-                    snapshot
-                        .environments
-                        .iter()
-                        .find(|item| item.id == tab.environment_id)
-                })
-                .cloned()
-        })
-        .or_else(|| snapshot.environments.first().cloned());
-    let active_activity = if is_activity(&snapshot.ui.active_activity) {
-        snapshot.ui.active_activity.clone()
-    } else {
-        "connections".into()
-    };
-    let active_sidebar_pane = if is_sidebar_pane(&snapshot.ui.active_sidebar_pane) {
-        snapshot.ui.active_sidebar_pane.clone()
-    } else if active_activity == "settings" {
-        "connections".into()
-    } else {
-        active_activity.clone()
-    };
-    let has_active_tab = active_tab.is_some();
-    let active_bottom_panel_tab = if is_bottom_panel_tab(&snapshot.ui.active_bottom_panel_tab) {
-        snapshot.ui.active_bottom_panel_tab.clone()
-    } else {
-        "results".into()
-    };
-
-    UiState {
-        active_connection_id: active_connection.map(|item| item.id).unwrap_or_default(),
-        active_environment_id: active_environment.map(|item| item.id).unwrap_or_default(),
-        active_tab_id: active_tab.map(|item| item.id).unwrap_or_default(),
-        explorer_filter: snapshot.ui.explorer_filter.clone(),
-        explorer_view: if is_explorer_view(&snapshot.ui.explorer_view) {
-            snapshot.ui.explorer_view.clone()
-        } else {
-            "structure".into()
-        },
-        connection_group_mode: if is_connection_group_mode(&snapshot.ui.connection_group_mode) {
-            snapshot.ui.connection_group_mode.clone()
-        } else {
-            "none".into()
-        },
-        sidebar_section_states: snapshot.ui.sidebar_section_states.clone(),
-        active_activity,
-        sidebar_collapsed: snapshot.ui.sidebar_collapsed,
-        active_sidebar_pane,
-        sidebar_width: clamp_sidebar_width(snapshot.ui.sidebar_width),
-        bottom_panel_visible: snapshot.ui.bottom_panel_visible
-            && (has_active_tab || active_bottom_panel_tab == "messages"),
-        active_bottom_panel_tab,
-        bottom_panel_height: clamp_bottom_panel_height(snapshot.ui.bottom_panel_height),
-        right_drawer: if is_right_drawer(&snapshot.ui.right_drawer) {
-            snapshot.ui.right_drawer.clone()
-        } else {
-            "none".into()
-        },
-        right_drawer_width: clamp_right_drawer_width(snapshot.ui.right_drawer_width),
-    }
 }
 
 fn migrate_snapshot(mut snapshot: WorkspaceSnapshot) -> WorkspaceSnapshot {
@@ -3180,6 +3047,51 @@ mod tests {
     static ENV_LOCK: TestMutex<()> = TestMutex::new(());
 
     #[test]
+    fn bottom_panel_tab_validator_accepts_history_tab() {
+        assert!(is_bottom_panel_tab("results"));
+        assert!(is_bottom_panel_tab("messages"));
+        assert!(is_bottom_panel_tab("history"));
+        assert!(is_bottom_panel_tab("details"));
+        assert!(!is_bottom_panel_tab("unknown"));
+    }
+
+    #[test]
+    fn focusing_query_tab_closes_connection_drawer() {
+        let connection = ConnectionProfile {
+            id: "conn-postgres".into(),
+            name: "Postgres".into(),
+            engine: "postgresql".into(),
+            family: "sql".into(),
+            host: "localhost".into(),
+            port: Some(5432),
+            database: Some("universality".into()),
+            connection_string: None,
+            connection_mode: Some("native".into()),
+            environment_ids: vec!["env-dev".into()],
+            tags: Vec::new(),
+            favorite: false,
+            read_only: false,
+            icon: "postgresql".into(),
+            color: None,
+            group: None,
+            notes: None,
+            auth: ConnectionAuth::default(),
+            created_at: timestamp_now(),
+            updated_at: timestamp_now(),
+        };
+        let tab = build_query_tab(&connection, true, "Query 1.sql".into());
+        let mut snapshot = blank_workspace_snapshot();
+        snapshot.ui.right_drawer = "connection".into();
+
+        focus_query_tab(&mut snapshot.ui, &tab);
+
+        assert_eq!(snapshot.ui.active_connection_id, tab.connection_id);
+        assert_eq!(snapshot.ui.active_environment_id, tab.environment_id);
+        assert_eq!(snapshot.ui.active_tab_id, tab.id);
+        assert_eq!(snapshot.ui.right_drawer, "none");
+    }
+
+    #[test]
     fn normal_blank_workspace_has_no_fixture_user_data() {
         let snapshot = blank_workspace_snapshot();
 
@@ -3528,7 +3440,9 @@ mod tests {
         let enriched =
             enrich_sql_execution_error(&connection, "select * from dbo.accounts", base_error);
 
-        assert!(enriched.message.contains("Detected missing relation `dbo.accounts`"));
+        assert!(enriched
+            .message
+            .contains("Detected missing relation `dbo.accounts`"));
         assert!(enriched.message.contains("schema.object"));
         assert!(enriched.message.contains("Explorer"));
     }

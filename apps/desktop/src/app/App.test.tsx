@@ -272,13 +272,13 @@ describe('App', () => {
     expect(screen.queryByLabelText('connection drawer')).not.toBeInTheDocument()
   })
 
-  it('closes connection details when creating a query from the connections pane', async () => {
+  it('closes connection details when creating a query from the editor tab strip', async () => {
     render(<App />)
 
     await createFirstConnection()
     expect(screen.getByLabelText('connection drawer')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'New query tab' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Create query tab' }))
 
     await waitFor(() => {
       expect(screen.getByRole('tab', { name: /Query 2/i })).toBeInTheDocument()
@@ -350,7 +350,8 @@ describe('App', () => {
     await waitFor(() => {
       expect(screen.queryByRole('tab', { name: /Query 1/i })).not.toBeInTheDocument()
     })
-    expect(screen.getByRole('button', { name: 'New query tab' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'New query tab' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Create query tab' })).toBeEnabled()
   })
 
   it('opens the connection drawer for editing from the toolbar', async () => {
@@ -526,7 +527,7 @@ describe('App', () => {
     render(<App />)
 
     await createFirstConnection()
-    expect(screen.getByLabelText('Active environment')).toHaveTextContent('Local')
+    expect(screen.getByLabelText('Environments view')).toBeInTheDocument()
 
     fireEvent.click(screen.getByLabelText('Environments view'))
 
@@ -1131,7 +1132,7 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Run query' }))
 
     await waitFor(() => {
-      expect(screen.getByText('2 documents returned from MongoDB adapter preview.')).toBeInTheDocument()
+      expect(screen.getByText('2 documents(s)')).toBeInTheDocument()
     })
 
     const builder = screen.getByLabelText('MongoDB query builder')
@@ -1140,7 +1141,7 @@ describe('App', () => {
       target: { value: 'inventory.available' },
     })
 
-    expect(screen.getByText('2 documents returned from MongoDB adapter preview.')).toBeInTheDocument()
+    expect(screen.getByText('2 documents(s)')).toBeInTheDocument()
     expect(screen.getByRole('treegrid', { name: 'Document result table' })).toBeInTheDocument()
   })
 
@@ -1280,7 +1281,7 @@ describe('App', () => {
     await waitFor(() => {
       expect(writeText).toHaveBeenCalledWith(expect.stringContaining('table_name'))
     })
-    expect(screen.getByText('Result copied to clipboard.')).toBeInTheDocument()
+    expect(screen.getByText(/Result copied to clipboard\./)).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Export result' }))
 
@@ -1289,6 +1290,7 @@ describe('App', () => {
     })
     expect(anchorClick).toHaveBeenCalled()
     expect(revokeObjectUrl).toHaveBeenCalledWith('blob:universality-result')
+    expect(screen.getByText(/\d{2}:\d{2}:\d{2}\.\d{3}/)).toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText('Query editor'), {
       target: { value: 'select 2;' },
@@ -1297,7 +1299,7 @@ describe('App', () => {
       expect(screen.getByLabelText('Query editor')).toHaveValue('select 2;')
     })
 
-    fireEvent.click(screen.getByRole('tab', { name: 'details' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'history' }))
 
     await waitFor(() => {
       expect(screen.getByText('Query History')).toBeInTheDocument()

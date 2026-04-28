@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useRef, useState } from 'react'
+import { useCallback, useDeferredValue, useEffect, useRef, useState } from 'react'
 import type { ComponentType, CSSProperties, DragEvent } from 'react'
 import type {
   ConnectionProfile,
@@ -151,7 +151,7 @@ function DesktopWorkspace() {
       ? buildMongoFindQueryText(activeBuilderState)
       : activeTab?.queryText
 
-  const resolveBuilderQueryText = (tab: QueryTabState): string | undefined => {
+  const resolveBuilderQueryText = useCallback((tab: QueryTabState): string | undefined => {
     const builderState =
       activeConnection && builderStateForTab(tab, activeConnection, builderStateDraftRef.current)
 
@@ -168,16 +168,16 @@ function DesktopWorkspace() {
     }
 
     return buildMongoFindQueryText(builderState)
-  }
-  const resolveQueryText = (tab: QueryTabState): string => {
+  }, [activeConnection, activeQueryWindowMode])
+  const resolveQueryText = useCallback((tab: QueryTabState): string => {
     const hasDraftText =
       Object.prototype.hasOwnProperty.call(queryTextDraftRef.current, tab.id) &&
       typeof queryTextDraftRef.current[tab.id] === 'string'
 
     return hasDraftText ? (queryTextDraftRef.current[tab.id] ?? tab.queryText) : tab.queryText
-  }
+  }, [])
 
-  const runCurrentTabQuery = (mode?: ExecutionRequest['mode'], guardrailId?: string) => {
+  const runCurrentTabQuery = useCallback((mode?: ExecutionRequest['mode'], guardrailId?: string) => {
     if (!activeTab) {
       return
     }
@@ -206,7 +206,7 @@ function DesktopWorkspace() {
       queryText: generatedQueryText,
     })
     void actions.executeQuery(activeTab.id, mode, guardrailId, generatedQueryText)
-  }
+  }, [actions, activeConnection, activeTab, resolveBuilderQueryText, resolveQueryText])
 
   const persistBuilderState = (tabId: string, builderState: QueryBuilderState) => {
     if (!snapshot) {
@@ -326,7 +326,7 @@ function DesktopWorkspace() {
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [activeTab, commandPaletteOpen, runCurrentTabQuery, snapshot])
+  }, [actions, activeTab, commandPaletteOpen, runCurrentTabQuery, snapshot])
 
   useEffect(() => {
     if (
@@ -412,6 +412,7 @@ function DesktopWorkspace() {
     const searchable = `${node.label} ${node.kind} ${node.detail} ${(node.path ?? []).join(' ')}`.toLowerCase()
     return matchesFamily && searchable.includes(filter)
   }) : []
+  const queryBuilderCollectionOptions = mongoCollectionOptions(activeConnection, explorerItems)
   const commandItems = [
     'Open command palette',
     'Open connections',
@@ -1033,10 +1034,6 @@ function DesktopWorkspace() {
                 {activeConnection && activeEnvironment && activeTab ? (
                   <>
                     <EditorToolbar
-                      connections={snapshot.connections}
-                      environments={snapshot.environments}
-                      activeConnection={activeConnection}
-                      activeEnvironment={activeEnvironment}
                       executionStatus={executionStatus}
                       capabilities={runtimeCapabilities}
                       canCancelExecution={canCancelExecution}
@@ -1047,12 +1044,6 @@ function DesktopWorkspace() {
                         lastExecution?.executionId
                           ? void actions.cancelExecution(lastExecution.executionId, activeTab.id)
                           : undefined
-                      }
-                      onSelectConnection={(connectionId) =>
-                        void actions.selectConnection(connectionId)
-                      }
-                      onSelectEnvironment={(environmentId) =>
-                        void actions.selectEnvironment(activeTab.id, environmentId)
                       }
                       onOpenConnectionDrawer={openConnectionDrawer}
                       canToggleBuilderView={hasBuilderQuery}
@@ -1067,7 +1058,6 @@ function DesktopWorkspace() {
 
                     <div className="editor-surface">
                       <div className="editor-surface-meta">
-                        <span>{activeTab.editorLabel}</span>
                         <span>
                           {activeConnection.name} / {activeEnvironment.label}
                         </span>
@@ -1080,6 +1070,7 @@ function DesktopWorkspace() {
                           <QueryBuilderPanel
                             tab={activeTab}
                             builderState={activeBuilderState}
+                            collectionOptions={queryBuilderCollectionOptions}
                             onBuilderStateChange={persistBuilderState}
                           />
                         ) : null}
@@ -1874,10 +1865,25 @@ function mongoLimitFromQueryText(queryText: string) {
     const parsed = JSON.parse(queryText) as { limit?: unknown }
     return typeof parsed.limit === 'number' && Number.isFinite(parsed.limit) && parsed.limit > 0
       ? Math.floor(parsed.limit)
-      : 50
+      : 20
   } catch {
-    return 50
+    return 20
   }
+}
+
+function mongoCollectionOptions(
+  connection: ConnectionProfile | undefined,
+  explorerItems: Array<{ kind: string; label: string }>,
+) {
+  if (connection?.engine !== 'mongodb') {
+    return []
+  }
+
+  const explorerCollections = explorerItems
+    .filter((node) => node.kind === 'collection')
+    .map((node) => node.label)
+
+  return Array.from(new Set([...explorerCollections, 'products', 'inventory', 'orders']))
 }
 
 function defaultCapabilities(): ExecutionCapabilities {

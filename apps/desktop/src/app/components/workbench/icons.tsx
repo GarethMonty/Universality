@@ -11,6 +11,7 @@ import {
   ChevronDown,
   ChevronRight,
   CircleStop,
+  Clock,
   Columns3,
   Copy,
   Database,
@@ -87,6 +88,7 @@ export const CopyIcon = adapt(Copy)
 export const DownloadIcon = adapt(Download)
 export const SaveIcon = adapt(Save)
 export const HistoryIcon = adapt(History)
+export const ClockIcon = adapt(Clock)
 export const ColorIcon = adapt(Palette)
 export const MoreIcon = adapt(MoreVertical)
 export const TrashIcon = adapt(Trash2)

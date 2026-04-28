@@ -56,6 +56,8 @@ export function DataGridView({ columns, rows }: DataGridViewProps) {
     })
   }, [filter, rows, sort])
 
+  // TanStack Virtual intentionally returns imperative helpers; keep this component un-memoized.
+  // eslint-disable-next-line react-hooks/incompatible-library
   const virtualizer = useVirtualizer({
     count: visibleRows.length,
     getScrollElement: () => parentRef.current,

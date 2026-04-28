@@ -13,13 +13,10 @@ import type {
   ResultPayload,
 } from '@universality/shared-types'
 import type { WorkbenchMessage } from '../../state/app-state'
-import {
-  ChevronDownIcon,
-  ChevronRightIcon,
-  CloseIcon,
-  HistoryIcon,
-  WarningIcon,
-} from './icons'
+import { DetailsView } from './bottom-panel/DetailsView'
+import { HistoryView } from './bottom-panel/HistoryView'
+import { MessagesView } from './bottom-panel/MessagesView'
+import { ChevronDownIcon, ChevronRightIcon, CloseIcon } from './icons'
 import { ResultsView } from './results/ResultsView'
 
 const MIN_BOTTOM_PANEL_HEIGHT = 120
@@ -139,7 +136,7 @@ export function BottomPanel({
 
       <div className="bottom-panel-header">
         <div className="bottom-panel-tabs" role="tablist" aria-label="Bottom panel tabs">
-          {(['results', 'messages', 'details'] as const).map((item) => {
+          {(['results', 'messages', 'history', 'details'] as const).map((item) => {
             const disabled = !hasQueryContext && item !== 'messages'
 
             return (
@@ -219,6 +216,13 @@ export function BottomPanel({
           />
         ) : null}
 
+        {safePanelTab === 'history' && activeTab ? (
+          <HistoryView
+            activeTab={activeTab}
+            onRestoreHistory={onRestoreHistory}
+          />
+        ) : null}
+
         {safePanelTab === 'details' && activeTab && activeConnection && activeEnvironment ? (
           <DetailsView
             activeConnection={activeConnection}
@@ -226,207 +230,10 @@ export function BottomPanel({
             activeTab={activeTab}
             diagnostics={diagnostics}
             explorerInspection={explorerInspection}
-            onRestoreHistory={onRestoreHistory}
           />
         ) : null}
       </div>
     </section>
-  )
-}
-
-function MessagesView({
-  lastExecution,
-  lastExecutionRequest,
-  messages,
-  workbenchMessages,
-  onConfirmExecution,
-  onDismissWorkbenchMessage,
-  onClearWorkbenchMessages,
-}: {
-  lastExecution?: ExecutionResponse
-  lastExecutionRequest?: ExecutionRequest
-  messages: string[]
-  workbenchMessages: WorkbenchMessage[]
-  onConfirmExecution(guardrailId: string, mode: ExecutionRequest['mode']): void
-  onDismissWorkbenchMessage(id: string): void
-  onClearWorkbenchMessages(): void
-}) {
-  const confirmationGuardrailId =
-    lastExecution?.guardrail.status === 'confirm' ? lastExecution.guardrail.id : undefined
-  const hasMessages = workbenchMessages.length > 0 || messages.length > 0
-
-  return (
-    <div className="panel-body-frame">
-      <div className="panel-title-row">
-        <div>
-          <strong>Messages</strong>
-          <p>Command errors, runtime notices, and query diagnostics.</p>
-        </div>
-        {workbenchMessages.length > 0 ? (
-          <button
-            type="button"
-            className="drawer-button"
-            aria-label="Clear all workbench messages"
-            title="Clear all session-level workbench messages."
-            onClick={onClearWorkbenchMessages}
-          >
-            Clear all
-          </button>
-        ) : null}
-      </div>
-
-      {!hasMessages && !confirmationGuardrailId ? (
-        <div className="messages-empty">
-          <WarningIcon className="empty-icon" />
-          <p>No messages.</p>
-        </div>
-      ) : null}
-
-      {workbenchMessages.length > 0 ? (
-        <ul className="workbench-message-list" aria-label="Workbench Messages">
-          {workbenchMessages.map((message) => (
-            <li
-              key={message.id}
-              className={`workbench-message-row is-${message.severity}`}
-              title={message.details ?? message.message}
-            >
-              <WarningIcon className="panel-inline-icon" />
-              <div className="workbench-message-content">
-                <strong>{message.message}</strong>
-                <span>
-                  {message.source} / {formatMessageTime(message.createdAt)}
-                </span>
-                {message.details ? <p>{message.details}</p> : null}
-              </div>
-              <button
-                type="button"
-                className="bottom-panel-icon-button"
-                aria-label={`Clear message ${message.message}`}
-                title="Clear this message from the session log."
-                onClick={() => onDismissWorkbenchMessage(message.id)}
-              >
-                <CloseIcon className="panel-inline-icon" />
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-
-      {messages.length > 0 ? (
-        <ul className="messages-list">
-          {messages.map((message, index) => (
-            <li key={`${message}-${index}`}>{message}</li>
-          ))}
-        </ul>
-      ) : null}
-
-      {confirmationGuardrailId ? (
-        <div className="panel-confirmation">
-          <div>
-            <strong>Confirmation required</strong>
-            <p>{lastExecution?.guardrail.reasons.join(' ')}</p>
-            {lastExecution?.guardrail.requiredConfirmationText ? (
-              <code>{lastExecution.guardrail.requiredConfirmationText}</code>
-            ) : null}
-          </div>
-          <button
-            type="button"
-            className="drawer-button drawer-button--primary"
-            onClick={() =>
-              onConfirmExecution(
-                confirmationGuardrailId,
-                lastExecutionRequest?.mode ?? 'full',
-              )
-            }
-          >
-            Confirm and run
-          </button>
-        </div>
-      ) : null}
-    </div>
-  )
-}
-
-function DetailsView({
-  activeConnection,
-  activeEnvironment,
-  activeTab,
-  diagnostics,
-  explorerInspection,
-  onRestoreHistory,
-}: {
-  activeConnection: ConnectionProfile
-  activeEnvironment: EnvironmentProfile
-  activeTab: QueryTabState
-  diagnostics?: DiagnosticsReport
-  explorerInspection?: ExplorerInspectResponse
-  onRestoreHistory(queryText: string): void
-}) {
-  return (
-    <div className="panel-body-frame">
-      <div className="panel-title-row">
-        <div>
-          <strong>Details</strong>
-        </div>
-      </div>
-
-      <div className="details-grid">
-        <DetailRow label="Connection" value={activeConnection.name} />
-        <DetailRow label="Environment" value={activeEnvironment.label} />
-        <DetailRow label="Database" value={activeConnection.database ?? 'n/a'} />
-        <DetailRow label="Editor" value={activeTab.editorLabel} />
-        <DetailRow label="Last Run" value={activeTab.lastRunAt ?? 'Never'} />
-        <DetailRow label="Runtime" value={diagnostics?.runtime ?? 'desktop'} />
-      </div>
-
-      <div className="details-section">
-        <strong>Guardrails</strong>
-        <ul className="messages-list">
-          {(activeTab.result?.notices.map((notice) => notice.message) ??
-            ['Guardrail decisions will appear after query execution.']).map((message) => (
-            <li key={message}>{message}</li>
-          ))}
-        </ul>
-      </div>
-
-      <div className="details-section">
-        <strong>Inspection</strong>
-        <p>{explorerInspection?.summary ?? 'No object selected.'}</p>
-      </div>
-
-      <div className="details-section">
-        <strong>Query History</strong>
-        {activeTab.history.length === 0 ? (
-          <p>No query history for this tab.</p>
-        ) : (
-          <ul className="history-list">
-            {activeTab.history.slice(0, 8).map((entry) => (
-              <li key={entry.id}>
-                <button
-                  type="button"
-                  className="history-row"
-                  aria-label={`Restore history query ${entry.status}`}
-                  onClick={() => onRestoreHistory(entry.queryText)}
-                >
-                  <HistoryIcon className="panel-inline-icon" />
-                  <span>{entry.status}</span>
-                  <code>{entry.queryText}</code>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function DetailRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="detail-row">
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
   )
 }
 
@@ -440,20 +247,6 @@ function buildMessages(
     ...(result?.notices.map((notice) => notice.message) ?? []),
     ...(lastExecution?.diagnostics ?? []),
   ]
-}
-
-function formatMessageTime(value: string) {
-  const date = new Date(value)
-
-  if (Number.isNaN(date.getTime())) {
-    return 'now'
-  }
-
-  return date.toLocaleTimeString([], {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  })
 }
 
 function ChevronUpPseudo() {

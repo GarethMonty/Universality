@@ -36,7 +36,7 @@ export type SidebarPane =
   | 'saved-work'
   | 'search'
 
-export type BottomPanelTab = 'results' | 'messages' | 'details'
+export type BottomPanelTab = 'results' | 'messages' | 'history' | 'details'
 
 export type RightDrawerView =
   | 'none'

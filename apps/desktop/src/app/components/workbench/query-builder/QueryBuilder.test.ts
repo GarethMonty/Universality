@@ -8,7 +8,7 @@ describe('Mongo query builder', () => {
     expect(query).toEqual({
       collection: 'products',
       filter: {},
-      limit: 50,
+      limit: 20,
     })
   })
 
@@ -115,5 +115,100 @@ describe('Mongo query builder', () => {
 
     expect(query.filter.metadata).toEqual({ source: 'fixture' })
     expect(query.projection).toEqual({ secret: 0 })
+  })
+
+  it('supports OR filter groups and disabled filters', () => {
+    const query = JSON.parse(
+      buildMongoFindQueryText({
+        kind: 'mongo-find',
+        collection: 'orders',
+        filterGroups: [{ id: 'group-status', label: 'Status', logic: 'or' }],
+        filters: [
+          {
+            id: 'filter-open',
+            enabled: true,
+            field: 'status',
+            groupId: 'group-status',
+            operator: 'eq',
+            value: 'open',
+            valueType: 'string',
+          },
+          {
+            id: 'filter-paused',
+            enabled: true,
+            field: 'status',
+            groupId: 'group-status',
+            operator: 'eq',
+            value: 'paused',
+            valueType: 'string',
+          },
+          {
+            id: 'filter-archived',
+            enabled: false,
+            field: 'status',
+            groupId: 'group-status',
+            operator: 'eq',
+            value: 'archived',
+            valueType: 'string',
+          },
+        ],
+        projectionMode: 'all',
+        projectionFields: [],
+        sort: [],
+      }),
+    )
+
+    expect(query.filter).toEqual({
+      $or: [{ status: 'open' }, { status: 'paused' }],
+    })
+  })
+
+  it('combines separate filter groups with AND', () => {
+    const query = JSON.parse(
+      buildMongoFindQueryText({
+        kind: 'mongo-find',
+        collection: 'orders',
+        filterGroups: [
+          { id: 'group-status', label: 'Status', logic: 'or' },
+          { id: 'group-total', label: 'Total', logic: 'and' },
+        ],
+        filters: [
+          {
+            id: 'filter-open',
+            field: 'status',
+            groupId: 'group-status',
+            operator: 'eq',
+            value: 'open',
+            valueType: 'string',
+          },
+          {
+            id: 'filter-paused',
+            field: 'status',
+            groupId: 'group-status',
+            operator: 'eq',
+            value: 'paused',
+            valueType: 'string',
+          },
+          {
+            id: 'filter-total',
+            field: 'total',
+            groupId: 'group-total',
+            operator: 'gte',
+            value: '100',
+            valueType: 'number',
+          },
+        ],
+        projectionMode: 'all',
+        projectionFields: [],
+        sort: [],
+      }),
+    )
+
+    expect(query.filter).toEqual({
+      $and: [
+        { $or: [{ status: 'open' }, { status: 'paused' }] },
+        { total: { $gte: 100 } },
+      ],
+    })
   })
 })

@@ -1,30 +1,27 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { KeyboardEvent } from 'react'
 import type { ConnectionProfile } from '@universality/shared-types'
+import { ClockIcon } from '../icons'
+import { DocumentContextMenu } from './document-context-menu'
+import { DocumentGridRowView } from './DocumentGridRowView'
 import { documentResultBehaviorForConnection } from './datastore-result-behaviors'
-import { writeFieldDragData } from './field-drag'
+import { editablePermissions } from './document-edit-permissions'
+import {
+  buildRows,
+  collectExpandableRowIds,
+  deleteValueAtPath,
+  renameFieldAtPath,
+  setValueAtPath,
+  type DocumentGridRow,
+} from './document-grid-model'
 import { copyText } from './payload-export'
-
-type DocumentValueType = 'object' | 'array' | 'string' | 'number' | 'boolean' | 'null'
+import { formatDurationClock } from './result-runtime'
 
 interface DocumentResultsViewProps {
   connection?: ConnectionProfile
   documents: Array<Record<string, unknown>>
+  resultDurationMs?: number
   resultSummary?: string
-}
-
-interface DocumentGridRow {
-  id: string
-  depth: number
-  label: string
-  fieldPath: string
-  type: DocumentValueType
-  valueLabel: string
-  value: unknown
-  expandable: boolean
-  documentIndex: number
-  parentPath: Array<string | number>
-  path: Array<string | number>
+  totalDocumentCount?: number
 }
 
 interface ContextMenuState {
@@ -33,17 +30,19 @@ interface ContextMenuState {
   row: DocumentGridRow
 }
 
+type DocumentEditCell = 'field' | 'type' | 'value'
+
 interface ActiveEditorState {
   rowId: string
-  cell: 'field' | 'type' | 'value'
+  cell: DocumentEditCell
 }
-
-const TYPE_OPTIONS: DocumentValueType[] = ['string', 'number', 'boolean', 'null', 'object', 'array']
 
 export function DocumentResultsView({
   connection,
   documents,
+  resultDurationMs,
   resultSummary,
+  totalDocumentCount,
 }: DocumentResultsViewProps) {
   const behavior = documentResultBehaviorForConnection(connection)
   const [draftState, setDraftState] = useState(() => ({
@@ -60,6 +59,10 @@ export function DocumentResultsView({
   const rows = useMemo(
     () => buildRows(draftDocuments, expandedRows),
     [draftDocuments, expandedRows],
+  )
+  const documentCountLabel = documentCountText(
+    resultSummary,
+    totalDocumentCount ?? draftDocuments.length,
   )
 
   useEffect(() => {
@@ -99,7 +102,7 @@ export function DocumentResultsView({
     })
   }
 
-  const beginEditing = (row: DocumentGridRow, cell: ActiveEditorState['cell']) => {
+  const beginEditing = (row: DocumentGridRow, cell: DocumentEditCell) => {
     const permissions = editablePermissions(row, behavior)
 
     if (
@@ -117,13 +120,6 @@ export function DocumentResultsView({
   }
 
   const stopEditing = () => setActiveEditor(undefined)
-
-  const handleEditorKeyDown = (event: KeyboardEvent<HTMLInputElement | HTMLSelectElement>) => {
-    if (event.key === 'Enter' || event.key === 'Escape') {
-      event.preventDefault()
-      stopEditing()
-    }
-  }
 
   const toggleRow = (rowId: string) => {
     setExpandedRows((current) => {
@@ -232,134 +228,24 @@ export function DocumentResultsView({
             value
           </div>
         </div>
-        {rows.map((row) => {
-          const expanded = expandedRows.has(row.id)
-          const editingField =
-            effectiveActiveEditor?.rowId === row.id && effectiveActiveEditor.cell === 'field'
-          const editingType =
-            effectiveActiveEditor?.rowId === row.id && effectiveActiveEditor.cell === 'type'
-          const editingValue =
-            effectiveActiveEditor?.rowId === row.id && effectiveActiveEditor.cell === 'value'
-
-          return (
-            <div
-              key={row.id}
-              className="document-data-grid-row"
-              role="row"
-              aria-level={row.depth + 1}
-              aria-expanded={row.expandable ? expanded : undefined}
-              onContextMenu={(event) => {
-                event.preventDefault()
-                setContextMenu({ x: event.clientX, y: event.clientY, row })
-              }}
-            >
-              <div
-                className="document-data-grid-cell document-data-grid-cell--id"
-                role="gridcell"
-                style={{ paddingLeft: 8 + row.depth * 18 }}
-                title={row.fieldPath ? `Drag ${row.fieldPath} to the query builder` : row.label}
-              >
-                {row.expandable ? (
-                  <button
-                    type="button"
-                    className="document-data-grid-expander"
-                    aria-label={`${expanded ? 'Collapse' : 'Expand'} ${row.label}`}
-                    onClick={() => toggleRow(row.id)}
-                  >
-                    {expanded ? 'v' : '>'}
-                  </button>
-                ) : (
-                  <span className="document-data-grid-spacer" />
-                )}
-                {editingField ? (
-                  <input
-                    className="document-data-grid-field-input"
-                    aria-label={`Rename field ${row.label}`}
-                    value={row.label}
-                    autoFocus
-                    onChange={(event) => renameRowField(row, event.target.value)}
-                    onBlur={stopEditing}
-                    onClick={(event) => event.stopPropagation()}
-                    onFocus={(event) => event.currentTarget.select()}
-                    onKeyDown={handleEditorKeyDown}
-                  />
-                ) : (
-                  <span
-                    className="document-data-grid-field"
-                    draggable={Boolean(row.fieldPath)}
-                    title={row.fieldPath ? `Drag ${row.fieldPath} to the query builder` : row.label}
-                    onDragStart={(event) => writeFieldDragData(event, row.fieldPath)}
-                    onDoubleClick={() => beginEditing(row, 'field')}
-                  >
-                    {row.label}
-                  </span>
-                )}
-              </div>
-              <div
-                className="document-data-grid-cell document-data-grid-cell--type"
-                role="gridcell"
-              >
-                {editingType ? (
-                  <select
-                    className={`document-type-badge is-${row.type}`}
-                    aria-label={`Change type ${row.fieldPath}`}
-                    value={row.type}
-                    autoFocus
-                    onBlur={stopEditing}
-                    onChange={(event) => {
-                      updateRowValue(row, coerceValue(row.value, event.target.value as DocumentValueType))
-                      stopEditing()
-                    }}
-                    onKeyDown={handleEditorKeyDown}
-                  >
-                    {TYPE_OPTIONS.map((type) => (
-                      <option key={type} value={type}>
-                        {type}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <span
-                    className={`document-type-badge is-${row.type}`}
-                    onDoubleClick={() => beginEditing(row, 'type')}
-                  >
-                    {row.type}
-                  </span>
-                )}
-              </div>
-              <div
-                className="document-data-grid-cell document-data-grid-cell--value"
-                role="gridcell"
-              >
-                {editingValue ? (
-                  <input
-                    className="document-data-grid-value-input"
-                    aria-label={`Edit value ${row.fieldPath}`}
-                    value={editableValue(row.value)}
-                    autoFocus
-                    onChange={(event) => updateRowValue(row, parseEditedValue(event.target.value, row.type))}
-                    onBlur={stopEditing}
-                    onFocus={(event) => event.currentTarget.select()}
-                    onKeyDown={handleEditorKeyDown}
-                  />
-                ) : (
-                  <button
-                    type="button"
-                    className="document-data-grid-value"
-                    title="Copy value"
-                    onClick={() => scheduleCopyValue(row.value)}
-                    onDoubleClick={() => {
-                      cancelScheduledCopy()
-                      beginEditing(row, 'value')
-                    }}
-                  >
-                    {row.valueLabel}
-                  </button>
-                )}
-              </div>
-            </div>
-          )
-        })}
+        {rows.map((row) => (
+          <DocumentGridRowView
+            key={row.id}
+            row={row}
+            expanded={expandedRows.has(row.id)}
+            editingCell={
+              effectiveActiveEditor?.rowId === row.id ? effectiveActiveEditor.cell : undefined
+            }
+            onBeginEditing={beginEditing}
+            onCancelScheduledCopy={cancelScheduledCopy}
+            onContextMenu={(selectedRow, x, y) => setContextMenu({ x, y, row: selectedRow })}
+            onRenameField={renameRowField}
+            onScheduleCopyValue={scheduleCopyValue}
+            onStopEditing={stopEditing}
+            onToggleRow={toggleRow}
+            onUpdateValue={updateRowValue}
+          />
+        ))}
       </div>
       <div className="document-data-grid-footer">
         <div className="document-data-grid-footer-left">
@@ -369,12 +255,17 @@ export function DocumentResultsView({
           <button type="button" className="drawer-button" onClick={collapseAll}>
             Collapse All
           </button>
-          <span>
-            {rows.length} visible row(s) / {behavior.editModeLabel}
-            {copyMessage ? ` / ${copyMessage}` : ''}
-          </span>
+          {copyMessage ? <span>{copyMessage}</span> : null}
         </div>
-        <strong>{resultSummary ?? `${draftDocuments.length} document(s)`}</strong>
+        <div className="document-data-grid-footer-right">
+          <strong>{documentCountLabel}</strong>
+          {resultDurationMs !== undefined ? (
+            <span className="result-runtime-label" title="Query runtime">
+              <ClockIcon className="panel-inline-icon" />
+              {formatDurationClock(resultDurationMs)}
+            </span>
+          ) : null}
+        </div>
       </div>
       {contextMenu ? (
         <DocumentContextMenu
@@ -399,416 +290,7 @@ export function DocumentResultsView({
   )
 }
 
-function DocumentContextMenu({
-  behavior,
-  onClose,
-  onCopyDocument,
-  onCopyPath,
-  onCopyValue,
-  onDelete,
-  onEditValue,
-  onRename,
-  row,
-  x,
-  y,
-}: {
-  behavior: ReturnType<typeof documentResultBehaviorForConnection>
-  onClose(): void
-  onCopyDocument(): void
-  onCopyPath(): void
-  onCopyValue(): void
-  onDelete(): void
-  onEditValue(): void
-  onRename(): void
-  row: DocumentGridRow
-  x: number
-  y: number
-}) {
-  const permissions = editablePermissions(row, behavior)
-
-  return (
-    <div
-      className="document-context-menu"
-      role="menu"
-      style={{ left: x, top: y }}
-      onPointerDown={(event) => event.stopPropagation()}
-    >
-      {behavior.contextActions.copyPath ? (
-        <button type="button" role="menuitem" onClick={() => { onCopyPath(); onClose() }}>
-          Copy Path
-        </button>
-      ) : null}
-      {behavior.contextActions.copyValue ? (
-        <button type="button" role="menuitem" onClick={() => { onCopyValue(); onClose() }}>
-          Copy Value
-        </button>
-      ) : null}
-      {behavior.contextActions.copyDocument ? (
-        <button type="button" role="menuitem" onClick={() => { onCopyDocument(); onClose() }}>
-          Copy Document JSON
-        </button>
-      ) : null}
-      {behavior.contextActions.renameField && permissions.canEditField ? (
-        <button type="button" role="menuitem" onClick={() => { onRename(); onClose() }}>
-          Rename Field
-        </button>
-      ) : null}
-      {behavior.contextActions.editValue && permissions.canEditLeaf ? (
-        <button type="button" role="menuitem" onClick={() => { onEditValue(); onClose() }}>
-          Edit Value
-        </button>
-      ) : null}
-      {behavior.contextActions.changeType && permissions.canChangeType ? (
-        <span role="menuitem" className="document-context-menu-note">
-          Double-click type to change
-        </span>
-      ) : null}
-      {behavior.contextActions.deleteField && permissions.canDeleteField ? (
-        <button type="button" role="menuitem" onClick={() => { onDelete(); onClose() }}>
-          Delete Field
-        </button>
-      ) : null}
-    </div>
-  )
-}
-
-function editablePermissions(
-  row: DocumentGridRow,
-  behavior: ReturnType<typeof documentResultBehaviorForConnection>,
-) {
-  const isProtectedField = row.fieldPath === '_id'
-  const isArrayIndex = typeof row.path.at(-1) === 'number'
-  const canEditField =
-    behavior.canEditDocuments &&
-    behavior.canRenameFields &&
-    row.path.length > 0 &&
-    !isProtectedField &&
-    !isArrayIndex
-  const canEditLeaf =
-    behavior.canEditDocuments && row.path.length > 0 && !isProtectedField && !row.expandable
-  const canChangeType = canEditLeaf && behavior.canChangeTypes
-  const canDeleteField =
-    behavior.canEditDocuments && row.path.length > 0 && !isProtectedField
-
-  return { canChangeType, canDeleteField, canEditField, canEditLeaf }
-}
-
-function buildRows(documents: Array<Record<string, unknown>>, expandedRows: Set<string>) {
-  const rows: DocumentGridRow[] = []
-
-  documents.forEach((document, index) => {
-    const rootId = `document-${index}`
-    const rootLabel = documentRootLabel(document, index)
-    rows.push(rowForValue(rootId, index, 0, rootLabel, '_id', document, [], []))
-
-    if (expandedRows.has(rootId)) {
-      rows.push(...childRows(document, index, rootId, 1, [], expandedRows))
-    }
-  })
-
-  return rows
-}
-
-function childRows(
-  value: unknown,
-  documentIndex: number,
-  parentId: string,
-  depth: number,
-  parentPath: Array<string | number>,
-  expandedRows: Set<string>,
-): DocumentGridRow[] {
-  if (!isExpandableValue(value)) {
-    return []
-  }
-
-  const entries = valueEntries(value)
-
-  return entries.flatMap(([key, childValue]) => {
-    const pathKey = key.startsWith('[') ? Number(key.slice(1, -1)) : key
-    const path = [...parentPath, pathKey]
-    const fieldPath = pathToFieldPath(path)
-    const id = `${parentId}.${key}`
-    const row = rowForValue(id, documentIndex, depth, key, fieldPath, childValue, parentPath, path)
-
-    if (!expandedRows.has(id)) {
-      return [row]
-    }
-
-    return [row, ...childRows(childValue, documentIndex, id, depth + 1, path, expandedRows)]
-  })
-}
-
-function collectExpandableRowIds(documents: Array<Record<string, unknown>>): string[] {
-  const ids: string[] = []
-
-  documents.forEach((document, index) => {
-    const rootId = `document-${index}`
-    ids.push(rootId)
-    collectExpandableChildren(document, rootId, ids)
-  })
-
-  return ids
-}
-
-function collectExpandableChildren(value: unknown, parentId: string, ids: string[]): void {
-  if (!isExpandableValue(value)) {
-    return
-  }
-
-  const entries = valueEntries(value)
-
-  entries.forEach(([key, childValue]) => {
-    if (!isExpandableValue(childValue)) {
-      return
-    }
-
-    const id = `${parentId}.${key}`
-    ids.push(id)
-    collectExpandableChildren(childValue, id, ids)
-  })
-}
-
-function rowForValue(
-  id: string,
-  documentIndex: number,
-  depth: number,
-  label: string,
-  fieldPath: string,
-  value: unknown,
-  parentPath: Array<string | number>,
-  path: Array<string | number>,
-): DocumentGridRow {
-  const type = valueType(value)
-
-  return {
-    id,
-    depth,
-    documentIndex,
-    label,
-    fieldPath,
-    parentPath,
-    path,
-    type,
-    value,
-    valueLabel: compactValue(value),
-    expandable: isExpandableValue(value),
-  }
-}
-
-function documentRootLabel(document: Record<string, unknown>, index: number) {
-  if (Object.hasOwn(document, '_id')) {
-    return rootIdentityLabel(document._id)
-  }
-
-  const id = document.id ?? document.key
-
-  if (typeof id === 'string' || typeof id === 'number') {
-    return String(id)
-  }
-
-  const firstKey = Object.keys(document)[0]
-  return firstKey ? `${firstKey}: ${compactValue(document[firstKey])}` : `document ${index + 1}`
-}
-
-function rootIdentityLabel(value: unknown) {
-  if (typeof value === 'string') {
-    return value
-  }
-
-  if (value === null || value === undefined) {
-    return String(value)
-  }
-
-  if (typeof value === 'object') {
-    try {
-      return JSON.stringify(value)
-    } catch {
-      return String(value)
-    }
-  }
-
-  return String(value)
-}
-
-function pathToFieldPath(path: Array<string | number>) {
-  return path
-    .map((item) => (typeof item === 'number' ? `[${item}]` : item))
-    .reduce((current, item) => {
-      if (item.startsWith('[')) {
-        return `${current}${item}`
-      }
-
-      return current ? `${current}.${item}` : item
-    }, '')
-}
-
-function isExpandableValue(value: unknown): value is Array<unknown> | Record<string, unknown> {
-  return typeof value === 'object' && value !== null && Object.keys(value).length > 0
-}
-
-function valueEntries(value: Array<unknown> | Record<string, unknown>): Array<[string, unknown]> {
-  return Array.isArray(value)
-    ? value.map((item, index) => [`[${index}]`, item])
-    : Object.entries(value)
-}
-
-function valueType(value: unknown): DocumentValueType {
-  if (value === null) {
-    return 'null'
-  }
-
-  if (Array.isArray(value)) {
-    return 'array'
-  }
-
-  if (typeof value === 'object') {
-    return 'object'
-  }
-
-  return typeof value as DocumentValueType
-}
-
-function compactValue(value: unknown) {
-  if (value === null) {
-    return 'null'
-  }
-
-  if (Array.isArray(value)) {
-    return `[${value.length} item(s)]`
-  }
-
-  if (typeof value === 'object') {
-    return `{${Object.keys(value as Record<string, unknown>).length} field(s)}`
-  }
-
-  if (typeof value === 'string') {
-    return value
-  }
-
-  return String(value)
-}
-
-function editableValue(value: unknown) {
-  if (value === null) {
-    return ''
-  }
-
-  if (typeof value === 'string') {
-    return value
-  }
-
-  return JSON.stringify(value)
-}
-
-function parseEditedValue(value: string, type: DocumentValueType) {
-  if (type === 'number') {
-    const parsed = Number(value)
-    return Number.isFinite(parsed) ? parsed : 0
-  }
-
-  if (type === 'boolean') {
-    return value.toLowerCase() === 'true'
-  }
-
-  if (type === 'null') {
-    return null
-  }
-
-  if (type === 'object' || type === 'array') {
-    try {
-      return JSON.parse(value)
-    } catch {
-      return type === 'array' ? [] : {}
-    }
-  }
-
-  return value
-}
-
-function coerceValue(value: unknown, type: DocumentValueType) {
-  if (type === 'string') {
-    return value === null ? '' : String(value)
-  }
-
-  if (type === 'number') {
-    const parsed = Number(value)
-    return Number.isFinite(parsed) ? parsed : 0
-  }
-
-  if (type === 'boolean') {
-    return Boolean(value)
-  }
-
-  if (type === 'null') {
-    return null
-  }
-
-  if (type === 'array') {
-    return Array.isArray(value) ? value : []
-  }
-
-  return typeof value === 'object' && value !== null && !Array.isArray(value) ? value : {}
-}
-
-function setValueAtPath(
-  document: Record<string, unknown>,
-  path: Array<string | number>,
-  nextValue: unknown,
-) {
-  const clone = structuredClone(document) as Record<string, unknown>
-  const parent = valueAtPath(clone, path.slice(0, -1))
-  const key = path.at(-1)
-
-  if (parent && key !== undefined) {
-    ;(parent as Record<string, unknown> | Array<unknown>)[key as never] = nextValue as never
-  }
-
-  return clone
-}
-
-function renameFieldAtPath(
-  document: Record<string, unknown>,
-  parentPath: Array<string | number>,
-  oldKey: string | number | undefined,
-  nextName: string,
-) {
-  const clone = structuredClone(document) as Record<string, unknown>
-  const parent = valueAtPath(clone, parentPath)
-
-  if (!parent || oldKey === undefined || Array.isArray(parent)) {
-    return clone
-  }
-
-  const record = parent as Record<string, unknown>
-  record[nextName] = record[String(oldKey)]
-  delete record[String(oldKey)]
-  return clone
-}
-
-function deleteValueAtPath(document: Record<string, unknown>, path: Array<string | number>) {
-  const clone = structuredClone(document) as Record<string, unknown>
-  const parent = valueAtPath(clone, path.slice(0, -1))
-  const key = path.at(-1)
-
-  if (!parent || key === undefined) {
-    return clone
-  }
-
-  if (Array.isArray(parent) && typeof key === 'number') {
-    parent.splice(key, 1)
-  } else {
-    delete (parent as Record<string, unknown>)[String(key)]
-  }
-
-  return clone
-}
-
-function valueAtPath(value: unknown, path: Array<string | number>) {
-  return path.reduce<unknown>((current, key) => {
-    if (current === null || current === undefined) {
-      return undefined
-    }
-
-    return (current as Record<string, unknown> | Array<unknown>)[key as never]
-  }, value)
+function documentCountText(summary: string | undefined, fallbackCount: number) {
+  const count = summary?.match(/^\s*(\d+)/)?.[1] ?? String(fallbackCount)
+  return `${count} documents(s)`
 }

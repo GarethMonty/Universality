@@ -89,10 +89,18 @@ export type MongoBuilderValueType = 'string' | 'number' | 'boolean' | 'null' | '
 
 export interface MongoFindFilterRow {
   id: string
+  enabled?: boolean
   field: string
+  groupId?: string
   operator: MongoFilterOperator
   value: string
   valueType: MongoBuilderValueType
+}
+
+export interface MongoFindFilterGroup {
+  id: string
+  label: string
+  logic: 'and' | 'or'
 }
 
 export interface MongoFindProjectionField {
@@ -110,6 +118,7 @@ export interface MongoFindBuilderState {
   kind: 'mongo-find'
   collection: string
   filters: MongoFindFilterRow[]
+  filterGroups?: MongoFindFilterGroup[]
   projectionMode: 'all' | 'include' | 'exclude'
   projectionFields: MongoFindProjectionField[]
   sort: MongoFindSortRow[]

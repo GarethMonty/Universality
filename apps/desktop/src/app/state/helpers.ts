@@ -93,7 +93,7 @@ function isActivity(value: unknown): value is UiState['activeActivity'] {
 }
 
 function isBottomPanelTab(value: unknown): value is UiState['activeBottomPanelTab'] {
-  return value === 'results' || value === 'messages' || value === 'details'
+  return value === 'results' || value === 'messages' || value === 'history' || value === 'details'
 }
 
 function isRightDrawer(value: unknown): value is UiState['rightDrawer'] {
@@ -494,13 +494,13 @@ export function editorLabelForConnection(connection: ConnectionProfile) {
 export function defaultQueryTextForConnection(connection: ConnectionProfile) {
   switch (connection.engine) {
     case 'mongodb':
-      return '{\n  "collection": "products",\n  "filter": {},\n  "limit": 50\n}'
+      return '{\n  "collection": "products",\n  "filter": {},\n  "limit": 20\n}'
     case 'dynamodb':
       return '{\n  "table": "Orders",\n  "keyCondition": "pk = :pk",\n  "values": { ":pk": "CUSTOMER#123" },\n  "limit": 25\n}'
     case 'cosmosdb':
       return 'select top 50 * from c'
     case 'litedb':
-      return '{\n  "collection": "products",\n  "filter": {},\n  "limit": 50\n}'
+      return '{\n  "collection": "products",\n  "filter": {},\n  "limit": 20\n}'
     case 'redis':
     case 'valkey':
       return 'SCAN 0 MATCH session:* COUNT 25'

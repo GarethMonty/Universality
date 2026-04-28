@@ -1,6 +1,4 @@
 import type {
-  ConnectionProfile,
-  EnvironmentProfile,
   ExecutionCapabilities,
 } from '@universality/shared-types'
 import {
@@ -17,10 +15,6 @@ import {
 type QueryWindowMode = 'both' | 'builder' | 'raw'
 
 interface EditorToolbarProps {
-  connections: ConnectionProfile[]
-  environments: EnvironmentProfile[]
-  activeConnection: ConnectionProfile
-  activeEnvironment: EnvironmentProfile
   executionStatus: 'idle' | 'loading' | 'ready'
   capabilities: ExecutionCapabilities
   canCancelExecution: boolean
@@ -28,8 +22,6 @@ interface EditorToolbarProps {
   onExecute(): void
   onExplain(): void
   onCancel(): void
-  onSelectConnection(connectionId: string): void
-  onSelectEnvironment(environmentId: string): void
   onOpenConnectionDrawer(): void
   onToggleBottomPanel(): void
   canToggleBuilderView: boolean
@@ -38,10 +30,6 @@ interface EditorToolbarProps {
 }
 
 export function EditorToolbar({
-  connections,
-  environments,
-  activeConnection,
-  activeEnvironment,
   executionStatus,
   capabilities,
   canCancelExecution,
@@ -49,8 +37,6 @@ export function EditorToolbar({
   onExecute,
   onExplain,
   onCancel,
-  onSelectConnection,
-  onSelectEnvironment,
   onOpenConnectionDrawer,
   onToggleBottomPanel,
   canToggleBuilderView,
@@ -154,38 +140,6 @@ export function EditorToolbar({
         >
           <SettingsIcon className="toolbar-icon" />
         </button>
-
-        <label className="toolbar-select">
-          <span className="sr-only">Active connection</span>
-          <select
-            value={activeConnection.id}
-            title="Select which saved connection this query tab should use."
-            onChange={(event) => onSelectConnection(event.target.value)}
-          >
-            {connections.map((connection) => (
-              <option key={connection.id} value={connection.id}>
-                {connection.name}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label
-          className={`toolbar-select toolbar-select--environment toolbar-environment--${activeEnvironment.risk}`}
-        >
-          <span className="sr-only">Active environment</span>
-          <select
-            value={activeEnvironment.id}
-            onChange={(event) => onSelectEnvironment(event.target.value)}
-            title={`Run this tab using the ${activeEnvironment.label} environment variables and guardrails.`}
-          >
-            {environments.map((environment) => (
-              <option key={environment.id} value={environment.id}>
-                {environment.label}
-              </option>
-            ))}
-          </select>
-        </label>
       </div>
 
       <button
