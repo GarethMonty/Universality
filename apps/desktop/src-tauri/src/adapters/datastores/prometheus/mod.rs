@@ -81,7 +81,7 @@ impl DatastoreAdapter for PrometheusAdapter {
             ok: false,
             supported: false,
             message: format!(
-                "Prometheus HTTP API does not support cancelling instant query execution {} from Universality.",
+                "Prometheus HTTP API does not support cancelling instant query execution {} from Datanaut.",
                 request.execution_id
             ),
         })

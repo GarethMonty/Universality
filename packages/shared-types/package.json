@@ -1,5 +1,5 @@
 {
-  "name": "@universality/shared-types",
+  "name": "@datanaut/shared-types",
   "private": true,
   "version": "0.1.0",
   "type": "module",

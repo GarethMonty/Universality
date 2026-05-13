@@ -4,7 +4,7 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "universality:rust:build",
+      "label": "datanaut:rust:build",
       "type": "shell",
       "command": "cargo",
       "args": [
@@ -18,7 +18,7 @@
       "problemMatcher": []
     },
     {
-      "label": "universality:fixtures:up:core",
+      "label": "datanaut:fixtures:up:core",
       "type": "shell",
       "command": "npm",
       "args": [
@@ -31,14 +31,14 @@
       "problemMatcher": []
     },
     {
-      "label": "universality:fixtures:up:profile",
+      "label": "datanaut:fixtures:up:profile",
       "type": "shell",
       "command": "npm",
       "args": [
         "run",
         "fixtures:up:profile",
         "--",
-        "${input:universalityFixtureProfile}"
+        "${input:datanautFixtureProfile}"
       ],
       "options": {
         "cwd": "${workspaceFolder}"
@@ -46,7 +46,7 @@
       "problemMatcher": []
     },
     {
-      "label": "universality:fixtures:up:all",
+      "label": "datanaut:fixtures:up:all",
       "type": "shell",
       "command": "npm",
       "args": [
@@ -59,7 +59,7 @@
       "problemMatcher": []
     },
     {
-      "label": "universality:fixtures:seed",
+      "label": "datanaut:fixtures:seed",
       "type": "shell",
       "command": "npm",
       "args": [
@@ -72,7 +72,7 @@
       "problemMatcher": []
     },
     {
-      "label": "universality:fixtures:seed:all",
+      "label": "datanaut:fixtures:seed:all",
       "type": "shell",
       "command": "npm",
       "args": [
@@ -85,7 +85,7 @@
       "problemMatcher": []
     },
     {
-      "label": "universality:fixtures:down",
+      "label": "datanaut:fixtures:down",
       "type": "shell",
       "command": "npm",
       "args": [
@@ -98,34 +98,34 @@
       "problemMatcher": []
     },
     {
-      "label": "universality:fixtures:ready:core",
+      "label": "datanaut:fixtures:ready:core",
       "dependsOn": [
-        "universality:fixtures:up:core",
-        "universality:fixtures:seed"
+        "datanaut:fixtures:up:core",
+        "datanaut:fixtures:seed"
       ],
       "dependsOrder": "sequence",
       "problemMatcher": []
     },
     {
-      "label": "universality:fixtures:ready:profile",
+      "label": "datanaut:fixtures:ready:profile",
       "dependsOn": [
-        "universality:fixtures:up:profile",
-        "universality:fixtures:seed"
+        "datanaut:fixtures:up:profile",
+        "datanaut:fixtures:seed"
       ],
       "dependsOrder": "sequence",
       "problemMatcher": []
     },
     {
-      "label": "universality:fixtures:ready:all",
+      "label": "datanaut:fixtures:ready:all",
       "dependsOn": [
-        "universality:fixtures:up:all",
-        "universality:fixtures:seed:all"
+        "datanaut:fixtures:up:all",
+        "datanaut:fixtures:seed:all"
       ],
       "dependsOrder": "sequence",
       "problemMatcher": []
     },
     {
-      "label": "universality:ui:dev",
+      "label": "datanaut:ui:dev",
       "type": "shell",
       "command": "node",
       "args": [
@@ -137,66 +137,66 @@
       "problemMatcher": []
     },
     {
-      "label": "universality:dev",
+      "label": "datanaut:dev",
       "dependsOn": [
-        "universality:rust:build",
-        "universality:ui:dev"
+        "datanaut:rust:build",
+        "datanaut:ui:dev"
       ],
       "dependsOrder": "parallel"
     },
     {
-      "label": "universality:ui:fixtures:core",
+      "label": "datanaut:ui:fixtures:core",
       "dependsOn": [
-        "universality:ui:dev",
-        "universality:fixtures:ready:core"
+        "datanaut:ui:dev",
+        "datanaut:fixtures:ready:core"
       ],
       "dependsOrder": "parallel",
       "problemMatcher": []
     },
     {
-      "label": "universality:ui:fixtures:profile",
+      "label": "datanaut:ui:fixtures:profile",
       "dependsOn": [
-        "universality:ui:dev",
-        "universality:fixtures:ready:profile"
+        "datanaut:ui:dev",
+        "datanaut:fixtures:ready:profile"
       ],
       "dependsOrder": "parallel",
       "problemMatcher": []
     },
     {
-      "label": "universality:ui:fixtures:all",
+      "label": "datanaut:ui:fixtures:all",
       "dependsOn": [
-        "universality:ui:dev",
-        "universality:fixtures:ready:all"
+        "datanaut:ui:dev",
+        "datanaut:fixtures:ready:all"
       ],
       "dependsOrder": "parallel",
       "problemMatcher": []
     },
     {
-      "label": "universality:dev:fixtures:core",
+      "label": "datanaut:dev:fixtures:core",
       "dependsOn": [
-        "universality:rust:build",
-        "universality:ui:dev",
-        "universality:fixtures:ready:core"
+        "datanaut:rust:build",
+        "datanaut:ui:dev",
+        "datanaut:fixtures:ready:core"
       ],
       "dependsOrder": "parallel",
       "problemMatcher": []
     },
     {
-      "label": "universality:dev:fixtures:profile",
+      "label": "datanaut:dev:fixtures:profile",
       "dependsOn": [
-        "universality:rust:build",
-        "universality:ui:dev",
-        "universality:fixtures:ready:profile"
+        "datanaut:rust:build",
+        "datanaut:ui:dev",
+        "datanaut:fixtures:ready:profile"
       ],
       "dependsOrder": "parallel",
       "problemMatcher": []
     },
     {
-      "label": "universality:dev:fixtures:all",
+      "label": "datanaut:dev:fixtures:all",
       "dependsOn": [
-        "universality:rust:build",
-        "universality:ui:dev",
-        "universality:fixtures:ready:all"
+        "datanaut:rust:build",
+        "datanaut:ui:dev",
+        "datanaut:fixtures:ready:all"
       ],
       "dependsOrder": "parallel",
       "problemMatcher": []
@@ -204,7 +204,7 @@
   ],
   "inputs": [
     {
-      "id": "universalityFixtureProfile",
+      "id": "datanautFixtureProfile",
       "type": "pickString",
       "description": "Fixture profile to start before debugging",
       "options": [

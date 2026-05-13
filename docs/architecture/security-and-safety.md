@@ -1,6 +1,6 @@
 # Security And Safety
 
-Universality is expected to handle live credentials and production systems, so security and safety need to be part of the architecture rather than later polish.
+Datanaut is expected to handle live credentials and production systems, so security and safety need to be part of the architecture rather than later polish.
 
 ## Secret handling
 

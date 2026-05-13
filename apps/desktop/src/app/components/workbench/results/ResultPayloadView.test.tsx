@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import type { ConnectionProfile } from '@universality/shared-types'
+import type { ConnectionProfile } from '@datanaut/shared-types'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { computeRenderedColumnWidths } from './data-grid-layout'
 import { FIELD_DRAG_MIME } from './field-drag'
@@ -358,11 +358,11 @@ function mongoConnection(): ConnectionProfile {
     readOnly: false,
     icon: 'mongodb',
     auth: {
-      username: 'universality',
+      username: 'datanaut',
       secretRef: {
         id: 'secret-mongo',
         provider: 'manual',
-        service: 'Universality',
+        service: 'Datanaut',
         account: 'conn-mongo',
         label: 'Mongo credential',
       },

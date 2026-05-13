@@ -509,7 +509,7 @@ mod tests {
     fn test_sqlite_path(name: &str) -> PathBuf {
         let unique = crate::app::runtime::generate_id(name);
         std::env::temp_dir()
-            .join("universality-local-db-tests")
+            .join("datanaut-local-db-tests")
             .join(format!("{unique}.sqlite"))
     }
 

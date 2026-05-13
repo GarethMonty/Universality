@@ -12,7 +12,7 @@ describe('resolveEnvironment', () => {
     const resolved = resolveEnvironment(snapshot.environments, 'env-prod')
 
     expect(resolved.variables.DB_HOST).toBe('analytics-prod.internal')
-    expect(resolved.variables.DB_NAME).toBe('universality_dev')
+    expect(resolved.variables.DB_NAME).toBe('datanaut_dev')
     expect(resolved.inheritedChain).toEqual(['Dev', 'Prod'])
   })
 })

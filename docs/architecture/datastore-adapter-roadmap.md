@@ -1,10 +1,10 @@
-# Universality Datastore Adapter Roadmap
+# Datanaut Datastore Adapter Roadmap
 
-This document is the durable implementation memory for Universality's datastore workbench. It captures the product plan, adapter architecture, feature backlog, safety model, and testing expectations so the roadmap does not live only in chat history.
+This document is the durable implementation memory for Datanaut's datastore workbench. It captures the product plan, adapter architecture, feature backlog, safety model, and testing expectations so the roadmap does not live only in chat history.
 
 ## North Star
 
-Universality should provide a capability-driven workbench for many datastore families without pretending every engine behaves like SQL. Each adapter should expose what the engine can safely support: connection validation, metadata exploration, query execution, normalized result rendering, permissions, diagnostics, operation planning, and guarded admin/destructive workflows.
+Datanaut should provide a capability-driven workbench for many datastore families without pretending every engine behaves like SQL. Each adapter should expose what the engine can safely support: connection validation, metadata exploration, query execution, normalized result rendering, permissions, diagnostics, operation planning, and guarded admin/destructive workflows.
 
 The product should prefer real engine protocols and SDKs over ORMs. ORMs can become an optional future context import feature, but they must not be a primary connection mechanism.
 
@@ -144,7 +144,7 @@ Adapters should expose a typed operation layer rather than one-off UI buttons.
 
 ## Guardrails
 
-Universality should be conservative by default:
+Datanaut should be conservative by default:
 
 - Read-only profiles block writes before execution.
 - Production/safe-mode profiles require explicit confirmation for DDL, DML, admin, backup/restore, import/export, and profiling that executes queries.

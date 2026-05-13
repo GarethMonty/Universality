@@ -1,4 +1,4 @@
-import type { ConnectionProfile } from '@universality/shared-types'
+import type { ConnectionProfile } from '@datanaut/shared-types'
 
 export interface DocumentResultBehavior {
   canEditDocuments: boolean

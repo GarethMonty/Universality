@@ -10,7 +10,7 @@ import type {
   ResultPayload,
   ScopedQueryTarget,
   WorkspaceSnapshot,
-} from '@universality/shared-types'
+} from '@datanaut/shared-types'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { ActivityBar } from './components/workbench/ActivityBar'
 import { BottomPanel } from './components/workbench/BottomPanel'
@@ -66,7 +66,7 @@ function DesktopWorkspace() {
     workbenchMessages,
     actions,
   } = useAppState()
-  const [exportPassphrase, setExportPassphrase] = useState('universality-desktop')
+  const [exportPassphrase, setExportPassphrase] = useState('datanaut-desktop')
   const [importPayload, setImportPayload] = useState('')
   const [commandQuery, setCommandQuery] = useState('')
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
@@ -382,7 +382,7 @@ function DesktopWorkspace() {
   if (status === 'booting' || !payload || !snapshot) {
     return (
       <BootSurface
-        title="Loading Universality workspace..."
+        title="Loading Datanaut workspace..."
         copy="Connections, environments, tabs, and workbench layout are being restored."
       />
     )
@@ -1792,10 +1792,10 @@ function WelcomeSurface({
   return (
     <section className="welcome-surface" aria-label="First run onboarding">
       <div className="welcome-panel">
-        <p className="sidebar-eyebrow">Universality Desktop</p>
+        <p className="sidebar-eyebrow">Datanaut Desktop</p>
         <h1>Connect to your first datastore.</h1>
         <p>
-          Start with a real connection. Universality will keep credentials in the
+          Start with a real connection. Datanaut will keep credentials in the
           desktop secret store and keep this workspace local to your machine.
         </p>
         <div className="welcome-actions">

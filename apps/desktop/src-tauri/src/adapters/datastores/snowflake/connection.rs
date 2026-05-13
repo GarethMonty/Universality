@@ -44,7 +44,7 @@ pub(super) async fn test_snowflake_connection(
             )
         },
         warnings: vec![
-            "Snowflake live calls require OAuth/programmatic access token credentials; Universality builds SQL API request, profile, and cost payloads without ORM credentials."
+            "Snowflake live calls require OAuth/programmatic access token credentials; Datanaut builds SQL API request, profile, and cost payloads without ORM credentials."
                 .into(),
         ],
         resolved_host: connection.host.clone(),
@@ -181,7 +181,7 @@ pub(super) fn snowflake_account(connection: &ResolvedConnectionProfile) -> Strin
     if !host.is_empty() && host != "127.0.0.1" && host != "localhost" {
         host.to_string()
     } else {
-        "universality-account".into()
+        "datanaut-account".into()
     }
 }
 
@@ -190,7 +190,7 @@ pub(super) fn snowflake_database(connection: &ResolvedConnectionProfile) -> Stri
         .database
         .as_deref()
         .filter(|value| !value.trim().is_empty())
-        .unwrap_or("UNIVERSALITY")
+        .unwrap_or("DATANAUT")
         .to_string()
 }
 

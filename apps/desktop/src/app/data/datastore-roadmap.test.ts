@@ -10,7 +10,7 @@ import {
   QUERY_LANGUAGES,
   RESULT_RENDERERS,
   datastoreBacklogByEngine,
-} from '@universality/shared-types'
+} from '@datanaut/shared-types'
 import { adapterManifests } from './workspace-factory'
 
 describe('datastore roadmap catalog', () => {

@@ -1,6 +1,6 @@
 # Testing Strategy
 
-Universality should treat testing as a product feature because connection handling, secret management, and production safeguards are high-trust workflows.
+Datanaut should treat testing as a product feature because connection handling, secret management, and production safeguards are high-trust workflows.
 
 ## Test layers
 

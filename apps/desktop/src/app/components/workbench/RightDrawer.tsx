@@ -22,11 +22,11 @@ import type {
   OperationPlanResponse,
   RightDrawerView,
   WorkspaceSnapshot,
-} from '@universality/shared-types'
+} from '@datanaut/shared-types'
 import {
   DATASTORE_FAMILIES,
   DATASTORE_FEATURE_BACKLOG,
-} from '@universality/shared-types'
+} from '@datanaut/shared-types'
 import {
   CloseIcon,
   ConnectionsIcon,

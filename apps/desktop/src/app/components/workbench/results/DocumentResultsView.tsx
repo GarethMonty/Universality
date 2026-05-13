@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { ConnectionProfile } from '@universality/shared-types'
+import type { ConnectionProfile } from '@datanaut/shared-types'
 import { ClockIcon } from '../icons'
 import { DocumentContextMenu } from './document-context-menu'
 import { DocumentGridRowView } from './DocumentGridRowView'

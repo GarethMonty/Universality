@@ -81,7 +81,7 @@ impl DatastoreAdapter for SnowflakeAdapter {
             ok: false,
             supported: false,
             message: format!(
-                "Snowflake statement {} cannot be cancelled by Universality after dispatch in the current SQL API adapter.",
+                "Snowflake statement {} cannot be cancelled by Datanaut after dispatch in the current SQL API adapter.",
                 request.execution_id
             ),
         })

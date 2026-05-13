@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main-capability",
-  "description": "Default capability for the Universality desktop window.",
+  "description": "Default capability for the Datanaut desktop window.",
   "windows": ["main"],
   "permissions": ["core:default", "opener:default"]
 }

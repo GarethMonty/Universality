@@ -81,7 +81,7 @@ impl DatastoreAdapter for DynamoDbAdapter {
             ok: false,
             supported: false,
             message: format!(
-                "DynamoDB request {} cannot be cancelled by Universality after dispatch.",
+                "DynamoDB request {} cannot be cancelled by Datanaut after dispatch.",
                 request.execution_id
             ),
         })

@@ -4,7 +4,7 @@ import type {
   ExecutionCapabilities,
   ExecutionResultEnvelope,
   ResultPayload,
-} from '@universality/shared-types'
+} from '@datanaut/shared-types'
 import { ClockIcon, CopyIcon, DownloadIcon } from '../icons'
 import { ResultPayloadView } from './ResultPayloadView'
 import { copyText, exportPayload, payloadToText } from './payload-export'

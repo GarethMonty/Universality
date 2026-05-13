@@ -2,7 +2,7 @@ import type {
   MongoBuilderValueType,
   MongoFindBuilderState,
   MongoFilterOperator,
-} from '@universality/shared-types'
+} from '@datanaut/shared-types'
 import {
   DEFAULT_FILTER_GROUP_ID,
   defaultFilterGroup,

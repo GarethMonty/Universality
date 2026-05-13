@@ -2,7 +2,7 @@ from pathlib import Path
 import sqlite3
 
 
-fixture_path = Path(__file__).with_name("universality.sqlite3")
+fixture_path = Path(__file__).with_name("datanaut.sqlite3")
 PERF_ROW_COUNT = 100_000
 
 with sqlite3.connect(fixture_path) as connection:

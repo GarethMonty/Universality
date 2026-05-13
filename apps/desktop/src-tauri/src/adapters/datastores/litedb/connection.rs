@@ -48,7 +48,7 @@ pub(super) fn litedb_file_path(connection: &ResolvedConnectionProfile) -> String
             let host = connection.host.trim();
             (!host.is_empty() && host != "127.0.0.1" && host != "localhost").then_some(host)
         })
-        .unwrap_or("universality.db")
+        .unwrap_or("datanaut.db")
         .to_string()
 }
 

@@ -10,11 +10,11 @@ import type {
   ResultPayload,
   UiState,
   WorkspaceSnapshot,
-} from '@universality/shared-types'
+} from '@datanaut/shared-types'
 import {
   datastoreBacklogByEngine,
-  UNIVERSALITY_ADAPTER_MANIFESTS,
-} from '@universality/shared-types'
+  DATANAUT_ADAPTER_MANIFESTS,
+} from '@datanaut/shared-types'
 
 const MIN_BOTTOM_PANEL_HEIGHT = 120
 const DEFAULT_BOTTOM_PANEL_HEIGHT = 260
@@ -186,7 +186,7 @@ export function normalizeUiState(snapshot: WorkspaceSnapshot): UiState {
 export function migrateWorkspaceSnapshot(snapshot: WorkspaceSnapshot): WorkspaceSnapshot {
   const next = JSON.parse(JSON.stringify(snapshot)) as WorkspaceSnapshot
   next.closedTabs ??= []
-  next.adapterManifests = UNIVERSALITY_ADAPTER_MANIFESTS
+  next.adapterManifests = DATANAUT_ADAPTER_MANIFESTS
   stripDemoRecords(next)
   next.schemaVersion = WORKSPACE_SCHEMA_VERSION
   next.ui = normalizeUiState(next)

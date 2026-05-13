@@ -5,7 +5,7 @@ import type {
   StructureNode,
   StructureResponse,
   UiState,
-} from '@universality/shared-types'
+} from '@datanaut/shared-types'
 import {
   DatabaseIcon,
   ExplorerIcon,

@@ -154,9 +154,9 @@ jobs:
         with:
           projectPath: apps/desktop
           tagName: app-v${{ inputs.version }}
-          releaseName: Universality v${{ inputs.version }}
+          releaseName: Datanaut v${{ inputs.version }}
           releaseBody: |
-            Desktop release artifacts for Universality.
+            Desktop release artifacts for Datanaut.
 
             This release is created as a draft for manual installer smoke testing before publication.
             Release checklist: docs/release-checklist.md

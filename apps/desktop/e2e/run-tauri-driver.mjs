@@ -9,40 +9,40 @@ const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm'
 const driverExecutable = process.platform === 'win32' ? 'tauri-driver.exe' : 'tauri-driver'
 const cargoDriverBin = join(process.env.CARGO_HOME ?? join(homedir(), '.cargo'), 'bin', driverExecutable)
 const driverBin =
-  process.env.UNIVERSALITY_TAURI_DRIVER_BIN ??
+  process.env.DATANAUT_TAURI_DRIVER_BIN ??
   (existsSync(cargoDriverBin) ? cargoDriverBin : 'tauri-driver')
-const driverPort = process.env.UNIVERSALITY_TAURI_DRIVER_PORT ?? '4444'
-const nativeDriverBin = process.env.UNIVERSALITY_NATIVE_WEBDRIVER_BIN
+const driverPort = process.env.DATANAUT_TAURI_DRIVER_PORT ?? '4444'
+const nativeDriverBin = process.env.DATANAUT_NATIVE_WEBDRIVER_BIN
 const workspaceDir =
-  process.env.UNIVERSALITY_WORKSPACE_DIR ??
-  mkdtempSync(join(tmpdir(), 'universality-e2e-workspace-'))
+  process.env.DATANAUT_WORKSPACE_DIR ??
+  mkdtempSync(join(tmpdir(), 'datanaut-e2e-workspace-'))
 
 function candidateBinaries() {
   const releaseDir = resolve(repoRoot, 'apps', 'desktop', 'src-tauri', 'target', 'release')
 
   if (process.platform === 'win32') {
     return [
-      join(releaseDir, 'universality-desktop.exe'),
-      join(releaseDir, 'Universality.exe'),
+      join(releaseDir, 'datanaut-desktop.exe'),
+      join(releaseDir, 'Datanaut.exe'),
     ]
   }
 
   if (process.platform === 'darwin') {
     return [
-      join(releaseDir, 'bundle', 'macos', 'Universality.app'),
-      join(releaseDir, 'universality-desktop'),
+      join(releaseDir, 'bundle', 'macos', 'Datanaut.app'),
+      join(releaseDir, 'datanaut-desktop'),
     ]
   }
 
   return [
-    join(releaseDir, 'universality-desktop'),
-    join(releaseDir, 'bundle', 'appimage', 'Universality.AppImage'),
+    join(releaseDir, 'datanaut-desktop'),
+    join(releaseDir, 'bundle', 'appimage', 'Datanaut.AppImage'),
   ]
 }
 
 function resolveApplicationBinary() {
-  if (process.env.UNIVERSALITY_DESKTOP_BINARY) {
-    return resolve(process.env.UNIVERSALITY_DESKTOP_BINARY)
+  if (process.env.DATANAUT_DESKTOP_BINARY) {
+    return resolve(process.env.DATANAUT_DESKTOP_BINARY)
   }
 
   const binary = candidateBinaries().find((candidate) => existsSync(candidate))
@@ -50,8 +50,8 @@ function resolveApplicationBinary() {
   if (!binary) {
     throw new Error(
       [
-        'Unable to find a built Universality desktop binary.',
-        'Run `npm run tauri:build` first or set UNIVERSALITY_DESKTOP_BINARY.',
+        'Unable to find a built Datanaut desktop binary.',
+        'Run `npm run tauri:build` first or set DATANAUT_DESKTOP_BINARY.',
       ].join(' '),
     )
   }
@@ -68,7 +68,7 @@ function ensureTauriDriver() {
 
   if (probe.status !== 0) {
     throw new Error(
-      'tauri-driver is required for desktop E2E. Install it with `cargo install tauri-driver --locked` or set UNIVERSALITY_TAURI_DRIVER_BIN.',
+      'tauri-driver is required for desktop E2E. Install it with `cargo install tauri-driver --locked` or set DATANAUT_TAURI_DRIVER_BIN.',
     )
   }
 }
@@ -76,19 +76,19 @@ function ensureTauriDriver() {
 function runWdio(application) {
   const result = spawnSync(
     npm,
-    ['exec', '--workspace', '@universality/desktop', '--', 'wdio', 'run', 'apps/desktop/e2e/wdio.conf.mjs'],
+    ['exec', '--workspace', '@datanaut/desktop', '--', 'wdio', 'run', 'apps/desktop/e2e/wdio.conf.mjs'],
     {
       cwd: repoRoot,
       env: {
         ...process.env,
-        UNIVERSALITY_DESKTOP_BINARY: application,
-        UNIVERSALITY_FIXTURE_RUN: process.env.UNIVERSALITY_FIXTURE_RUN ?? '1',
-        UNIVERSALITY_FIXTURE_PROFILE: process.env.UNIVERSALITY_FIXTURE_PROFILE ?? '',
-        UNIVERSALITY_WORKSPACE_DIR: workspaceDir,
-        UNIVERSALITY_SECRET_STORE: 'file',
-        UNIVERSALITY_SECRET_FILE: join(workspaceDir, 'secrets.json'),
-        UNIVERSALITY_SQLITE_FIXTURE: resolve(repoRoot, 'tests', 'fixtures', 'sqlite', 'universality.sqlite3'),
-        UNIVERSALITY_TAURI_DRIVER_PORT: driverPort,
+        DATANAUT_DESKTOP_BINARY: application,
+        DATANAUT_FIXTURE_RUN: process.env.DATANAUT_FIXTURE_RUN ?? '1',
+        DATANAUT_FIXTURE_PROFILE: process.env.DATANAUT_FIXTURE_PROFILE ?? '',
+        DATANAUT_WORKSPACE_DIR: workspaceDir,
+        DATANAUT_SECRET_STORE: 'file',
+        DATANAUT_SECRET_FILE: join(workspaceDir, 'secrets.json'),
+        DATANAUT_SQLITE_FIXTURE: resolve(repoRoot, 'tests', 'fixtures', 'sqlite', 'datanaut.sqlite3'),
+        DATANAUT_TAURI_DRIVER_PORT: driverPort,
       },
       stdio: 'inherit',
       shell: false,
@@ -124,7 +124,7 @@ try {
 } finally {
   driver.kill()
 
-  if (!process.env.UNIVERSALITY_WORKSPACE_DIR) {
+  if (!process.env.DATANAUT_WORKSPACE_DIR) {
     rmSync(workspaceDir, { recursive: true, force: true })
   }
 }

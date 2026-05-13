@@ -1,15 +1,15 @@
 services:
   postgres:
     image: postgres:16
-    container_name: universality-postgres
+    container_name: datanaut-postgres
     environment:
-      POSTGRES_DB: universality
-      POSTGRES_USER: universality
-      POSTGRES_PASSWORD: universality
+      POSTGRES_DB: datanaut
+      POSTGRES_USER: datanaut
+      POSTGRES_PASSWORD: datanaut
     ports:
-      - '${UNIVERSALITY_POSTGRES_PORT:-54329}:5432'
+      - '${DATANAUT_POSTGRES_PORT:-54329}:5432'
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U universality -d universality']
+      test: ['CMD-SHELL', 'pg_isready -U datanaut -d datanaut']
       interval: 5s
       timeout: 5s
       retries: 20
@@ -18,16 +18,16 @@ services:
 
   mysql:
     image: mysql:8.4
-    container_name: universality-mysql
+    container_name: datanaut-mysql
     environment:
       MYSQL_DATABASE: commerce
-      MYSQL_USER: universality
-      MYSQL_PASSWORD: universality
-      MYSQL_ROOT_PASSWORD: universality-root
+      MYSQL_USER: datanaut
+      MYSQL_PASSWORD: datanaut
+      MYSQL_ROOT_PASSWORD: datanaut-root
     ports:
-      - '${UNIVERSALITY_MYSQL_PORT:-33060}:3306'
+      - '${DATANAUT_MYSQL_PORT:-33060}:3306'
     healthcheck:
-      test: ['CMD', 'mysqladmin', 'ping', '-h', '127.0.0.1', '-u', 'root', '-puniversality-root']
+      test: ['CMD', 'mysqladmin', 'ping', '-h', '127.0.0.1', '-u', 'root', '-pdatanaut-root']
       interval: 5s
       timeout: 5s
       retries: 30
@@ -36,17 +36,17 @@ services:
 
   sqlserver:
     image: mcr.microsoft.com/mssql/server:2022-latest
-    container_name: universality-sqlserver
+    container_name: datanaut-sqlserver
     environment:
       ACCEPT_EULA: 'Y'
-      MSSQL_SA_PASSWORD: Universality_pwd_123
+      MSSQL_SA_PASSWORD: Datanaut_pwd_123
     ports:
-      - '${UNIVERSALITY_SQLSERVER_PORT:-14333}:1433'
+      - '${DATANAUT_SQLSERVER_PORT:-14333}:1433'
     healthcheck:
       test:
         [
           'CMD-SHELL',
-          "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Universality_pwd_123' -C -Q 'SELECT 1' || exit 1",
+          "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Datanaut_pwd_123' -C -Q 'SELECT 1' || exit 1",
         ]
       interval: 10s
       timeout: 10s
@@ -56,18 +56,18 @@ services:
 
   mongodb:
     image: mongo:7
-    container_name: universality-mongodb
+    container_name: datanaut-mongodb
     environment:
-      MONGO_INITDB_ROOT_USERNAME: universality
-      MONGO_INITDB_ROOT_PASSWORD: universality
+      MONGO_INITDB_ROOT_USERNAME: datanaut
+      MONGO_INITDB_ROOT_PASSWORD: datanaut
       MONGO_INITDB_DATABASE: catalog
     ports:
-      - '${UNIVERSALITY_MONGODB_PORT:-27018}:27017'
+      - '${DATANAUT_MONGODB_PORT:-27018}:27017'
     healthcheck:
       test:
         [
           'CMD-SHELL',
-          "mongosh --quiet --username universality --password universality --authenticationDatabase admin --eval 'db.adminCommand({ ping: 1 })' || exit 1",
+          "mongosh --quiet --username datanaut --password datanaut --authenticationDatabase admin --eval 'db.adminCommand({ ping: 1 })' || exit 1",
         ]
       interval: 5s
       timeout: 10s
@@ -77,9 +77,9 @@ services:
 
   redis:
     image: redis:7
-    container_name: universality-redis
+    container_name: datanaut-redis
     ports:
-      - '${UNIVERSALITY_REDIS_PORT:-6380}:6379'
+      - '${DATANAUT_REDIS_PORT:-6380}:6379'
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
       interval: 5s
@@ -88,10 +88,10 @@ services:
 
   valkey:
     image: valkey/valkey:8
-    container_name: universality-valkey
+    container_name: datanaut-valkey
     profiles: ['cache']
     ports:
-      - '${UNIVERSALITY_VALKEY_PORT:-6381}:6379'
+      - '${DATANAUT_VALKEY_PORT:-6381}:6379'
     healthcheck:
       test: ['CMD', 'valkey-cli', 'ping']
       interval: 5s
@@ -100,23 +100,23 @@ services:
 
   memcached:
     image: memcached:1.6
-    container_name: universality-memcached
+    container_name: datanaut-memcached
     profiles: ['cache']
     command: ['memcached', '-m', '64', '-vv']
     ports:
-      - '${UNIVERSALITY_MEMCACHED_PORT:-11212}:11211'
+      - '${DATANAUT_MEMCACHED_PORT:-11212}:11211'
 
   mariadb:
     image: mariadb:11
-    container_name: universality-mariadb
+    container_name: datanaut-mariadb
     profiles: ['sqlplus']
     environment:
       MARIADB_DATABASE: commerce
-      MARIADB_USER: universality
-      MARIADB_PASSWORD: universality
-      MARIADB_ROOT_PASSWORD: universality-root
+      MARIADB_USER: datanaut
+      MARIADB_PASSWORD: datanaut
+      MARIADB_ROOT_PASSWORD: datanaut-root
     ports:
-      - '${UNIVERSALITY_MARIADB_PORT:-33061}:3306'
+      - '${DATANAUT_MARIADB_PORT:-33061}:3306'
     healthcheck:
       test: ['CMD', 'healthcheck.sh', '--connect', '--innodb_initialized']
       interval: 5s
@@ -127,12 +127,12 @@ services:
 
   cockroachdb:
     image: cockroachdb/cockroach:v24.3.3
-    container_name: universality-cockroachdb
+    container_name: datanaut-cockroachdb
     profiles: ['sqlplus']
     command: ['start-single-node', '--insecure', '--store=type=mem,size=1GiB']
     ports:
-      - '${UNIVERSALITY_COCKROACH_PORT:-26257}:26257'
-      - '${UNIVERSALITY_COCKROACH_HTTP_PORT:-8080}:8080'
+      - '${DATANAUT_COCKROACH_PORT:-26257}:26257'
+      - '${DATANAUT_COCKROACH_HTTP_PORT:-8080}:8080'
     healthcheck:
       test: ['CMD', '/cockroach/cockroach', 'sql', '--insecure', '--execute=select 1']
       interval: 5s
@@ -143,16 +143,16 @@ services:
 
   timescaledb:
     image: timescale/timescaledb:latest-pg16
-    container_name: universality-timescaledb
+    container_name: datanaut-timescaledb
     profiles: ['sqlplus']
     environment:
       POSTGRES_DB: metrics
-      POSTGRES_USER: universality
-      POSTGRES_PASSWORD: universality
+      POSTGRES_USER: datanaut
+      POSTGRES_PASSWORD: datanaut
     ports:
-      - '${UNIVERSALITY_TIMESCALE_PORT:-54330}:5432'
+      - '${DATANAUT_TIMESCALE_PORT:-54330}:5432'
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U universality -d metrics']
+      test: ['CMD-SHELL', 'pg_isready -U datanaut -d metrics']
       interval: 5s
       timeout: 5s
       retries: 20
@@ -161,16 +161,16 @@ services:
 
   clickhouse:
     image: clickhouse/clickhouse-server:24.8
-    container_name: universality-clickhouse
+    container_name: datanaut-clickhouse
     profiles: ['analytics']
     environment:
       CLICKHOUSE_DB: analytics
-      CLICKHOUSE_USER: universality
-      CLICKHOUSE_PASSWORD: universality
+      CLICKHOUSE_USER: datanaut
+      CLICKHOUSE_PASSWORD: datanaut
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
     ports:
-      - '${UNIVERSALITY_CLICKHOUSE_HTTP_PORT:-8124}:8123'
-      - '${UNIVERSALITY_CLICKHOUSE_NATIVE_PORT:-9001}:9000'
+      - '${DATANAUT_CLICKHOUSE_HTTP_PORT:-8124}:8123'
+      - '${DATANAUT_CLICKHOUSE_NATIVE_PORT:-9001}:9000'
     healthcheck:
       test: ['CMD', 'wget', '--spider', '-q', 'http://127.0.0.1:8123/ping']
       interval: 5s
@@ -181,13 +181,13 @@ services:
 
   influxdb:
     image: influxdb:1.8
-    container_name: universality-influxdb
+    container_name: datanaut-influxdb
     profiles: ['analytics']
     environment:
       INFLUXDB_DB: metrics
       INFLUXDB_HTTP_AUTH_ENABLED: 'false'
     ports:
-      - '${UNIVERSALITY_INFLUXDB_PORT:-8087}:8086'
+      - '${DATANAUT_INFLUXDB_PORT:-8087}:8086'
     healthcheck:
       test: ['CMD', 'influx', '-execute', 'SHOW DATABASES']
       interval: 5s
@@ -198,14 +198,14 @@ services:
 
   prometheus:
     image: prom/prometheus:v2.55.1
-    container_name: universality-prometheus
+    container_name: datanaut-prometheus
     profiles: ['analytics']
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
       - '--web.enable-lifecycle'
     ports:
-      - '${UNIVERSALITY_PROMETHEUS_PORT:-9091}:9090'
+      - '${DATANAUT_PROMETHEUS_PORT:-9091}:9090'
     healthcheck:
       test:
         [
@@ -220,15 +220,15 @@ services:
 
   opensearch:
     image: opensearchproject/opensearch:2.17.1
-    container_name: universality-opensearch
+    container_name: datanaut-opensearch
     profiles: ['search']
     environment:
       discovery.type: single-node
       plugins.security.disabled: 'true'
-      OPENSEARCH_INITIAL_ADMIN_PASSWORD: Universality_pwd_123
+      OPENSEARCH_INITIAL_ADMIN_PASSWORD: Datanaut_pwd_123
       OPENSEARCH_JAVA_OPTS: -Xms512m -Xmx512m
     ports:
-      - '${UNIVERSALITY_OPENSEARCH_PORT:-9201}:9200'
+      - '${DATANAUT_OPENSEARCH_PORT:-9201}:9200'
     healthcheck:
       test: ['CMD-SHELL', 'curl -fsS http://127.0.0.1:9200 >/dev/null']
       interval: 10s
@@ -237,14 +237,14 @@ services:
 
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.15.3
-    container_name: universality-elasticsearch
+    container_name: datanaut-elasticsearch
     profiles: ['search']
     environment:
       discovery.type: single-node
       xpack.security.enabled: 'false'
       ES_JAVA_OPTS: -Xms512m -Xmx512m
     ports:
-      - '${UNIVERSALITY_ELASTICSEARCH_PORT:-9202}:9200'
+      - '${DATANAUT_ELASTICSEARCH_PORT:-9202}:9200'
     healthcheck:
       test: ['CMD-SHELL', 'curl -fsS http://127.0.0.1:9200 >/dev/null']
       interval: 10s
@@ -253,54 +253,54 @@ services:
 
   neo4j:
     image: neo4j:5
-    container_name: universality-neo4j
+    container_name: datanaut-neo4j
     profiles: ['graph']
     environment:
-      NEO4J_AUTH: neo4j/universality
+      NEO4J_AUTH: neo4j/datanaut
       NEO4J_server_memory_heap_initial__size: 512m
       NEO4J_server_memory_heap_max__size: 512m
     ports:
-      - '${UNIVERSALITY_NEO4J_HTTP_PORT:-7475}:7474'
-      - '${UNIVERSALITY_NEO4J_BOLT_PORT:-7688}:7687'
+      - '${DATANAUT_NEO4J_HTTP_PORT:-7475}:7474'
+      - '${DATANAUT_NEO4J_BOLT_PORT:-7688}:7687'
     healthcheck:
-      test: ['CMD-SHELL', "cypher-shell -u neo4j -p universality 'RETURN 1'"]
+      test: ['CMD-SHELL', "cypher-shell -u neo4j -p datanaut 'RETURN 1'"]
       interval: 10s
       timeout: 10s
       retries: 40
 
   arangodb:
     image: arangodb:3.12
-    container_name: universality-arangodb
+    container_name: datanaut-arangodb
     profiles: ['graph']
     environment:
-      ARANGO_ROOT_PASSWORD: universality
+      ARANGO_ROOT_PASSWORD: datanaut
     ports:
-      - '${UNIVERSALITY_ARANGODB_PORT:-8529}:8529'
+      - '${DATANAUT_ARANGODB_PORT:-8529}:8529'
     healthcheck:
-      test: ['CMD-SHELL', "arangosh --server.password universality --javascript.execute-string 'db._version()'"]
+      test: ['CMD-SHELL', "arangosh --server.password datanaut --javascript.execute-string 'db._version()'"]
       interval: 10s
       timeout: 10s
       retries: 40
 
   janusgraph:
     image: janusgraph/janusgraph:1.1.0
-    container_name: universality-janusgraph
+    container_name: datanaut-janusgraph
     profiles: ['graph']
     ports:
-      - '${UNIVERSALITY_JANUSGRAPH_PORT:-8183}:8182'
+      - '${DATANAUT_JANUSGRAPH_PORT:-8183}:8182'
 
   cassandra:
     image: cassandra:5
-    container_name: universality-cassandra
+    container_name: datanaut-cassandra
     profiles: ['widecolumn']
     environment:
-      CASSANDRA_CLUSTER_NAME: Universality
+      CASSANDRA_CLUSTER_NAME: Datanaut
       CASSANDRA_DC: datacenter1
       CASSANDRA_ENDPOINT_SNITCH: GossipingPropertyFileSnitch
       MAX_HEAP_SIZE: 768M
       HEAP_NEWSIZE: 256M
     ports:
-      - '${UNIVERSALITY_CASSANDRA_PORT:-9043}:9042'
+      - '${DATANAUT_CASSANDRA_PORT:-9043}:9042'
     healthcheck:
       test: ['CMD-SHELL', 'cqlsh -e "describe keyspaces"']
       interval: 15s
@@ -311,14 +311,14 @@ services:
 
   oracle:
     image: gvenzl/oracle-free:23-slim
-    container_name: universality-oracle
+    container_name: datanaut-oracle
     profiles: ['oracle']
     environment:
-      ORACLE_PASSWORD: universality
-      APP_USER: universality
-      APP_USER_PASSWORD: universality
+      ORACLE_PASSWORD: datanaut
+      APP_USER: datanaut
+      APP_USER_PASSWORD: datanaut
     ports:
-      - '${UNIVERSALITY_ORACLE_PORT:-1522}:1521'
+      - '${DATANAUT_ORACLE_PORT:-1522}:1521'
     healthcheck:
       test: ['CMD-SHELL', 'healthcheck.sh']
       interval: 15s
@@ -329,23 +329,23 @@ services:
 
   dynamodb:
     image: amazon/dynamodb-local:2.5.2
-    container_name: universality-dynamodb
+    container_name: datanaut-dynamodb
     profiles: ['cloud-contract']
     command: ['-jar', 'DynamoDBLocal.jar', '-sharedDb', '-inMemory']
     ports:
-      - '${UNIVERSALITY_DYNAMODB_PORT:-8001}:8000'
+      - '${DATANAUT_DYNAMODB_PORT:-8001}:8000'
 
   cloud-contract:
     image: node:24-alpine
-    container_name: universality-cloud-contract
+    container_name: datanaut-cloud-contract
     profiles: ['cloud-contract']
     working_dir: /work
     command: ['node', '/work/server.mjs']
     ports:
-      - '${UNIVERSALITY_BIGQUERY_MOCK_PORT:-19050}:19050'
-      - '${UNIVERSALITY_SNOWFLAKE_MOCK_PORT:-19060}:19060'
-      - '${UNIVERSALITY_COSMOSDB_MOCK_PORT:-19070}:19070'
-      - '${UNIVERSALITY_NEPTUNE_MOCK_PORT:-19080}:19080'
+      - '${DATANAUT_BIGQUERY_MOCK_PORT:-19050}:19050'
+      - '${DATANAUT_SNOWFLAKE_MOCK_PORT:-19060}:19060'
+      - '${DATANAUT_COSMOSDB_MOCK_PORT:-19070}:19070'
+      - '${DATANAUT_NEPTUNE_MOCK_PORT:-19080}:19080'
     healthcheck:
       test:
         [

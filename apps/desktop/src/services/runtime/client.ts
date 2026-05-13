@@ -40,8 +40,8 @@ import type {
   UpdateQueryBuilderStateRequest,
   UpdateUiStateRequest,
   WorkspaceSnapshot,
-} from '@universality/shared-types'
-import { datastoreBacklogByEngine } from '@universality/shared-types'
+} from '@datanaut/shared-types'
+import { datastoreBacklogByEngine } from '@datanaut/shared-types'
 import {
   createBlankBootstrapPayload,
   createBrowserPreviewHealth,
@@ -61,7 +61,7 @@ import {
   simulateExecution,
 } from '../../app/state/helpers'
 
-const STORAGE_KEY = 'universality.workspace.v2'
+const STORAGE_KEY = 'datanaut.workspace.v2'
 const MAX_CLOSED_TABS = 25
 
 declare global {
@@ -2235,12 +2235,12 @@ export const desktopClient = {
 
     const filename =
       request.purpose === 'create'
-        ? 'universality-preview-local.sqlite'
-        : 'universality-preview-existing.sqlite'
+        ? 'datanaut-preview-local.sqlite'
+        : 'datanaut-preview-existing.sqlite'
 
     return {
       canceled: false,
-      path: `C:\\Users\\gmont\\Universality\\${filename}`,
+      path: `C:\\Users\\gmont\\Datanaut\\${filename}`,
     }
   },
 
@@ -2280,7 +2280,7 @@ export const desktopClient = {
     }
 
     return {
-      format: 'universality-bundle',
+      format: 'datanaut-bundle',
       version: 3,
       encryptedPayload: encodeBase64(
         JSON.stringify({

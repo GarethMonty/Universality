@@ -1,11 +1,11 @@
 [package]
-name = "universality-desktop"
+name = "datanaut-desktop"
 version = "0.1.0"
-description = "Universality desktop shell"
+description = "Datanaut desktop shell"
 edition = "2021"
 
 [lib]
-name = "universality_desktop_lib"
+name = "datanaut_desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

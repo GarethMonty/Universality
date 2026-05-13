@@ -1,6 +1,6 @@
-# Universality Release Checklist
+# Datanaut Release Checklist
 
-Universality desktop releases are created manually from GitHub Actions with a version input. The workflow validates that the requested version already exists in every source-of-truth version file, creates or reuses `app-vX.Y.Z`, builds platform bundles, and uploads artifacts to a draft GitHub Release.
+Datanaut desktop releases are created manually from GitHub Actions with a version input. The workflow validates that the requested version already exists in every source-of-truth version file, creates or reuses `app-vX.Y.Z`, builds platform bundles, and uploads artifacts to a draft GitHub Release.
 
 ## Before Running Release
 
@@ -34,7 +34,7 @@ Windows Authenticode signing is not configured yet. Before a public stable Windo
 1. Open the GitHub Actions `Release` workflow.
 2. Run the workflow manually with the exact semantic version, for example `0.1.0` or `0.2.0-beta.1`.
 3. Wait for all platform builds to finish.
-4. Open the draft GitHub Release named `Universality v<version>`.
+4. Open the draft GitHub Release named `Datanaut v<version>`.
 5. Confirm release assets exist for Windows, Linux, macOS Intel, and macOS Apple Silicon where each platform build succeeded.
 6. Download representative installers and smoke-test launch.
 7. Publish the draft release only after smoke tests pass.

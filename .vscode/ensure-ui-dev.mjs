@@ -56,7 +56,7 @@ async function waitForVite() {
 
   while (Date.now() - startedAt < readyTimeoutMs) {
     if ((await canConnect()) && (await isViteReady())) {
-      console.log(`Universality UI ready at ${appUrl}`);
+      console.log(`Datanaut UI ready at ${appUrl}`);
       return true;
     }
 
@@ -67,7 +67,7 @@ async function waitForVite() {
 }
 
 if ((await canConnect()) && (await isViteReady())) {
-  console.log(`Universality UI ready at ${appUrl}`);
+  console.log(`Datanaut UI ready at ${appUrl}`);
   process.exit(0);
 }
 
@@ -75,7 +75,7 @@ const child =
   process.platform === "win32"
     ? spawn(
         "cmd.exe",
-        ["/d", "/s", "/c", "npm run dev --workspace @universality/desktop"],
+        ["/d", "/s", "/c", "npm run dev --workspace @datanaut/desktop"],
         {
           cwd: workspaceRoot,
           detached: true,
@@ -86,7 +86,7 @@ const child =
           ]
         }
       )
-    : spawn("npm", ["run", "dev", "--workspace", "@universality/desktop"], {
+    : spawn("npm", ["run", "dev", "--workspace", "@datanaut/desktop"], {
         cwd: workspaceRoot,
         detached: true,
         stdio: [
@@ -114,7 +114,7 @@ process.once("SIGTERM", stopChild);
 
 if (!(await waitForVite())) {
   stopChild();
-  console.error(`Universality UI dev server did not become ready at ${appUrl}`);
+  console.error(`Datanaut UI dev server did not become ready at ${appUrl}`);
   process.exit(1);
 }
 

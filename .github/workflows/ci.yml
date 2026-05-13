@@ -94,36 +94,36 @@ jobs:
 
       - name: Seed SQL Server fixture
         run: |
-          docker exec universality-sqlserver /opt/mssql-tools18/bin/sqlcmd \
-            -S localhost -U sa -P 'Universality_pwd_123' -C \
+          docker exec datanaut-sqlserver /opt/mssql-tools18/bin/sqlcmd \
+            -S localhost -U sa -P 'Datanaut_pwd_123' -C \
             -i /work/001_seed.sql
 
       - name: Run adapter integration tests
         working-directory: apps/desktop/src-tauri
         env:
-          UNIVERSALITY_FIXTURE_RUN: '1'
-          UNIVERSALITY_POSTGRES_HOST: 127.0.0.1
-          UNIVERSALITY_POSTGRES_PORT: '54329'
-          UNIVERSALITY_POSTGRES_DB: universality
-          UNIVERSALITY_POSTGRES_USER: universality
-          UNIVERSALITY_POSTGRES_PASSWORD: universality
-          UNIVERSALITY_SQLSERVER_HOST: 127.0.0.1
-          UNIVERSALITY_SQLSERVER_PORT: '14333'
-          UNIVERSALITY_SQLSERVER_DB: universality
-          UNIVERSALITY_SQLSERVER_USER: sa
-          UNIVERSALITY_SQLSERVER_PASSWORD: Universality_pwd_123
-          UNIVERSALITY_MYSQL_HOST: 127.0.0.1
-          UNIVERSALITY_MYSQL_PORT: '33060'
-          UNIVERSALITY_MYSQL_DB: commerce
-          UNIVERSALITY_MYSQL_USER: universality
-          UNIVERSALITY_MYSQL_PASSWORD: universality
-          UNIVERSALITY_MONGODB_HOST: 127.0.0.1
-          UNIVERSALITY_MONGODB_PORT: '27018'
-          UNIVERSALITY_MONGODB_DB: catalog
-          UNIVERSALITY_MONGODB_USER: universality
-          UNIVERSALITY_MONGODB_PASSWORD: universality
-          UNIVERSALITY_REDIS_HOST: 127.0.0.1
-          UNIVERSALITY_REDIS_PORT: '6380'
+          DATANAUT_FIXTURE_RUN: '1'
+          DATANAUT_POSTGRES_HOST: 127.0.0.1
+          DATANAUT_POSTGRES_PORT: '54329'
+          DATANAUT_POSTGRES_DB: datanaut
+          DATANAUT_POSTGRES_USER: datanaut
+          DATANAUT_POSTGRES_PASSWORD: datanaut
+          DATANAUT_SQLSERVER_HOST: 127.0.0.1
+          DATANAUT_SQLSERVER_PORT: '14333'
+          DATANAUT_SQLSERVER_DB: datanaut
+          DATANAUT_SQLSERVER_USER: sa
+          DATANAUT_SQLSERVER_PASSWORD: Datanaut_pwd_123
+          DATANAUT_MYSQL_HOST: 127.0.0.1
+          DATANAUT_MYSQL_PORT: '33060'
+          DATANAUT_MYSQL_DB: commerce
+          DATANAUT_MYSQL_USER: datanaut
+          DATANAUT_MYSQL_PASSWORD: datanaut
+          DATANAUT_MONGODB_HOST: 127.0.0.1
+          DATANAUT_MONGODB_PORT: '27018'
+          DATANAUT_MONGODB_DB: catalog
+          DATANAUT_MONGODB_USER: datanaut
+          DATANAUT_MONGODB_PASSWORD: datanaut
+          DATANAUT_REDIS_HOST: 127.0.0.1
+          DATANAUT_REDIS_PORT: '6380'
         run: cargo test --test adapters_integration -- --nocapture
 
       - name: Stop fixture services

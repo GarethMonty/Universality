@@ -599,7 +599,7 @@ describe('App', () => {
     await waitFor(() => {
       expect(
         (within(drawer).getByLabelText('Database file') as HTMLInputElement).value,
-      ).toContain('universality-preview-local.sqlite')
+      ).toContain('datanaut-preview-local.sqlite')
     })
 
     fireEvent.click(within(drawer).getByRole('button', { name: 'Save Connection' }))
@@ -609,7 +609,7 @@ describe('App', () => {
     })
     expect(
       within(screen.getByLabelText('Editor toolbar')).queryByText(
-        /universality-preview-local\.sqlite/i,
+        /datanaut-preview-local\.sqlite/i,
       ),
     ).not.toBeInTheDocument()
   })
@@ -1254,7 +1254,7 @@ describe('App', () => {
 
   it('copies, exports, and restores executed result history', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
-    const createObjectUrl = vi.fn(() => 'blob:universality-result')
+    const createObjectUrl = vi.fn(() => 'blob:datanaut-result')
     const revokeObjectUrl = vi.fn()
     const anchorClick = vi
       .spyOn(HTMLAnchorElement.prototype, 'click')
@@ -1289,7 +1289,7 @@ describe('App', () => {
       expect(createObjectUrl).toHaveBeenCalled()
     })
     expect(anchorClick).toHaveBeenCalled()
-    expect(revokeObjectUrl).toHaveBeenCalledWith('blob:universality-result')
+    expect(revokeObjectUrl).toHaveBeenCalledWith('blob:datanaut-result')
     expect(screen.getByText(/\d{2}:\d{2}:\d{2}\.\d{3}/)).toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText('Query editor'), {

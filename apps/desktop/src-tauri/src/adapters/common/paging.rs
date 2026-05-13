@@ -92,7 +92,7 @@ pub(crate) fn paged_sql(
 
     let offset = u64::from(page_index) * u64::from(page_size);
     Ok(format!(
-        "select * from ({}) as universality_page limit {} offset {}",
+        "select * from ({}) as datanaut_page limit {} offset {}",
         strip_sql_semicolon(statement),
         page_size + 1,
         offset

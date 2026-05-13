@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { useState } from 'react'
-import type { QueryBuilderState, QueryTabState } from '@universality/shared-types'
+import type { QueryBuilderState, QueryTabState } from '@datanaut/shared-types'
 import { describe, expect, it, vi } from 'vitest'
 import { FIELD_DRAG_MIME } from '../results/field-drag'
 import { createDefaultMongoFindBuilderState } from './mongo-find'

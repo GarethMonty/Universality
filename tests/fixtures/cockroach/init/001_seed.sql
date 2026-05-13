@@ -1,6 +1,6 @@
-create database if not exists universality;
+create database if not exists datanaut;
 
-use universality;
+use datanaut;
 
 create table if not exists accounts (
   id int primary key,

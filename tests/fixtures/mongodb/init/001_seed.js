@@ -1,9 +1,9 @@
 db = db.getSiblingDB('catalog');
 
-if (!db.getUser('universality')) {
+if (!db.getUser('datanaut')) {
   db.createUser({
-    user: 'universality',
-    pwd: 'universality',
+    user: 'datanaut',
+    pwd: 'datanaut',
     roles: [{ role: 'readWrite', db: 'catalog' }],
   });
 }

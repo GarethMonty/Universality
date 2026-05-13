@@ -11,11 +11,11 @@ import type {
   ResolvedEnvironment,
   SavedWorkItem,
   WorkspaceSnapshot,
-} from '@universality/shared-types'
-import { UNIVERSALITY_ADAPTER_MANIFESTS } from '@universality/shared-types'
+} from '@datanaut/shared-types'
+import { DATANAUT_ADAPTER_MANIFESTS } from '@datanaut/shared-types'
 import { buildDiagnosticsReport, resolveEnvironment } from '../../app/state/helpers'
 
-const adapterManifests = UNIVERSALITY_ADAPTER_MANIFESTS
+const adapterManifests = DATANAUT_ADAPTER_MANIFESTS
 
 const timestamp = '2026-04-23T18:30:00.000Z'
 
@@ -48,7 +48,7 @@ const connections: ConnectionProfile[] = [
       secretRef: {
         id: 'secret-postgres-prod',
         provider: 'os-keyring',
-        service: 'Universality',
+        service: 'Datanaut',
         account: 'analytics-prod',
         label: 'Analytics prod credential',
       },
@@ -76,7 +76,7 @@ const connections: ConnectionProfile[] = [
       secretRef: {
         id: 'secret-orders-uat',
         provider: 'os-keyring',
-        service: 'Universality',
+        service: 'Datanaut',
         account: 'orders-uat',
         label: 'Orders UAT credential',
       },
@@ -104,7 +104,7 @@ const connections: ConnectionProfile[] = [
       secretRef: {
         id: 'secret-mongo-dev',
         provider: 'os-keyring',
-        service: 'Universality',
+        service: 'Datanaut',
         account: 'catalog-dev',
         label: 'Catalog dev credential',
       },
@@ -132,7 +132,7 @@ const connections: ConnectionProfile[] = [
       secretRef: {
         id: 'secret-mysql-dev',
         provider: 'os-keyring',
-        service: 'Universality',
+        service: 'Datanaut',
         account: 'commerce-dev',
         label: 'Commerce dev credential',
       },
@@ -175,7 +175,7 @@ const connections: ConnectionProfile[] = [
       secretRef: {
         id: 'secret-redis-prod',
         provider: 'os-keyring',
-        service: 'Universality',
+        service: 'Datanaut',
         account: 'redis-prod',
         label: 'Redis prod credential',
       },
@@ -193,12 +193,12 @@ const environments: EnvironmentProfile[] = [
     risk: 'low',
     variables: {
       DB_HOST: 'analytics-dev.internal',
-      DB_NAME: 'universality_dev',
+      DB_NAME: 'datanaut_dev',
       USERNAME: 'developer',
       MONGO_HOST: 'catalog-dev.internal',
       MYSQL_HOST: 'commerce-dev.internal',
       SQLITE_PATH:
-        'C:\\Users\\gmont\\source\\repos\\Universality\\tests\\fixtures\\sqlite\\universality.db',
+        'C:\\Users\\gmont\\source\\repos\\Datanaut\\tests\\fixtures\\sqlite\\datanaut.db',
     },
     sensitiveKeys: [],
     requiresConfirmation: false,
@@ -232,7 +232,7 @@ const environments: EnvironmentProfile[] = [
     variables: {
       DB_HOST: 'analytics-prod.internal',
       REDIS_HOST: 'session-prod.internal',
-      PASSWORD_REF: 'keyring://universality/prod',
+      PASSWORD_REF: 'keyring://datanaut/prod',
     },
     sensitiveKeys: ['PASSWORD_REF'],
     requiresConfirmation: true,

@@ -19,7 +19,7 @@ pub(super) async fn collect_memcached_diagnostics(
         diagnostics.query_history.push(payload_raw("stats".into()));
     }
     diagnostics.warnings.push(
-        "Memcached has no portable native key browser; Universality exposes known-key reads and server diagnostics."
+        "Memcached has no portable native key browser; Datanaut exposes known-key reads and server diagnostics."
             .into(),
     );
     Ok(diagnostics)

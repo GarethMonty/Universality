@@ -5,7 +5,7 @@ import type {
   MongoFindBuilderState,
   MongoFindFilterRow,
   QueryBuilderState,
-} from '@universality/shared-types'
+} from '@datanaut/shared-types'
 import {
   defaultFilterGroup,
   normalizeFilterGroups,

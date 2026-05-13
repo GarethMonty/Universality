@@ -1204,6 +1204,33 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d7a1e2f27636f116493b8b860f5546edb47c8d8f8ea73e1d2a20be88e28d1fea"
 
 [[package]]
+name = "datanaut-desktop"
+version = "0.1.0"
+dependencies = [
+ "aes-gcm",
+ "async-trait",
+ "base64 0.22.1",
+ "duckdb",
+ "futures-util",
+ "keyring",
+ "mongodb",
+ "pbkdf2",
+ "rand 0.8.6",
+ "redis",
+ "serde",
+ "serde_json",
+ "sha2",
+ "sqlx",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-dialog",
+ "tauri-plugin-opener",
+ "tiberius",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
 name = "dbus"
 version = "0.9.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6637,33 +6664,6 @@ checksum = "fc1de2c688dc15305988b563c3854064043356019f97a4b46276fe734c4f07ea"
 dependencies = [
  "crypto-common",
  "subtle",
-]
-
-[[package]]
-name = "universality-desktop"
-version = "0.1.0"
-dependencies = [
- "aes-gcm",
- "async-trait",
- "base64 0.22.1",
- "duckdb",
- "futures-util",
- "keyring",
- "mongodb",
- "pbkdf2",
- "rand 0.8.6",
- "redis",
- "serde",
- "serde_json",
- "sha2",
- "sqlx",
- "tauri",
- "tauri-build",
- "tauri-plugin-dialog",
- "tauri-plugin-opener",
- "tiberius",
- "tokio",
- "tokio-util",
 ]
 
 [[package]]

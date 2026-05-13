@@ -700,7 +700,7 @@ impl ManagedAppState {
         let serialized = serde_json::to_string_pretty(&sanitize_snapshot(&self.snapshot))?;
         let encrypted_payload = security::encrypt_export_payload(passphrase, &serialized)?;
         Ok(ExportBundle {
-            format: "universality-bundle".into(),
+            format: "datanaut-bundle".into(),
             version: persistence::SCHEMA_VERSION,
             encrypted_payload,
         })
@@ -1873,7 +1873,7 @@ struct FixtureConnectionSeed {
 }
 
 fn fixture_debug_enabled() -> bool {
-    std::env::var("UNIVERSALITY_FIXTURE_RUN")
+    fixture_env_value("DATANAUT_FIXTURE_RUN")
         .map(|value| value == "1" || value.eq_ignore_ascii_case("true"))
         .unwrap_or(false)
 }
@@ -1886,9 +1886,9 @@ fn workspace_is_empty(snapshot: &WorkspaceSnapshot) -> bool {
 }
 
 fn fixture_workspace_seed() -> FixtureWorkspaceSeed {
-    let profile_value = std::env::var("UNIVERSALITY_FIXTURE_PROFILE").ok();
-    let sqlite_fixture = std::env::var("UNIVERSALITY_SQLITE_FIXTURE")
-        .unwrap_or_else(|_| "tests/fixtures/sqlite/universality.sqlite3".into());
+    let profile_value = fixture_env_value("DATANAUT_FIXTURE_PROFILE");
+    let sqlite_fixture = fixture_env_value("DATANAUT_SQLITE_FIXTURE")
+        .unwrap_or_else(|| "tests/fixtures/sqlite/datanaut.sqlite3".into());
     fixture_workspace_seed_for_profile(profile_value.as_deref(), &sqlite_fixture)
 }
 
@@ -1989,7 +1989,7 @@ fn seed_fixture_secrets(secrets: &[(SecretRef, String)]) -> Result<(), CommandEr
     if !security::using_file_secret_store() {
         return Err(CommandError::new(
             "fixture-secret-store",
-            "Fixture workspace seeding requires UNIVERSALITY_SECRET_STORE=file.",
+            "Fixture workspace seeding requires DATANAUT_SECRET_STORE=file.",
         ));
     }
 
@@ -2061,7 +2061,7 @@ fn build_fixture_connection(
     let secret_ref = seed.password.map(|_| SecretRef {
         id: format!("secret-{}", seed.id),
         provider: "file".into(),
-        service: "UniversalityFixture".into(),
+        service: "DatanautFixture".into(),
         account: seed.id.into(),
         label: format!("{} fixture credential", seed.name),
     });
@@ -2254,11 +2254,11 @@ fn fixture_connection_seeds() -> Vec<FixtureConnectionSeed> {
             engine: "postgresql",
             family: "sql",
             host: "127.0.0.1",
-            port: Some(fixture_port("UNIVERSALITY_POSTGRES_PORT", 54329)),
-            database: Some("universality"),
+            port: Some(fixture_port("DATANAUT_POSTGRES_PORT", 54329)),
+            database: Some("datanaut"),
             use_sqlite_fixture: false,
-            username: Some("universality"),
-            password: Some("universality"),
+            username: Some("datanaut"),
+            password: Some("datanaut"),
             auth_mechanism: Some("password"),
             ssl_mode: Some("disable"),
             connection_string: None,
@@ -2276,11 +2276,11 @@ fn fixture_connection_seeds() -> Vec<FixtureConnectionSeed> {
             engine: "sqlserver",
             family: "sql",
             host: "127.0.0.1",
-            port: Some(fixture_port("UNIVERSALITY_SQLSERVER_PORT", 14333)),
-            database: Some("universality"),
+            port: Some(fixture_port("DATANAUT_SQLSERVER_PORT", 14333)),
+            database: Some("datanaut"),
             use_sqlite_fixture: false,
             username: Some("sa"),
-            password: Some("Universality_pwd_123"),
+            password: Some("Datanaut_pwd_123"),
             auth_mechanism: Some("sql-server"),
             ssl_mode: Some("trust"),
             connection_string: None,
@@ -2298,11 +2298,11 @@ fn fixture_connection_seeds() -> Vec<FixtureConnectionSeed> {
             engine: "mysql",
             family: "sql",
             host: "127.0.0.1",
-            port: Some(fixture_port("UNIVERSALITY_MYSQL_PORT", 33060)),
+            port: Some(fixture_port("DATANAUT_MYSQL_PORT", 33060)),
             database: Some("commerce"),
             use_sqlite_fixture: false,
-            username: Some("universality"),
-            password: Some("universality"),
+            username: Some("datanaut"),
+            password: Some("datanaut"),
             auth_mechanism: Some("password"),
             ssl_mode: Some("disable"),
             connection_string: None,
@@ -2342,11 +2342,11 @@ fn fixture_connection_seeds() -> Vec<FixtureConnectionSeed> {
             engine: "mongodb",
             family: "document",
             host: "127.0.0.1",
-            port: Some(fixture_port("UNIVERSALITY_MONGODB_PORT", 27018)),
+            port: Some(fixture_port("DATANAUT_MONGODB_PORT", 27018)),
             database: Some("catalog"),
             use_sqlite_fixture: false,
-            username: Some("universality"),
-            password: Some("universality"),
+            username: Some("datanaut"),
+            password: Some("datanaut"),
             auth_mechanism: Some("password"),
             ssl_mode: None,
             connection_string: None,
@@ -2364,7 +2364,7 @@ fn fixture_connection_seeds() -> Vec<FixtureConnectionSeed> {
             engine: "redis",
             family: "keyvalue",
             host: "127.0.0.1",
-            port: Some(fixture_port("UNIVERSALITY_REDIS_PORT", 6380)),
+            port: Some(fixture_port("DATANAUT_REDIS_PORT", 6380)),
             database: Some("0"),
             use_sqlite_fixture: false,
             username: None,
@@ -2386,7 +2386,7 @@ fn fixture_connection_seeds() -> Vec<FixtureConnectionSeed> {
             engine: "valkey",
             family: "keyvalue",
             host: "127.0.0.1",
-            port: Some(fixture_port("UNIVERSALITY_VALKEY_PORT", 6381)),
+            port: Some(fixture_port("DATANAUT_VALKEY_PORT", 6381)),
             database: Some("0"),
             use_sqlite_fixture: false,
             username: None,
@@ -2408,7 +2408,7 @@ fn fixture_connection_seeds() -> Vec<FixtureConnectionSeed> {
             engine: "memcached",
             family: "keyvalue",
             host: "127.0.0.1",
-            port: Some(fixture_port("UNIVERSALITY_MEMCACHED_PORT", 11212)),
+            port: Some(fixture_port("DATANAUT_MEMCACHED_PORT", 11212)),
             database: None,
             use_sqlite_fixture: false,
             username: None,
@@ -2430,11 +2430,11 @@ fn fixture_connection_seeds() -> Vec<FixtureConnectionSeed> {
             engine: "mariadb",
             family: "sql",
             host: "127.0.0.1",
-            port: Some(fixture_port("UNIVERSALITY_MARIADB_PORT", 33061)),
+            port: Some(fixture_port("DATANAUT_MARIADB_PORT", 33061)),
             database: Some("commerce"),
             use_sqlite_fixture: false,
-            username: Some("universality"),
-            password: Some("universality"),
+            username: Some("datanaut"),
+            password: Some("datanaut"),
             auth_mechanism: Some("password"),
             ssl_mode: Some("disable"),
             connection_string: None,
@@ -2452,8 +2452,8 @@ fn fixture_connection_seeds() -> Vec<FixtureConnectionSeed> {
             engine: "cockroachdb",
             family: "sql",
             host: "127.0.0.1",
-            port: Some(fixture_port("UNIVERSALITY_COCKROACH_PORT", 26257)),
-            database: Some("universality"),
+            port: Some(fixture_port("DATANAUT_COCKROACH_PORT", 26257)),
+            database: Some("datanaut"),
             use_sqlite_fixture: false,
             username: Some("root"),
             password: None,
@@ -2474,11 +2474,11 @@ fn fixture_connection_seeds() -> Vec<FixtureConnectionSeed> {
             engine: "timescaledb",
             family: "timeseries",
             host: "127.0.0.1",
-            port: Some(fixture_port("UNIVERSALITY_TIMESCALE_PORT", 54330)),
+            port: Some(fixture_port("DATANAUT_TIMESCALE_PORT", 54330)),
             database: Some("metrics"),
             use_sqlite_fixture: false,
-            username: Some("universality"),
-            password: Some("universality"),
+            username: Some("datanaut"),
+            password: Some("datanaut"),
             auth_mechanism: Some("password"),
             ssl_mode: Some("disable"),
             connection_string: None,
@@ -2496,11 +2496,11 @@ fn fixture_connection_seeds() -> Vec<FixtureConnectionSeed> {
             engine: "clickhouse",
             family: "warehouse",
             host: "127.0.0.1",
-            port: Some(fixture_port("UNIVERSALITY_CLICKHOUSE_HTTP_PORT", 8124)),
+            port: Some(fixture_port("DATANAUT_CLICKHOUSE_HTTP_PORT", 8124)),
             database: Some("analytics"),
             use_sqlite_fixture: false,
-            username: Some("universality"),
-            password: Some("universality"),
+            username: Some("datanaut"),
+            password: Some("datanaut"),
             auth_mechanism: Some("password"),
             ssl_mode: None,
             connection_string: None,
@@ -2518,7 +2518,7 @@ fn fixture_connection_seeds() -> Vec<FixtureConnectionSeed> {
             engine: "influxdb",
             family: "timeseries",
             host: "127.0.0.1",
-            port: Some(fixture_port("UNIVERSALITY_INFLUXDB_PORT", 8087)),
+            port: Some(fixture_port("DATANAUT_INFLUXDB_PORT", 8087)),
             database: Some("metrics"),
             use_sqlite_fixture: false,
             username: None,
@@ -2540,7 +2540,7 @@ fn fixture_connection_seeds() -> Vec<FixtureConnectionSeed> {
             engine: "prometheus",
             family: "timeseries",
             host: "127.0.0.1",
-            port: Some(fixture_port("UNIVERSALITY_PROMETHEUS_PORT", 9091)),
+            port: Some(fixture_port("DATANAUT_PROMETHEUS_PORT", 9091)),
             database: None,
             use_sqlite_fixture: false,
             username: None,
@@ -2562,7 +2562,7 @@ fn fixture_connection_seeds() -> Vec<FixtureConnectionSeed> {
             engine: "opensearch",
             family: "search",
             host: "127.0.0.1",
-            port: Some(fixture_port("UNIVERSALITY_OPENSEARCH_PORT", 9201)),
+            port: Some(fixture_port("DATANAUT_OPENSEARCH_PORT", 9201)),
             database: None,
             use_sqlite_fixture: false,
             username: None,
@@ -2584,7 +2584,7 @@ fn fixture_connection_seeds() -> Vec<FixtureConnectionSeed> {
             engine: "elasticsearch",
             family: "search",
             host: "127.0.0.1",
-            port: Some(fixture_port("UNIVERSALITY_ELASTICSEARCH_PORT", 9202)),
+            port: Some(fixture_port("DATANAUT_ELASTICSEARCH_PORT", 9202)),
             database: None,
             use_sqlite_fixture: false,
             username: None,
@@ -2606,11 +2606,11 @@ fn fixture_connection_seeds() -> Vec<FixtureConnectionSeed> {
             engine: "neo4j",
             family: "graph",
             host: "127.0.0.1",
-            port: Some(fixture_port("UNIVERSALITY_NEO4J_BOLT_PORT", 7688)),
+            port: Some(fixture_port("DATANAUT_NEO4J_BOLT_PORT", 7688)),
             database: Some("neo4j"),
             use_sqlite_fixture: false,
             username: Some("neo4j"),
-            password: Some("universality"),
+            password: Some("datanaut"),
             auth_mechanism: Some("password"),
             ssl_mode: None,
             connection_string: None,
@@ -2628,11 +2628,11 @@ fn fixture_connection_seeds() -> Vec<FixtureConnectionSeed> {
             engine: "arango",
             family: "graph",
             host: "127.0.0.1",
-            port: Some(fixture_port("UNIVERSALITY_ARANGODB_PORT", 8529)),
-            database: Some("universality"),
+            port: Some(fixture_port("DATANAUT_ARANGODB_PORT", 8529)),
+            database: Some("datanaut"),
             use_sqlite_fixture: false,
             username: Some("root"),
-            password: Some("universality"),
+            password: Some("datanaut"),
             auth_mechanism: Some("password"),
             ssl_mode: None,
             connection_string: None,
@@ -2650,7 +2650,7 @@ fn fixture_connection_seeds() -> Vec<FixtureConnectionSeed> {
             engine: "janusgraph",
             family: "graph",
             host: "127.0.0.1",
-            port: Some(fixture_port("UNIVERSALITY_JANUSGRAPH_PORT", 8183)),
+            port: Some(fixture_port("DATANAUT_JANUSGRAPH_PORT", 8183)),
             database: None,
             use_sqlite_fixture: false,
             username: None,
@@ -2672,8 +2672,8 @@ fn fixture_connection_seeds() -> Vec<FixtureConnectionSeed> {
             engine: "cassandra",
             family: "widecolumn",
             host: "127.0.0.1",
-            port: Some(fixture_port("UNIVERSALITY_CASSANDRA_PORT", 9043)),
-            database: Some("universality"),
+            port: Some(fixture_port("DATANAUT_CASSANDRA_PORT", 9043)),
+            database: Some("datanaut"),
             use_sqlite_fixture: false,
             username: None,
             password: None,
@@ -2684,7 +2684,7 @@ fn fixture_connection_seeds() -> Vec<FixtureConnectionSeed> {
             color: "#64a6d8",
             icon: "cassandra",
             query_title: "Fixture Cassandra.cql",
-            query_text: "select * from universality.orders limit 25;",
+            query_text: "select * from datanaut.orders limit 25;",
             tags: &["fixtures", "widecolumn"],
         },
         FixtureConnectionSeed {
@@ -2694,11 +2694,11 @@ fn fixture_connection_seeds() -> Vec<FixtureConnectionSeed> {
             engine: "oracle",
             family: "sql",
             host: "127.0.0.1",
-            port: Some(fixture_port("UNIVERSALITY_ORACLE_PORT", 1522)),
+            port: Some(fixture_port("DATANAUT_ORACLE_PORT", 1522)),
             database: Some("FREEPDB1"),
             use_sqlite_fixture: false,
-            username: Some("universality"),
-            password: Some("universality"),
+            username: Some("datanaut"),
+            password: Some("datanaut"),
             auth_mechanism: Some("password"),
             ssl_mode: None,
             connection_string: None,
@@ -2716,7 +2716,7 @@ fn fixture_connection_seeds() -> Vec<FixtureConnectionSeed> {
             engine: "dynamodb",
             family: "widecolumn",
             host: "127.0.0.1",
-            port: Some(fixture_port("UNIVERSALITY_DYNAMODB_PORT", 8001)),
+            port: Some(fixture_port("DATANAUT_DYNAMODB_PORT", 8001)),
             database: Some("sharedDb"),
             use_sqlite_fixture: false,
             username: Some("local"),
@@ -2738,14 +2738,14 @@ fn fixture_connection_seeds() -> Vec<FixtureConnectionSeed> {
             engine: "bigquery",
             family: "warehouse",
             host: "127.0.0.1",
-            port: Some(fixture_port("UNIVERSALITY_BIGQUERY_MOCK_PORT", 19050)),
+            port: Some(fixture_port("DATANAUT_BIGQUERY_MOCK_PORT", 19050)),
             database: Some("analytics"),
             use_sqlite_fixture: false,
-            username: Some("universality-project"),
+            username: Some("datanaut-project"),
             password: Some("fixture-token"),
             auth_mechanism: Some("mock-token"),
             ssl_mode: None,
-            connection_string: Some("http://127.0.0.1:${UNIVERSALITY_BIGQUERY_MOCK_PORT}"),
+            connection_string: Some("http://127.0.0.1:${DATANAUT_BIGQUERY_MOCK_PORT}"),
             group: "Cloud Contract Fixtures",
             color: "#669df6",
             icon: "bigquery",
@@ -2760,14 +2760,14 @@ fn fixture_connection_seeds() -> Vec<FixtureConnectionSeed> {
             engine: "snowflake",
             family: "warehouse",
             host: "127.0.0.1",
-            port: Some(fixture_port("UNIVERSALITY_SNOWFLAKE_MOCK_PORT", 19060)),
-            database: Some("UNIVERSALITY"),
+            port: Some(fixture_port("DATANAUT_SNOWFLAKE_MOCK_PORT", 19060)),
+            database: Some("DATANAUT"),
             use_sqlite_fixture: false,
             username: Some("PUBLIC"),
             password: Some("fixture-token"),
             auth_mechanism: Some("mock-token"),
             ssl_mode: None,
-            connection_string: Some("http://127.0.0.1:${UNIVERSALITY_SNOWFLAKE_MOCK_PORT}"),
+            connection_string: Some("http://127.0.0.1:${DATANAUT_SNOWFLAKE_MOCK_PORT}"),
             group: "Cloud Contract Fixtures",
             color: "#7dd3fc",
             icon: "snowflake",
@@ -2782,14 +2782,14 @@ fn fixture_connection_seeds() -> Vec<FixtureConnectionSeed> {
             engine: "cosmosdb",
             family: "document",
             host: "127.0.0.1",
-            port: Some(fixture_port("UNIVERSALITY_COSMOSDB_MOCK_PORT", 19070)),
-            database: Some("universality"),
+            port: Some(fixture_port("DATANAUT_COSMOSDB_MOCK_PORT", 19070)),
+            database: Some("datanaut"),
             use_sqlite_fixture: false,
             username: None,
             password: Some("fixture-token"),
             auth_mechanism: Some("mock-token"),
             ssl_mode: None,
-            connection_string: Some("http://127.0.0.1:${UNIVERSALITY_COSMOSDB_MOCK_PORT}"),
+            connection_string: Some("http://127.0.0.1:${DATANAUT_COSMOSDB_MOCK_PORT}"),
             group: "Cloud Contract Fixtures",
             color: "#58a6ff",
             icon: "cosmosdb",
@@ -2804,14 +2804,14 @@ fn fixture_connection_seeds() -> Vec<FixtureConnectionSeed> {
             engine: "neptune",
             family: "graph",
             host: "127.0.0.1",
-            port: Some(fixture_port("UNIVERSALITY_NEPTUNE_MOCK_PORT", 19080)),
+            port: Some(fixture_port("DATANAUT_NEPTUNE_MOCK_PORT", 19080)),
             database: None,
             use_sqlite_fixture: false,
             username: None,
             password: None,
             auth_mechanism: None,
             ssl_mode: None,
-            connection_string: Some("http://127.0.0.1:${UNIVERSALITY_NEPTUNE_MOCK_PORT}"),
+            connection_string: Some("http://127.0.0.1:${DATANAUT_NEPTUNE_MOCK_PORT}"),
             group: "Cloud Contract Fixtures",
             color: "#64d2ff",
             icon: "neptune",
@@ -2832,7 +2832,24 @@ fn fixture_env_value(env_key: &str) -> Option<String> {
     std::env::var(env_key)
         .ok()
         .filter(|value| !value.trim().is_empty())
+        .or_else(|| {
+            legacy_datanaut_env_key(env_key).and_then(|legacy_key| {
+                std::env::var(legacy_key)
+                    .ok()
+                    .filter(|value| !value.trim().is_empty())
+            })
+        })
         .or_else(|| fixture_generated_env_value(env_key))
+        .or_else(|| {
+            legacy_datanaut_env_key(env_key)
+                .and_then(|legacy_key| fixture_generated_env_value(&legacy_key))
+        })
+}
+
+fn legacy_datanaut_env_key(env_key: &str) -> Option<String> {
+    env_key
+        .strip_prefix("DATANAUT_")
+        .map(|suffix| format!("UNIVERSALITY_{suffix}"))
 }
 
 fn fixture_generated_env_value(env_key: &str) -> Option<String> {
@@ -3064,7 +3081,7 @@ mod tests {
             family: "sql".into(),
             host: "localhost".into(),
             port: Some(5432),
-            database: Some("universality".into()),
+            database: Some("datanaut".into()),
             connection_string: None,
             connection_mode: Some("native".into()),
             environment_ids: vec!["env-dev".into()],
@@ -3197,7 +3214,7 @@ mod tests {
             family: "document".into(),
             host: "localhost".into(),
             port: Some(27017),
-            database: Some("universality".into()),
+            database: Some("datanaut".into()),
             connection_string: None,
             connection_mode: Some("native".into()),
             environment_ids: vec!["env-dev".into()],
@@ -3251,7 +3268,7 @@ mod tests {
             family: "sql".into(),
             host: "localhost".into(),
             port: Some(5432),
-            database: Some("universality".into()),
+            database: Some("datanaut".into()),
             connection_string: None,
             connection_mode: Some("native".into()),
             environment_ids: vec!["env-dev".into()],
@@ -3298,7 +3315,7 @@ mod tests {
             host: "localhost".into(),
             port: Some(5432),
             database: Some("observability".into()),
-            username: Some("universality".into()),
+            username: Some("datanaut".into()),
             password: Some("pw".into()),
             connection_string: None,
             read_only: false,
@@ -3344,7 +3361,7 @@ mod tests {
             host: "localhost".into(),
             port: Some(5432),
             database: Some("observability".into()),
-            username: Some("universality".into()),
+            username: Some("datanaut".into()),
             password: Some("pw".into()),
             connection_string: None,
             read_only: false,
@@ -3371,7 +3388,7 @@ mod tests {
             host: "localhost".into(),
             port: Some(5432),
             database: None,
-            username: Some("universality".into()),
+            username: Some("datanaut".into()),
             password: Some("pw".into()),
             connection_string: None,
             read_only: false,
@@ -3401,7 +3418,7 @@ mod tests {
             host: "localhost".into(),
             port: Some(5432),
             database: Some("postgres".into()),
-            username: Some("universality".into()),
+            username: Some("datanaut".into()),
             password: Some("pw".into()),
             connection_string: None,
             read_only: false,
@@ -3426,7 +3443,7 @@ mod tests {
             family: "sql".into(),
             host: "localhost".into(),
             port: Some(1433),
-            database: Some("universality".into()),
+            database: Some("datanaut".into()),
             username: Some("sa".into()),
             password: Some("pw".into()),
             connection_string: None,
@@ -3457,7 +3474,7 @@ mod tests {
             host: "localhost".into(),
             port: Some(5432),
             database: Some("observability".into()),
-            username: Some("universality".into()),
+            username: Some("datanaut".into()),
             password: Some("pw".into()),
             connection_string: None,
             read_only: false,
@@ -3508,7 +3525,7 @@ mod tests {
         let seed = fixture_workspace_seed_for_profile(Some("all"), "fixture.sqlite3");
         let serialized = serde_json::to_string(&seed.snapshot).expect("serialize fixture snapshot");
 
-        for raw_secret in ["Universality_pwd_123", "fixture-token"] {
+        for raw_secret in ["Datanaut_pwd_123", "fixture-token"] {
             assert!(
                 !serialized.contains(raw_secret),
                 "workspace JSON leaked {raw_secret}"
@@ -3522,19 +3539,19 @@ mod tests {
     fn fixture_secrets_are_written_to_file_secret_store() {
         let _guard = ENV_LOCK.lock().expect("env test lock");
         let path = temp_secret_file_path();
-        std::env::set_var("UNIVERSALITY_SECRET_STORE", "file");
-        std::env::set_var("UNIVERSALITY_SECRET_FILE", &path);
+        std::env::set_var("DATANAUT_SECRET_STORE", "file");
+        std::env::set_var("DATANAUT_SECRET_FILE", &path);
 
         let seed = fixture_workspace_seed_for_profile(Some("cloud-contract"), "fixture.sqlite3");
         seed_fixture_secrets(&seed.secrets).expect("store fixture secrets");
         let secret_file = fs::read_to_string(&path).expect("read fixture secrets file");
 
-        assert!(secret_file.contains("UniversalityFixture:fixture-sqlserver"));
-        assert!(secret_file.contains("Universality_pwd_123"));
+        assert!(secret_file.contains("DatanautFixture:fixture-sqlserver"));
+        assert!(secret_file.contains("Datanaut_pwd_123"));
         assert!(secret_file.contains("fixture-token"));
 
-        std::env::remove_var("UNIVERSALITY_SECRET_STORE");
-        std::env::remove_var("UNIVERSALITY_SECRET_FILE");
+        std::env::remove_var("DATANAUT_SECRET_STORE");
+        std::env::remove_var("DATANAUT_SECRET_FILE");
         let _ = fs::remove_file(path);
     }
 
@@ -3588,7 +3605,7 @@ mod tests {
 
     fn temp_secret_file_path() -> PathBuf {
         std::env::temp_dir().join(format!(
-            "universality-fixture-secrets-{}.json",
+            "datanaut-fixture-secrets-{}.json",
             generate_id("test")
         ))
     }

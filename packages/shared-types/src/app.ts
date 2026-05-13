@@ -90,7 +90,7 @@ export interface BootstrapPayload {
 }
 
 export interface ExportBundle {
-  format: 'universality-bundle'
+  format: 'datanaut-bundle'
   version: number
   encryptedPayload: string
 }

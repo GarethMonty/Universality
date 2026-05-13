@@ -43,8 +43,8 @@ import type {
   UpdateQueryBuilderStateRequest,
   UpdateUiStateRequest,
   WorkspaceSnapshot,
-} from '@universality/shared-types'
-import { datastoreBacklogByEngine } from '@universality/shared-types'
+} from '@datanaut/shared-types'
+import { datastoreBacklogByEngine } from '@datanaut/shared-types'
 import { desktopClient } from '../../services/runtime/client'
 import { createId } from './helpers'
 
@@ -338,7 +338,7 @@ function secretRefForConnection(profile: ConnectionProfile): SecretRef {
   return {
     id: `secret-${profile.id}`,
     provider: 'os-keyring',
-    service: 'Universality',
+    service: 'Datanaut',
     account: profile.id,
     label: `${profile.name} password`,
   }

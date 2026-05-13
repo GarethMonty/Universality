@@ -1,7 +1,7 @@
-create keyspace if not exists universality
+create keyspace if not exists datanaut
 with replication = {'class': 'SimpleStrategy', 'replication_factor': 1};
 
-use universality;
+use datanaut;
 
 create table if not exists orders_by_account (
   account_id int,

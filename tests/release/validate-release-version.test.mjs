@@ -10,24 +10,24 @@ import {
 import { validateReleaseWorkflow } from './validate-release-workflow.mjs'
 
 function makeRepo(version = '1.2.3') {
-  const root = mkdtempSync(join(tmpdir(), 'universality-release-'))
+  const root = mkdtempSync(join(tmpdir(), 'datanaut-release-'))
   mkdirSync(join(root, 'apps', 'desktop', 'src-tauri'), { recursive: true })
 
   writeFileSync(
     join(root, 'package.json'),
-    JSON.stringify({ name: 'universality', version }, null, 2)
+    JSON.stringify({ name: 'datanaut', version }, null, 2)
   )
   writeFileSync(
     join(root, 'apps', 'desktop', 'package.json'),
-    JSON.stringify({ name: '@universality/desktop', version }, null, 2)
+    JSON.stringify({ name: '@datanaut/desktop', version }, null, 2)
   )
   writeFileSync(
     join(root, 'apps', 'desktop', 'src-tauri', 'Cargo.toml'),
-    `[package]\nname = "universality-desktop"\nversion = "${version}"\nedition = "2021"\n`
+    `[package]\nname = "datanaut-desktop"\nversion = "${version}"\nedition = "2021"\n`
   )
   writeFileSync(
     join(root, 'apps', 'desktop', 'src-tauri', 'tauri.conf.json'),
-    JSON.stringify({ productName: 'Universality', version }, null, 2)
+    JSON.stringify({ productName: 'Datanaut', version }, null, 2)
   )
 
   return root

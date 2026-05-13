@@ -1,23 +1,23 @@
-# Universality
+# Datanaut
 
-[![CI](https://github.com/GarethMonty/Universality/actions/workflows/ci.yml/badge.svg)](https://github.com/GarethMonty/Universality/actions/workflows/ci.yml)
+[![CI](https://github.com/GarethMonty/Datanaut/actions/workflows/ci.yml/badge.svg)](https://github.com/GarethMonty/Datanaut/actions/workflows/ci.yml)
 
-Universality is a cross-platform desktop workbench for exploring, querying, inspecting, and managing multiple datastore families from one consistent interface.
+Datanaut is a cross-platform desktop workbench for exploring, querying, inspecting, and managing multiple datastore families from one consistent interface.
 
 The project is built as a Tauri desktop application with a React and TypeScript workbench, a Rust native host, and shared datastore contracts. It is intentionally desktop-first: the web frontend exists to render the Tauri shell, not to ship a hosted web app.
 
 ## Project Status
 
-Universality is early-stage software. The repository contains the desktop foundation, shared domain contracts, adapter catalog, native command surface, fixture-backed integration tests, and the first capability-driven datastore adapter work.
+Datanaut is early-stage software. The repository contains the desktop foundation, shared domain contracts, adapter catalog, native command surface, fixture-backed integration tests, and the first capability-driven datastore adapter work.
 
 Public docs use two labels:
 
 - **Current app foundation**: workflows that exist in the repository today, including the desktop workbench, local workspace state, environments, query tabs, adapter manifests, diagnostics, fixtures, and Tauri command wiring.
 - **Adapter roadmap**: datastore support that is represented in contracts, manifests, beta adapters, tests, or roadmap documents. Some adapters are read/diagnostic-oriented or preview-only while the product hardens live execution paths.
 
-## What Universality Does
+## What Datanaut Does
 
-Universality is designed for developers and operators who move between different data systems and want one local, safety-aware workstation instead of a stack of disconnected tools.
+Datanaut is designed for developers and operators who move between different data systems and want one local, safety-aware workstation instead of a stack of disconnected tools.
 
 Current workbench capabilities include:
 
@@ -128,7 +128,7 @@ npm run check:e2e
 ## Repository Layout
 
 ```text
-Universality/
+Datanaut/
   apps/
     desktop/           React workbench, Vite app, and Tauri host
   packages/
@@ -143,7 +143,7 @@ Universality/
 
 ## Architecture
 
-Universality is organized around a capability-driven desktop architecture:
+Datanaut is organized around a capability-driven desktop architecture:
 
 1. The React UI shell owns layout, navigation, workbench panes, query editors, result surfaces, and user interaction.
 2. The application layer coordinates workspace state, active connection/environment selection, guardrails, query execution, saved work, and diagnostics.
@@ -160,11 +160,11 @@ Key docs:
 - [Development Guide](docs/contributing/development.md)
 - [Testing Strategy](docs/testing/strategy.md)
 
-The public wiki is intended to live at [github.com/GarethMonty/Universality/wiki](https://github.com/GarethMonty/Universality/wiki).
+The public wiki is intended to live at [github.com/GarethMonty/Datanaut/wiki](https://github.com/GarethMonty/Datanaut/wiki).
 
 ## Security And Safety
 
-Universality is designed for workflows that may touch live credentials and production systems. The safety model is part of the architecture:
+Datanaut is designed for workflows that may touch live credentials and production systems. The safety model is part of the architecture:
 
 - keep secret values in the OS credential store where available and persist only references in regular workspace state
 - redact sensitive values in previews, logs, diagnostics, and exports by default

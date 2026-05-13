@@ -1,5 +1,5 @@
 {
-  "name": "@universality/desktop",
+  "name": "@datanaut/desktop",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -17,7 +17,7 @@
     "@monaco-editor/react": "^4.7.0",
     "@tanstack/react-virtual": "^3.13.24",
     "@tauri-apps/api": "^2.8.0",
-    "@universality/shared-types": "file:../../packages/shared-types",
+    "@datanaut/shared-types": "file:../../packages/shared-types",
     "lucide-react": "^1.9.0",
     "monaco-editor": "^0.55.1",
     "react": "^19.2.5",

@@ -81,7 +81,7 @@ impl DatastoreAdapter for DuckDbAdapter {
             ok: false,
             supported: false,
             message: format!(
-                "Embedded DuckDB execution {} cannot be cancelled by Universality after dispatch.",
+                "Embedded DuckDB execution {} cannot be cancelled by Datanaut after dispatch.",
                 request.execution_id
             ),
         })

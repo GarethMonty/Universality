@@ -1,10 +1,10 @@
-if db_id('universality') is null
+if db_id('datanaut') is null
 begin
-  create database universality;
+  create database datanaut;
 end
 go
 
-use universality;
+use datanaut;
 go
 
 if object_id('dbo.orders', 'U') is null

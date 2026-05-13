@@ -1,4 +1,4 @@
-import type { ExecutionResultEnvelope, ResultPayload } from '@universality/shared-types'
+import type { ExecutionResultEnvelope, ResultPayload } from '@datanaut/shared-types'
 
 export async function copyText(value: string) {
   if (navigator.clipboard?.writeText) {
@@ -21,7 +21,7 @@ export function exportPayload(payload: ResultPayload, result?: ExecutionResultEn
   const serialized = payloadToText(payload)
   const { extension, mimeType } = exportDetailsForPayload(payload)
   const filename = sanitizeFilename(
-    `${result?.engine ?? 'universality'}-${payload.renderer}-${result?.executedAt ?? 'result'}.${extension}`,
+    `${result?.engine ?? 'datanaut'}-${payload.renderer}-${result?.executedAt ?? 'result'}.${extension}`,
   )
   const blob = new Blob([serialized], { type: mimeType })
   const url = URL.createObjectURL(blob)

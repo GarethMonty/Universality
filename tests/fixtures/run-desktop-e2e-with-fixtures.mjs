@@ -7,7 +7,7 @@ function run(args, options = {}) {
     cwd: process.cwd(),
     env: {
       ...process.env,
-      UNIVERSALITY_FIXTURE_RUN: process.env.UNIVERSALITY_FIXTURE_RUN ?? '1',
+      DATANAUT_FIXTURE_RUN: process.env.DATANAUT_FIXTURE_RUN ?? '1',
     },
     stdio: 'inherit',
     shell: process.platform === 'win32',

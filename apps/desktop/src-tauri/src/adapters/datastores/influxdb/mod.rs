@@ -81,7 +81,7 @@ impl DatastoreAdapter for InfluxDbAdapter {
             ok: false,
             supported: false,
             message: format!(
-                "InfluxDB HTTP query execution {} cannot be cancelled by Universality after dispatch.",
+                "InfluxDB HTTP query execution {} cannot be cancelled by Datanaut after dispatch.",
                 request.execution_id
             ),
         })

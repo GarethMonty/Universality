@@ -4,7 +4,7 @@ coverage/
 .DS_Store
 Thumbs.db
 .vscode/ui-dev.log
-.universality/
+.datanaut/
 
 apps/desktop/dist/
 apps/desktop/coverage/
@@ -12,5 +12,5 @@ apps/desktop/src-tauri/target/
 apps/desktop/src-tauri/gen/
 
 packages/*/dist/
-tests/fixtures/sqlite/universality.sqlite3
+tests/fixtures/sqlite/datanaut.sqlite3
 tests/fixtures/.generated.env

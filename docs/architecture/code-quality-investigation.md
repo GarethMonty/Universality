@@ -6,7 +6,7 @@ This report captures the current architecture risks found while hardening the da
 
 ## Executive Summary
 
-Universality is moving quickly from a small Tauri workbench into a broad datastore product. The main architectural risk is concentration: large files now carry too many responsibilities, especially the Rust adapter module and the React workbench shell. This makes new engines easy to add in the short term, but expensive to validate and risky to refactor later.
+Datanaut is moving quickly from a small Tauri workbench into a broad datastore product. The main architectural risk is concentration: large files now carry too many responsibilities, especially the Rust adapter module and the React workbench shell. This makes new engines easy to add in the short term, but expensive to validate and risky to refactor later.
 
 The most urgent backend issue was a duplicate TimescaleDB implementation: an inherent `impl TimescaleAdapter` coexisted with the trait implementation, which allowed manifest calls and runtime adapter behavior to disagree. That has been removed, and the contract tests now check beta preview-only behavior for risky operations.
 

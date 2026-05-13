@@ -1,6 +1,6 @@
 # Architecture Overview
 
-Universality is structured as a modular desktop workstation with a clear separation between the UI shell, product orchestration, domain contracts, datastore adapters, and privileged native services.
+Datanaut is structured as a modular desktop workstation with a clear separation between the UI shell, product orchestration, domain contracts, datastore adapters, and privileged native services.
 
 ## Layers
 

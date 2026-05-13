@@ -1,5 +1,5 @@
 import type { ComponentType, SVGProps } from 'react'
-import type { UiActivity, WorkspaceSnapshot } from '@universality/shared-types'
+import type { UiActivity, WorkspaceSnapshot } from '@datanaut/shared-types'
 import {
   ConnectionsIcon,
   EnvironmentsIcon,

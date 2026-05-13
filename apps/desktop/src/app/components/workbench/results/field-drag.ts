@@ -1,6 +1,6 @@
 import type { DragEvent } from 'react'
 
-export const FIELD_DRAG_MIME = 'application/x-universality-field'
+export const FIELD_DRAG_MIME = 'application/x-datanaut-field'
 let lastDraggedFieldPath = ''
 
 export function writeFieldDragData(event: DragEvent<HTMLElement>, fieldPath: string) {

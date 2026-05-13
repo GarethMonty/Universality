@@ -5,7 +5,7 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Universality: Tauri Debug (LLDB)",
+      "name": "Datanaut: Tauri Debug (LLDB)",
       "type": "lldb",
       "request": "launch",
       "cwd": "${workspaceFolder}/apps/desktop",
@@ -17,14 +17,14 @@
           "--no-default-features"
         ],
         "filter": {
-          "name": "universality-desktop",
+          "name": "datanaut-desktop",
           "kind": "bin"
         }
       },
-      "preLaunchTask": "universality:ui:dev"
+      "preLaunchTask": "datanaut:ui:dev"
     },
     {
-      "name": "Universality: Tauri Debug + Core Fixtures (LLDB)",
+      "name": "Datanaut: Tauri Debug + Core Fixtures (LLDB)",
       "type": "lldb",
       "request": "launch",
       "cwd": "${workspaceFolder}/apps/desktop",
@@ -36,48 +36,21 @@
           "--no-default-features"
         ],
         "filter": {
-          "name": "universality-desktop",
-          "kind": "bin"
-        }
-      },
-      "env": {
-        "UNIVERSALITY_FIXTURE_RUN": "1",
-        "UNIVERSALITY_WORKSPACE_DIR": "${workspaceFolder}/.universality/fixture-workspaces/core",
-        "UNIVERSALITY_SECRET_STORE": "file",
-        "UNIVERSALITY_SECRET_FILE": "${workspaceFolder}/.universality/fixture-workspaces/core/secrets.json",
-        "UNIVERSALITY_SQLITE_FIXTURE": "${workspaceFolder}/tests/fixtures/sqlite/universality.sqlite3"
-      },
-      "preLaunchTask": "universality:ui:fixtures:core"
-    },
-    {
-      "name": "Universality: Tauri Debug + Fixture Profile (LLDB)",
-      "type": "lldb",
-      "request": "launch",
-      "cwd": "${workspaceFolder}/apps/desktop",
-      "cargo": {
-        "args": [
-          "build",
-          "--manifest-path",
-          "${workspaceFolder}/apps/desktop/src-tauri/Cargo.toml",
-          "--no-default-features"
-        ],
-        "filter": {
-          "name": "universality-desktop",
+          "name": "datanaut-desktop",
           "kind": "bin"
         }
       },
       "env": {
-        "UNIVERSALITY_FIXTURE_RUN": "1",
-        "UNIVERSALITY_FIXTURE_PROFILE": "${input:universalityFixtureProfile}",
-        "UNIVERSALITY_WORKSPACE_DIR": "${workspaceFolder}/.universality/fixture-workspaces/profile-${input:universalityFixtureProfile}",
-        "UNIVERSALITY_SECRET_STORE": "file",
-        "UNIVERSALITY_SECRET_FILE": "${workspaceFolder}/.universality/fixture-workspaces/profile-${input:universalityFixtureProfile}/secrets.json",
-        "UNIVERSALITY_SQLITE_FIXTURE": "${workspaceFolder}/tests/fixtures/sqlite/universality.sqlite3"
+        "DATANAUT_FIXTURE_RUN": "1",
+        "DATANAUT_WORKSPACE_DIR": "${workspaceFolder}/.datanaut/fixture-workspaces/core",
+        "DATANAUT_SECRET_STORE": "file",
+        "DATANAUT_SECRET_FILE": "${workspaceFolder}/.datanaut/fixture-workspaces/core/secrets.json",
+        "DATANAUT_SQLITE_FIXTURE": "${workspaceFolder}/tests/fixtures/sqlite/datanaut.sqlite3"
       },
-      "preLaunchTask": "universality:ui:fixtures:profile"
+      "preLaunchTask": "datanaut:ui:fixtures:core"
     },
     {
-      "name": "Universality: Tauri Debug + All Fixtures (LLDB)",
+      "name": "Datanaut: Tauri Debug + Fixture Profile (LLDB)",
       "type": "lldb",
       "request": "launch",
       "cwd": "${workspaceFolder}/apps/desktop",
@@ -89,130 +62,157 @@
           "--no-default-features"
         ],
         "filter": {
-          "name": "universality-desktop",
+          "name": "datanaut-desktop",
           "kind": "bin"
         }
       },
       "env": {
-        "UNIVERSALITY_FIXTURE_RUN": "1",
-        "UNIVERSALITY_FIXTURE_PROFILE": "all",
-        "UNIVERSALITY_WORKSPACE_DIR": "${workspaceFolder}/.universality/fixture-workspaces/all",
-        "UNIVERSALITY_SECRET_STORE": "file",
-        "UNIVERSALITY_SECRET_FILE": "${workspaceFolder}/.universality/fixture-workspaces/all/secrets.json",
-        "UNIVERSALITY_SQLITE_FIXTURE": "${workspaceFolder}/tests/fixtures/sqlite/universality.sqlite3"
+        "DATANAUT_FIXTURE_RUN": "1",
+        "DATANAUT_FIXTURE_PROFILE": "${input:datanautFixtureProfile}",
+        "DATANAUT_WORKSPACE_DIR": "${workspaceFolder}/.datanaut/fixture-workspaces/profile-${input:datanautFixtureProfile}",
+        "DATANAUT_SECRET_STORE": "file",
+        "DATANAUT_SECRET_FILE": "${workspaceFolder}/.datanaut/fixture-workspaces/profile-${input:datanautFixtureProfile}/secrets.json",
+        "DATANAUT_SQLITE_FIXTURE": "${workspaceFolder}/tests/fixtures/sqlite/datanaut.sqlite3"
       },
-      "preLaunchTask": "universality:ui:fixtures:all"
+      "preLaunchTask": "datanaut:ui:fixtures:profile"
     },
     {
-      "name": "Universality: Tauri Debug (Windows)",
+      "name": "Datanaut: Tauri Debug + All Fixtures (LLDB)",
+      "type": "lldb",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/apps/desktop",
+      "cargo": {
+        "args": [
+          "build",
+          "--manifest-path",
+          "${workspaceFolder}/apps/desktop/src-tauri/Cargo.toml",
+          "--no-default-features"
+        ],
+        "filter": {
+          "name": "datanaut-desktop",
+          "kind": "bin"
+        }
+      },
+      "env": {
+        "DATANAUT_FIXTURE_RUN": "1",
+        "DATANAUT_FIXTURE_PROFILE": "all",
+        "DATANAUT_WORKSPACE_DIR": "${workspaceFolder}/.datanaut/fixture-workspaces/all",
+        "DATANAUT_SECRET_STORE": "file",
+        "DATANAUT_SECRET_FILE": "${workspaceFolder}/.datanaut/fixture-workspaces/all/secrets.json",
+        "DATANAUT_SQLITE_FIXTURE": "${workspaceFolder}/tests/fixtures/sqlite/datanaut.sqlite3"
+      },
+      "preLaunchTask": "datanaut:ui:fixtures:all"
+    },
+    {
+      "name": "Datanaut: Tauri Debug (Windows)",
       "type": "cppvsdbg",
       "request": "launch",
-      "program": "${workspaceFolder}/apps/desktop/src-tauri/target/debug/universality-desktop.exe",
+      "program": "${workspaceFolder}/apps/desktop/src-tauri/target/debug/datanaut-desktop.exe",
       "cwd": "${workspaceFolder}/apps/desktop",
-      "preLaunchTask": "universality:dev"
+      "preLaunchTask": "datanaut:dev"
     },
     {
-      "name": "Universality: Tauri Debug + Core Fixtures (Windows)",
+      "name": "Datanaut: Tauri Debug + Core Fixtures (Windows)",
       "type": "cppvsdbg",
       "request": "launch",
-      "program": "${workspaceFolder}/apps/desktop/src-tauri/target/debug/universality-desktop.exe",
+      "program": "${workspaceFolder}/apps/desktop/src-tauri/target/debug/datanaut-desktop.exe",
       "cwd": "${workspaceFolder}/apps/desktop",
       "environment": [
         {
-          "name": "UNIVERSALITY_FIXTURE_RUN",
+          "name": "DATANAUT_FIXTURE_RUN",
           "value": "1"
         },
         {
-          "name": "UNIVERSALITY_WORKSPACE_DIR",
-          "value": "${workspaceFolder}/.universality/fixture-workspaces/core"
+          "name": "DATANAUT_WORKSPACE_DIR",
+          "value": "${workspaceFolder}/.datanaut/fixture-workspaces/core"
         },
         {
-          "name": "UNIVERSALITY_SECRET_STORE",
+          "name": "DATANAUT_SECRET_STORE",
           "value": "file"
         },
         {
-          "name": "UNIVERSALITY_SECRET_FILE",
-          "value": "${workspaceFolder}/.universality/fixture-workspaces/core/secrets.json"
+          "name": "DATANAUT_SECRET_FILE",
+          "value": "${workspaceFolder}/.datanaut/fixture-workspaces/core/secrets.json"
         },
         {
-          "name": "UNIVERSALITY_SQLITE_FIXTURE",
-          "value": "${workspaceFolder}/tests/fixtures/sqlite/universality.sqlite3"
+          "name": "DATANAUT_SQLITE_FIXTURE",
+          "value": "${workspaceFolder}/tests/fixtures/sqlite/datanaut.sqlite3"
         }
       ],
-      "preLaunchTask": "universality:dev:fixtures:core"
+      "preLaunchTask": "datanaut:dev:fixtures:core"
     },
     {
-      "name": "Universality: Tauri Debug + Fixture Profile (Windows)",
+      "name": "Datanaut: Tauri Debug + Fixture Profile (Windows)",
       "type": "cppvsdbg",
       "request": "launch",
-      "program": "${workspaceFolder}/apps/desktop/src-tauri/target/debug/universality-desktop.exe",
+      "program": "${workspaceFolder}/apps/desktop/src-tauri/target/debug/datanaut-desktop.exe",
       "cwd": "${workspaceFolder}/apps/desktop",
       "environment": [
         {
-          "name": "UNIVERSALITY_FIXTURE_RUN",
+          "name": "DATANAUT_FIXTURE_RUN",
           "value": "1"
         },
         {
-          "name": "UNIVERSALITY_FIXTURE_PROFILE",
-          "value": "${input:universalityFixtureProfile}"
+          "name": "DATANAUT_FIXTURE_PROFILE",
+          "value": "${input:datanautFixtureProfile}"
         },
         {
-          "name": "UNIVERSALITY_WORKSPACE_DIR",
-          "value": "${workspaceFolder}/.universality/fixture-workspaces/profile-${input:universalityFixtureProfile}"
+          "name": "DATANAUT_WORKSPACE_DIR",
+          "value": "${workspaceFolder}/.datanaut/fixture-workspaces/profile-${input:datanautFixtureProfile}"
         },
         {
-          "name": "UNIVERSALITY_SECRET_STORE",
+          "name": "DATANAUT_SECRET_STORE",
           "value": "file"
         },
         {
-          "name": "UNIVERSALITY_SECRET_FILE",
-          "value": "${workspaceFolder}/.universality/fixture-workspaces/profile-${input:universalityFixtureProfile}/secrets.json"
+          "name": "DATANAUT_SECRET_FILE",
+          "value": "${workspaceFolder}/.datanaut/fixture-workspaces/profile-${input:datanautFixtureProfile}/secrets.json"
         },
         {
-          "name": "UNIVERSALITY_SQLITE_FIXTURE",
-          "value": "${workspaceFolder}/tests/fixtures/sqlite/universality.sqlite3"
+          "name": "DATANAUT_SQLITE_FIXTURE",
+          "value": "${workspaceFolder}/tests/fixtures/sqlite/datanaut.sqlite3"
         }
       ],
-      "preLaunchTask": "universality:dev:fixtures:profile"
+      "preLaunchTask": "datanaut:dev:fixtures:profile"
     },
     {
-      "name": "Universality: Tauri Debug + All Fixtures (Windows)",
+      "name": "Datanaut: Tauri Debug + All Fixtures (Windows)",
       "type": "cppvsdbg",
       "request": "launch",
-      "program": "${workspaceFolder}/apps/desktop/src-tauri/target/debug/universality-desktop.exe",
+      "program": "${workspaceFolder}/apps/desktop/src-tauri/target/debug/datanaut-desktop.exe",
       "cwd": "${workspaceFolder}/apps/desktop",
       "environment": [
         {
-          "name": "UNIVERSALITY_FIXTURE_RUN",
+          "name": "DATANAUT_FIXTURE_RUN",
           "value": "1"
         },
         {
-          "name": "UNIVERSALITY_FIXTURE_PROFILE",
+          "name": "DATANAUT_FIXTURE_PROFILE",
           "value": "all"
         },
         {
-          "name": "UNIVERSALITY_WORKSPACE_DIR",
-          "value": "${workspaceFolder}/.universality/fixture-workspaces/all"
+          "name": "DATANAUT_WORKSPACE_DIR",
+          "value": "${workspaceFolder}/.datanaut/fixture-workspaces/all"
         },
         {
-          "name": "UNIVERSALITY_SECRET_STORE",
+          "name": "DATANAUT_SECRET_STORE",
           "value": "file"
         },
         {
-          "name": "UNIVERSALITY_SECRET_FILE",
-          "value": "${workspaceFolder}/.universality/fixture-workspaces/all/secrets.json"
+          "name": "DATANAUT_SECRET_FILE",
+          "value": "${workspaceFolder}/.datanaut/fixture-workspaces/all/secrets.json"
         },
         {
-          "name": "UNIVERSALITY_SQLITE_FIXTURE",
-          "value": "${workspaceFolder}/tests/fixtures/sqlite/universality.sqlite3"
+          "name": "DATANAUT_SQLITE_FIXTURE",
+          "value": "${workspaceFolder}/tests/fixtures/sqlite/datanaut.sqlite3"
         }
       ],
-      "preLaunchTask": "universality:dev:fixtures:all"
+      "preLaunchTask": "datanaut:dev:fixtures:all"
     }
   ],
   "inputs": [
     {
-      "id": "universalityFixtureProfile",
+      "id": "datanautFixtureProfile",
       "type": "pickString",
       "description": "Fixture profile to start before debugging",
       "options": [

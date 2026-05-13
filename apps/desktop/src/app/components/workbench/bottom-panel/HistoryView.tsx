@@ -1,4 +1,4 @@
-import type { QueryTabState } from '@universality/shared-types'
+import type { QueryTabState } from '@datanaut/shared-types'
 import { HistoryIcon } from '../icons'
 
 interface HistoryViewProps {

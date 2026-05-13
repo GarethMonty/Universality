@@ -1,4 +1,4 @@
-import type { MongoBuilderValueType, MongoFindBuilderState, MongoFindFilterGroup, MongoFilterOperator } from '@universality/shared-types'
+import type { MongoBuilderValueType, MongoFindBuilderState, MongoFindFilterGroup, MongoFilterOperator } from '@datanaut/shared-types'
 import { BuilderSection } from './BuilderSection'
 
 type BuilderUpdater = (patch: Partial<MongoFindBuilderState>) => void

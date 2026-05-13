@@ -2,21 +2,21 @@ use std::collections::BTreeSet;
 use std::env;
 use std::fs;
 
-use sqlx::Executor;
-use universality_desktop_lib::{
+use datanaut_desktop_lib::{
     adapters,
     domain::{
         error::CommandError,
         models::{ExecutionRequest, ExplorerRequest, ResolvedConnectionProfile, ResultPageRequest},
     },
 };
+use sqlx::Executor;
 
 fn fixtures_enabled() -> bool {
-    env::var("UNIVERSALITY_FIXTURE_RUN").unwrap_or_default() == "1"
+    env::var("DATANAUT_FIXTURE_RUN").unwrap_or_default() == "1"
 }
 
 fn fixture_profile_enabled(profile: &str) -> bool {
-    let value = env::var("UNIVERSALITY_FIXTURE_PROFILE").unwrap_or_default();
+    let value = env::var("DATANAUT_FIXTURE_PROFILE").unwrap_or_default();
     value
         .split(',')
         .map(str::trim)
@@ -94,9 +94,9 @@ fn resolved_connection(engine: &str, family: &str) -> ResolvedConnectionProfile 
         family: family.into(),
         host: "127.0.0.1".into(),
         port: None,
-        database: Some("universality".into()),
-        username: Some("universality".into()),
-        password: Some("universality".into()),
+        database: Some("datanaut".into()),
+        username: Some("datanaut".into()),
+        password: Some("datanaut".into()),
         connection_string: None,
         read_only: true,
     }
@@ -496,15 +496,15 @@ async fn postgres_adapter_fixture_roundtrip() -> Result<(), CommandError> {
         name: "Fixture Postgres".into(),
         engine: "postgresql".into(),
         family: "sql".into(),
-        host: env_or("UNIVERSALITY_POSTGRES_HOST", "127.0.0.1"),
+        host: env_or("DATANAUT_POSTGRES_HOST", "127.0.0.1"),
         port: Some(
-            env_or("UNIVERSALITY_POSTGRES_PORT", "54329")
+            env_or("DATANAUT_POSTGRES_PORT", "54329")
                 .parse()
                 .unwrap_or(54329),
         ),
-        database: Some(env_or("UNIVERSALITY_POSTGRES_DB", "universality")),
-        username: Some(env_or("UNIVERSALITY_POSTGRES_USER", "universality")),
-        password: Some(env_or("UNIVERSALITY_POSTGRES_PASSWORD", "universality")),
+        database: Some(env_or("DATANAUT_POSTGRES_DB", "datanaut")),
+        username: Some(env_or("DATANAUT_POSTGRES_USER", "datanaut")),
+        password: Some(env_or("DATANAUT_POSTGRES_PASSWORD", "datanaut")),
         connection_string: None,
         read_only: false,
     };
@@ -592,18 +592,15 @@ async fn sqlserver_adapter_fixture_roundtrip() -> Result<(), CommandError> {
         name: "Fixture SQL Server".into(),
         engine: "sqlserver".into(),
         family: "sql".into(),
-        host: env_or("UNIVERSALITY_SQLSERVER_HOST", "127.0.0.1"),
+        host: env_or("DATANAUT_SQLSERVER_HOST", "127.0.0.1"),
         port: Some(
-            env_or("UNIVERSALITY_SQLSERVER_PORT", "14333")
+            env_or("DATANAUT_SQLSERVER_PORT", "14333")
                 .parse()
                 .unwrap_or(14333),
         ),
-        database: Some(env_or("UNIVERSALITY_SQLSERVER_DB", "universality")),
-        username: Some(env_or("UNIVERSALITY_SQLSERVER_USER", "sa")),
-        password: Some(env_or(
-            "UNIVERSALITY_SQLSERVER_PASSWORD",
-            "Universality_pwd_123",
-        )),
+        database: Some(env_or("DATANAUT_SQLSERVER_DB", "datanaut")),
+        username: Some(env_or("DATANAUT_SQLSERVER_USER", "sa")),
+        password: Some(env_or("DATANAUT_SQLSERVER_PASSWORD", "Datanaut_pwd_123")),
         connection_string: None,
         read_only: false,
     };
@@ -638,15 +635,15 @@ async fn mysql_adapter_fixture_roundtrip() -> Result<(), CommandError> {
         name: "Fixture MySQL".into(),
         engine: "mysql".into(),
         family: "sql".into(),
-        host: env_or("UNIVERSALITY_MYSQL_HOST", "127.0.0.1"),
+        host: env_or("DATANAUT_MYSQL_HOST", "127.0.0.1"),
         port: Some(
-            env_or("UNIVERSALITY_MYSQL_PORT", "33060")
+            env_or("DATANAUT_MYSQL_PORT", "33060")
                 .parse()
                 .unwrap_or(33060),
         ),
-        database: Some(env_or("UNIVERSALITY_MYSQL_DB", "commerce")),
-        username: Some(env_or("UNIVERSALITY_MYSQL_USER", "universality")),
-        password: Some(env_or("UNIVERSALITY_MYSQL_PASSWORD", "universality")),
+        database: Some(env_or("DATANAUT_MYSQL_DB", "commerce")),
+        username: Some(env_or("DATANAUT_MYSQL_USER", "datanaut")),
+        password: Some(env_or("DATANAUT_MYSQL_PASSWORD", "datanaut")),
         connection_string: None,
         read_only: false,
     };
@@ -672,7 +669,7 @@ async fn mysql_adapter_fixture_roundtrip() -> Result<(), CommandError> {
 
 #[tokio::test]
 async fn sqlite_adapter_fixture_roundtrip() -> Result<(), CommandError> {
-    let sqlite_url = "sqlite://file:universality-fixture?mode=memory&cache=shared".to_string();
+    let sqlite_url = "sqlite://file:datanaut-fixture?mode=memory&cache=shared".to_string();
     let pool = sqlx::sqlite::SqlitePoolOptions::new()
         .max_connections(1)
         .connect(&sqlite_url)
@@ -691,9 +688,9 @@ async fn sqlite_adapter_fixture_roundtrip() -> Result<(), CommandError> {
         name: "Fixture SQLite".into(),
         engine: "sqlite".into(),
         family: "sql".into(),
-        host: "file:universality-fixture".into(),
+        host: "file:datanaut-fixture".into(),
         port: None,
-        database: Some("file:universality-fixture".into()),
+        database: Some("file:datanaut-fixture".into()),
         username: None,
         password: None,
         connection_string: Some(sqlite_url),
@@ -755,15 +752,15 @@ async fn mongodb_adapter_fixture_roundtrip() -> Result<(), CommandError> {
         name: "Fixture MongoDB".into(),
         engine: "mongodb".into(),
         family: "document".into(),
-        host: env_or("UNIVERSALITY_MONGODB_HOST", "127.0.0.1"),
+        host: env_or("DATANAUT_MONGODB_HOST", "127.0.0.1"),
         port: Some(
-            env_or("UNIVERSALITY_MONGODB_PORT", "27018")
+            env_or("DATANAUT_MONGODB_PORT", "27018")
                 .parse()
                 .unwrap_or(27018),
         ),
-        database: Some(env_or("UNIVERSALITY_MONGODB_DB", "catalog")),
-        username: Some(env_or("UNIVERSALITY_MONGODB_USER", "universality")),
-        password: Some(env_or("UNIVERSALITY_MONGODB_PASSWORD", "universality")),
+        database: Some(env_or("DATANAUT_MONGODB_DB", "catalog")),
+        username: Some(env_or("DATANAUT_MONGODB_USER", "datanaut")),
+        password: Some(env_or("DATANAUT_MONGODB_PASSWORD", "datanaut")),
         connection_string: None,
         read_only: false,
     };
@@ -832,9 +829,9 @@ async fn redis_adapter_fixture_roundtrip() -> Result<(), CommandError> {
         name: "Fixture Redis".into(),
         engine: "redis".into(),
         family: "keyvalue".into(),
-        host: env_or("UNIVERSALITY_REDIS_HOST", "127.0.0.1"),
+        host: env_or("DATANAUT_REDIS_HOST", "127.0.0.1"),
         port: Some(
-            env_or("UNIVERSALITY_REDIS_PORT", "6380")
+            env_or("DATANAUT_REDIS_PORT", "6380")
                 .parse()
                 .unwrap_or(6380),
         ),
@@ -939,8 +936,8 @@ async fn sqlplus_profile_fixture_roundtrips() -> Result<(), CommandError> {
         host: "127.0.0.1".into(),
         port: Some(33061),
         database: Some("commerce".into()),
-        username: Some("universality".into()),
-        password: Some("universality".into()),
+        username: Some("datanaut".into()),
+        password: Some("datanaut".into()),
         connection_string: None,
         read_only: false,
     };
@@ -966,8 +963,8 @@ async fn sqlplus_profile_fixture_roundtrips() -> Result<(), CommandError> {
         host: "127.0.0.1".into(),
         port: Some(54330),
         database: Some("metrics".into()),
-        username: Some("universality".into()),
-        password: Some("universality".into()),
+        username: Some("datanaut".into()),
+        password: Some("datanaut".into()),
         connection_string: None,
         read_only: false,
     };
@@ -994,10 +991,10 @@ async fn sqlplus_profile_fixture_roundtrips() -> Result<(), CommandError> {
         family: "sql".into(),
         host: "127.0.0.1".into(),
         port: Some(26257),
-        database: Some("universality".into()),
+        database: Some("datanaut".into()),
         username: Some("root".into()),
         password: Some(String::new()),
-        connection_string: Some("postgres://root@127.0.0.1:26257/universality".into()),
+        connection_string: Some("postgres://root@127.0.0.1:26257/datanaut".into()),
         read_only: false,
     };
     let cockroach_result = adapters::execute(
@@ -1031,8 +1028,8 @@ async fn analytics_profile_fixture_roundtrips() -> Result<(), CommandError> {
         host: "127.0.0.1".into(),
         port: Some(8124),
         database: Some("analytics".into()),
-        username: Some("universality".into()),
-        password: Some("universality".into()),
+        username: Some("datanaut".into()),
+        password: Some("datanaut".into()),
         connection_string: None,
         read_only: false,
     };
@@ -1155,7 +1152,7 @@ async fn graph_profile_fixture_roundtrips() -> Result<(), CommandError> {
         port: Some(7475),
         database: Some("neo4j".into()),
         username: Some("neo4j".into()),
-        password: Some("universality".into()),
+        password: Some("datanaut".into()),
         connection_string: None,
         read_only: false,
     };
@@ -1180,9 +1177,9 @@ async fn graph_profile_fixture_roundtrips() -> Result<(), CommandError> {
         family: "graph".into(),
         host: "127.0.0.1".into(),
         port: Some(8529),
-        database: Some("universality".into()),
+        database: Some("datanaut".into()),
         username: Some("root".into()),
-        password: Some("universality".into()),
+        password: Some("datanaut".into()),
         connection_string: None,
         read_only: false,
     };
@@ -1244,7 +1241,7 @@ async fn cloud_contract_profile_fixture_roundtrips() -> Result<(), CommandError>
         host: "127.0.0.1".into(),
         port: Some(19050),
         database: Some("analytics".into()),
-        username: Some("universality-project".into()),
+        username: Some("datanaut-project".into()),
         password: Some("fixture-token".into()),
         connection_string: Some("http://127.0.0.1:19050".into()),
         read_only: false,
@@ -1268,7 +1265,7 @@ async fn cloud_contract_profile_fixture_roundtrips() -> Result<(), CommandError>
         family: "warehouse".into(),
         host: "127.0.0.1".into(),
         port: Some(19060),
-        database: Some("UNIVERSALITY".into()),
+        database: Some("DATANAUT".into()),
         username: Some("PUBLIC".into()),
         password: Some("fixture-token".into()),
         connection_string: Some("http://127.0.0.1:19060".into()),
@@ -1290,7 +1287,7 @@ async fn cloud_contract_profile_fixture_roundtrips() -> Result<(), CommandError>
         family: "document".into(),
         host: "127.0.0.1".into(),
         port: Some(19070),
-        database: Some("universality".into()),
+        database: Some("datanaut".into()),
         username: None,
         password: Some("fixture-token".into()),
         connection_string: Some("http://127.0.0.1:19070".into()),
@@ -1302,7 +1299,7 @@ async fn cloud_contract_profile_fixture_roundtrips() -> Result<(), CommandError>
             &cosmosdb.id,
             "env-dev",
             "sql",
-            r#"{ "operation": "QueryDocuments", "database": "universality", "container": "orders", "query": "SELECT * FROM c" }"#,
+            r#"{ "operation": "QueryDocuments", "database": "datanaut", "container": "orders", "query": "SELECT * FROM c" }"#,
         ),
         Vec::new(),
     )

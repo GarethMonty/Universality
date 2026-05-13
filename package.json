@@ -1,8 +1,8 @@
 {
-  "name": "universality",
+  "name": "datanaut",
   "private": true,
   "version": "0.1.0",
-  "description": "Universality is a modular Tauri workstation for exploring multiple datastore families from one desktop app.",
+  "description": "Datanaut is a modular Tauri workstation for exploring multiple datastore families from one desktop app.",
   "workspaces": [
     "apps/*",
     "packages/*"
@@ -11,10 +11,10 @@
     "node": ">=24.0.0"
   },
   "scripts": {
-    "dev": "npm run dev --workspace @universality/desktop",
-    "build": "npm run build --workspace @universality/shared-types && npm run build --workspace @universality/desktop",
-    "lint": "npm run lint --workspace @universality/desktop",
-    "test": "npm run test --workspace @universality/desktop",
+    "dev": "npm run dev --workspace @datanaut/desktop",
+    "build": "npm run build --workspace @datanaut/shared-types && npm run build --workspace @datanaut/desktop",
+    "lint": "npm run lint --workspace @datanaut/desktop",
+    "test": "npm run test --workspace @datanaut/desktop",
     "check": "npm run lint && npm run test && npm run build",
     "rust:check": "cargo check --manifest-path apps/desktop/src-tauri/Cargo.toml",
     "rust:test": "cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml",
@@ -35,7 +35,7 @@
     "fixtures:seed:all": "node tests/fixtures/seed.mjs all",
     "e2e:desktop": "node apps/desktop/e2e/run-tauri-driver.mjs",
     "check:e2e": "node tests/fixtures/run-desktop-e2e-with-fixtures.mjs",
-    "tauri:dev": "npm run tauri:dev --workspace @universality/desktop",
-    "tauri:build": "npm run tauri:build --workspace @universality/desktop"
+    "tauri:dev": "npm run tauri:dev --workspace @datanaut/desktop",
+    "tauri:build": "npm run tauri:build --workspace @datanaut/desktop"
   }
 }

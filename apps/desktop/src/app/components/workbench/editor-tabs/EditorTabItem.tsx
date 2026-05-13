@@ -8,7 +8,7 @@ import type {
   ConnectionProfile,
   EnvironmentProfile,
   QueryTabState,
-} from '@universality/shared-types'
+} from '@datanaut/shared-types'
 import { CloseIcon, DatabaseIcon } from '../icons'
 import { colorWithAlpha, normalizeTabDisplayTitle } from './tab-title'
 

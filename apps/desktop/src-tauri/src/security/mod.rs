@@ -65,15 +65,24 @@ impl SecretStore for FileSecretStore {
     fn resolve_secret(&self, secret_ref: &SecretRef) -> Result<String, CommandError> {
         let path = file_secret_path();
         let secrets = read_file_secrets(&path)?;
-        secrets
-            .get(&file_secret_key(secret_ref))
-            .cloned()
-            .ok_or_else(|| CommandError::new("secret-store", "Secret was not found."))
+        if let Some(secret) = secrets.get(&file_secret_key(secret_ref)).cloned() {
+            return Ok(secret);
+        }
+
+        let legacy_path = legacy_file_secret_path();
+        if legacy_path != path {
+            let legacy_secrets = read_file_secrets(&legacy_path)?;
+            if let Some(secret) = legacy_secrets.get(&file_secret_key(secret_ref)).cloned() {
+                return Ok(secret);
+            }
+        }
+
+        Err(CommandError::new("secret-store", "Secret was not found."))
     }
 }
 
 pub fn using_file_secret_store() -> bool {
-    std::env::var("UNIVERSALITY_SECRET_STORE")
+    env_value("DATANAUT_SECRET_STORE", "UNIVERSALITY_SECRET_STORE")
         .map(|value| value.eq_ignore_ascii_case("file"))
         .unwrap_or(false)
 }
@@ -95,6 +104,18 @@ pub fn resolve_secret_value(secret_ref: &SecretRef) -> Result<String, CommandErr
 }
 
 fn file_secret_path() -> PathBuf {
+    if let Some(path) = env_value("DATANAUT_SECRET_FILE", "UNIVERSALITY_SECRET_FILE") {
+        return PathBuf::from(path);
+    }
+
+    if let Some(workspace_dir) = env_value("DATANAUT_WORKSPACE_DIR", "UNIVERSALITY_WORKSPACE_DIR") {
+        return PathBuf::from(workspace_dir).join("secrets.json");
+    }
+
+    std::env::temp_dir().join("datanaut").join("secrets.json")
+}
+
+fn legacy_file_secret_path() -> PathBuf {
     if let Ok(path) = std::env::var("UNIVERSALITY_SECRET_FILE") {
         return PathBuf::from(path);
     }
@@ -119,6 +140,17 @@ fn read_file_secrets(path: &PathBuf) -> Result<HashMap<String, String>, CommandE
 
 fn file_secret_key(secret_ref: &SecretRef) -> String {
     format!("{}:{}", secret_ref.service, secret_ref.account)
+}
+
+fn env_value(primary: &str, legacy: &str) -> Option<String> {
+    std::env::var(primary)
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| {
+            std::env::var(legacy)
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+        })
 }
 
 pub fn evaluate_guardrails(

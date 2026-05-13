@@ -1,4 +1,4 @@
-import type { ConnectionProfile, ResultPayload } from '@universality/shared-types'
+import type { ConnectionProfile, ResultPayload } from '@datanaut/shared-types'
 import { DataGridView } from './DataGridView'
 import { DocumentResultsView } from './DocumentResultsView'
 import { JsonTreeView } from './JsonTreeView'

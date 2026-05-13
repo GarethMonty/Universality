@@ -65,5 +65,5 @@ pub fn run() {
             commands::workspace::upsert_saved_work_item
         ])
         .run(tauri::generate_context!())
-        .expect("error while running Universality");
+        .expect("error while running Datanaut");
 }

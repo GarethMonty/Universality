@@ -203,7 +203,7 @@ pub(super) fn cosmosdb_default_database(connection: &ResolvedConnectionProfile) 
         .database
         .as_deref()
         .filter(|value| !value.starts_with('/') && !value.trim().is_empty())
-        .unwrap_or("universality")
+        .unwrap_or("datanaut")
         .to_string()
 }
 

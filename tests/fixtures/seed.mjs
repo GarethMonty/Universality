@@ -8,7 +8,7 @@ const root = dirname(fileURLToPath(import.meta.url))
 const requestedProfiles = new Set(
   [
     process.argv[2],
-    process.env.UNIVERSALITY_FIXTURE_PROFILE,
+    process.env.DATANAUT_FIXTURE_PROFILE,
   ]
     .filter(Boolean)
     .flatMap((value) => String(value).split(','))
@@ -86,7 +86,7 @@ function seedRedisPerfKeys(container, command = 'redis-cli') {
     return
   }
 
-  const keyCount = Number.parseInt(process.env.UNIVERSALITY_REDIS_PERF_KEYS ?? '50000', 10)
+  const keyCount = Number.parseInt(process.env.DATANAUT_REDIS_PERF_KEYS ?? '50000', 10)
   const commands = []
 
   commands.push(redisProtocolCommand(['DEL', 'perf:manifest']))
@@ -97,7 +97,7 @@ function seedRedisPerfKeys(container, command = 'redis-cli') {
       'keyCount',
       String(keyCount),
       'description',
-      'Synthetic keys for Universality result and explorer performance tests.',
+      'Synthetic keys for Datanaut result and explorer performance tests.',
     ]),
   )
 
@@ -190,56 +190,56 @@ function tcpRequest(port, payload) {
 
 async function seedCore() {
   seedSqlWithStdin(
-    'universality-postgres',
+    'datanaut-postgres',
     'psql',
-    ['-U', 'universality', '-d', 'universality'],
+    ['-U', 'datanaut', '-d', 'datanaut'],
     join(root, 'postgres', 'init', '001_seed.sql'),
   )
 
   seedSqlWithStdin(
-    'universality-mysql',
+    'datanaut-mysql',
     'mysql',
-    ['-uuniversality', '-puniversality', 'commerce'],
+    ['-udatanaut', '-pdatanaut', 'commerce'],
     join(root, 'mysql', 'init', '001_seed.sql'),
   )
 
-  if (containerRunning('universality-sqlserver')) {
+  if (containerRunning('datanaut-sqlserver')) {
     docker([
       'exec',
-      'universality-sqlserver',
+      'datanaut-sqlserver',
       '/opt/mssql-tools18/bin/sqlcmd',
       '-S',
       'localhost',
       '-U',
       'sa',
       '-P',
-      'Universality_pwd_123',
+      'Datanaut_pwd_123',
       '-C',
       '-i',
       '/work/001_seed.sql',
     ])
   }
 
-  if (containerRunning('universality-mongodb')) {
+  if (containerRunning('datanaut-mongodb')) {
     docker([
       'exec',
-      'universality-mongodb',
+      'datanaut-mongodb',
       'mongosh',
       '--quiet',
       '--username',
-      'universality',
+      'datanaut',
       '--password',
-      'universality',
+      'datanaut',
       '--authenticationDatabase',
       'admin',
       '/docker-entrypoint-initdb.d/001_seed.js',
     ])
   }
 
-  if (containerRunning('universality-redis')) {
+  if (containerRunning('datanaut-redis')) {
     docker([
       'exec',
-      'universality-redis',
+      'datanaut-redis',
       'redis-cli',
       'HSET',
       'session:9f2d7e1a',
@@ -250,26 +250,26 @@ async function seedCore() {
       'active',
       '1',
     ])
-    docker(['exec', 'universality-redis', 'redis-cli', 'EXPIRE', 'session:9f2d7e1a', '1800'])
+    docker(['exec', 'datanaut-redis', 'redis-cli', 'EXPIRE', 'session:9f2d7e1a', '1800'])
     docker([
       'exec',
-      'universality-redis',
+      'datanaut-redis',
       'redis-cli',
       'SET',
       'cache:feature-flags',
       '{"beta":true,"region":"local"}',
     ])
-    seedRedisPerfKeys('universality-redis')
+    seedRedisPerfKeys('datanaut-redis')
   }
 
   runPython(join(root, 'sqlite', 'seed.py'))
 }
 
 async function seedCache() {
-  if (shouldSeed('universality-valkey', 'cache')) {
+  if (shouldSeed('datanaut-valkey', 'cache')) {
     docker([
       'exec',
-      'universality-valkey',
+      'datanaut-valkey',
       'valkey-cli',
       'HSET',
       'session:9f2d7e1a',
@@ -280,11 +280,11 @@ async function seedCache() {
       'active',
       '1',
     ])
-    docker(['exec', 'universality-valkey', 'valkey-cli', 'EXPIRE', 'session:9f2d7e1a', '1800'])
-    seedRedisPerfKeys('universality-valkey', 'valkey-cli')
+    docker(['exec', 'datanaut-valkey', 'valkey-cli', 'EXPIRE', 'session:9f2d7e1a', '1800'])
+    seedRedisPerfKeys('datanaut-valkey', 'valkey-cli')
   }
 
-  if (shouldSeed('universality-memcached', 'cache')) {
+  if (shouldSeed('datanaut-memcached', 'cache')) {
     await tcpRequest(
       11212,
       'set cache:feature-flags 0 3600 30\r\n{"beta":true,"region":"local"}\r\nquit\r\n',
@@ -293,19 +293,19 @@ async function seedCache() {
 }
 
 async function seedSqlPlus() {
-  if (shouldSeed('universality-mariadb', 'sqlplus')) {
+  if (shouldSeed('datanaut-mariadb', 'sqlplus')) {
     seedSqlWithStdin(
-      'universality-mariadb',
+      'datanaut-mariadb',
       'mariadb',
-      ['-uuniversality', '-puniversality', 'commerce'],
+      ['-udatanaut', '-pdatanaut', 'commerce'],
       join(root, 'mariadb', 'init', '001_seed.sql'),
     )
   }
 
-  if (shouldSeed('universality-cockroachdb', 'sqlplus')) {
+  if (shouldSeed('datanaut-cockroachdb', 'sqlplus')) {
     docker([
       'exec',
-      'universality-cockroachdb',
+      'datanaut-cockroachdb',
       '/cockroach/cockroach',
       'sql',
       '--insecure',
@@ -313,27 +313,27 @@ async function seedSqlPlus() {
     ])
   }
 
-  if (shouldSeed('universality-timescaledb', 'sqlplus')) {
+  if (shouldSeed('datanaut-timescaledb', 'sqlplus')) {
     seedSqlWithStdin(
-      'universality-timescaledb',
+      'datanaut-timescaledb',
       'psql',
-      ['-U', 'universality', '-d', 'metrics'],
+      ['-U', 'datanaut', '-d', 'metrics'],
       join(root, 'timescaledb', 'init', '001_seed.sql'),
     )
   }
 }
 
 async function seedAnalytics() {
-  if (shouldSeed('universality-clickhouse', 'analytics')) {
+  if (shouldSeed('datanaut-clickhouse', 'analytics')) {
     seedSqlWithStdin(
-      'universality-clickhouse',
+      'datanaut-clickhouse',
       'clickhouse-client',
-      ['--user', 'universality', '--password', 'universality', '--multiquery'],
+      ['--user', 'datanaut', '--password', 'datanaut', '--multiquery'],
       join(root, 'clickhouse', 'init', '001_seed.sql'),
     )
   }
 
-  if (shouldSeed('universality-influxdb', 'analytics')) {
+  if (shouldSeed('datanaut-influxdb', 'analytics')) {
     await httpRequest({ port: 8087, path: '/query?q=CREATE+DATABASE+metrics' })
     for (const query of [
       'INSERT order_latency,region=eu-west-1,account_id=1 value=18.4 1767225600000000000',
@@ -350,8 +350,8 @@ async function seedAnalytics() {
 
 async function seedSearch() {
   for (const [container, port] of [
-    ['universality-opensearch', 9201],
-    ['universality-elasticsearch', 9202],
+    ['datanaut-opensearch', 9201],
+    ['datanaut-elasticsearch', 9202],
   ]) {
     if (!shouldSeed(container, 'search')) {
       continue
@@ -387,13 +387,13 @@ async function seedSearch() {
 }
 
 async function seedGraph() {
-  if (shouldSeed('universality-neo4j', 'graph')) {
+  if (shouldSeed('datanaut-neo4j', 'graph')) {
     await httpRequest({
       method: 'POST',
       port: 7475,
       path: '/db/neo4j/tx/commit',
       headers: {
-        authorization: `Basic ${Buffer.from('neo4j:universality').toString('base64')}`,
+        authorization: `Basic ${Buffer.from('neo4j:datanaut').toString('base64')}`,
       },
       body: {
         statements: [
@@ -406,15 +406,15 @@ async function seedGraph() {
     })
   }
 
-  if (shouldSeed('universality-arangodb', 'graph')) {
-    const auth = { authorization: `Basic ${Buffer.from('root:universality').toString('base64')}` }
-    await httpRequest({ method: 'POST', port: 8529, path: '/_api/database', headers: auth, body: { name: 'universality' } }).catch(() => undefined)
-    await httpRequest({ method: 'POST', port: 8529, path: '/_db/universality/_api/collection', headers: auth, body: { name: 'accounts' } }).catch(() => undefined)
-    await httpRequest({ method: 'POST', port: 8529, path: '/_db/universality/_api/collection', headers: auth, body: { name: 'orders' } }).catch(() => undefined)
+  if (shouldSeed('datanaut-arangodb', 'graph')) {
+    const auth = { authorization: `Basic ${Buffer.from('root:datanaut').toString('base64')}` }
+    await httpRequest({ method: 'POST', port: 8529, path: '/_api/database', headers: auth, body: { name: 'datanaut' } }).catch(() => undefined)
+    await httpRequest({ method: 'POST', port: 8529, path: '/_db/datanaut/_api/collection', headers: auth, body: { name: 'accounts' } }).catch(() => undefined)
+    await httpRequest({ method: 'POST', port: 8529, path: '/_db/datanaut/_api/collection', headers: auth, body: { name: 'orders' } }).catch(() => undefined)
     await httpRequest({
       method: 'POST',
       port: 8529,
-      path: '/_db/universality/_api/cursor',
+      path: '/_db/datanaut/_api/cursor',
       headers: auth,
       body: {
         query:
@@ -425,25 +425,25 @@ async function seedGraph() {
 }
 
 async function seedWideColumn() {
-  if (shouldSeed('universality-cassandra', 'widecolumn')) {
-    docker(['exec', 'universality-cassandra', 'cqlsh', '-f', '/work/001_seed.cql'])
+  if (shouldSeed('datanaut-cassandra', 'widecolumn')) {
+    docker(['exec', 'datanaut-cassandra', 'cqlsh', '-f', '/work/001_seed.cql'])
   }
 }
 
 async function seedOracle() {
-  if (shouldSeed('universality-oracle', 'oracle')) {
+  if (shouldSeed('datanaut-oracle', 'oracle')) {
     docker([
       'exec',
-      'universality-oracle',
+      'datanaut-oracle',
       'bash',
       '-lc',
-      "sqlplus -s universality/universality@//localhost:1521/FREEPDB1 @/container-entrypoint-initdb.d/001_seed.sql",
+      "sqlplus -s datanaut/datanaut@//localhost:1521/FREEPDB1 @/container-entrypoint-initdb.d/001_seed.sql",
     ])
   }
 }
 
 async function seedCloudContract() {
-  if (!shouldSeed('universality-dynamodb', 'cloud-contract')) {
+  if (!shouldSeed('datanaut-dynamodb', 'cloud-contract')) {
     return
   }
 

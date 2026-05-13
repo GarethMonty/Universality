@@ -5,13 +5,13 @@ import type {
   BootstrapPayload,
   DiagnosticsReport,
   WorkspaceSnapshot,
-} from '@universality/shared-types'
-import { UNIVERSALITY_ADAPTER_MANIFESTS } from '@universality/shared-types'
+} from '@datanaut/shared-types'
+import { DATANAUT_ADAPTER_MANIFESTS } from '@datanaut/shared-types'
 import { buildDiagnosticsReport, resolveEnvironment } from '../state/helpers'
 
 export const EMPTY_WORKSPACE_SCHEMA_VERSION = 6
 
-export const adapterManifests: AdapterManifest[] = UNIVERSALITY_ADAPTER_MANIFESTS
+export const adapterManifests: AdapterManifest[] = DATANAUT_ADAPTER_MANIFESTS
 
 export const defaultPreferences: AppPreferences = {
   theme: 'dark',

@@ -1,6 +1,6 @@
 # Adapter Model
 
-Universality uses a capability-driven adapter system so the desktop app can add new datastore engines without rewriting the shell.
+Datanaut uses a capability-driven adapter system so the desktop app can add new datastore engines without rewriting the shell.
 
 ## Adapter contract
 

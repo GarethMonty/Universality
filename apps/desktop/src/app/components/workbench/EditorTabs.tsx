@@ -10,7 +10,7 @@ import type {
   ConnectionProfile,
   EnvironmentProfile,
   QueryTabState,
-} from '@universality/shared-types'
+} from '@datanaut/shared-types'
 import { EditorTabContextMenu } from './editor-tabs/EditorTabContextMenu'
 import { EditorTabItem, type EditorTabDropTarget } from './editor-tabs/EditorTabItem'
 import { useTabStripScroll } from './editor-tabs/useTabStripScroll'
@@ -173,7 +173,7 @@ export function EditorTabs({
     event.stopPropagation()
 
     const sourceTabId =
-      draggingTabId || event.dataTransfer.getData('application/x-universality-tab-id')
+      draggingTabId || event.dataTransfer.getData('application/x-datanaut-tab-id')
 
     setDraggingTabId(undefined)
     setDropTarget(undefined)
@@ -303,7 +303,7 @@ export function EditorTabs({
               onDragStart={(event) => {
                 setDraggingTabId(tab.id)
                 event.dataTransfer.effectAllowed = 'move'
-                event.dataTransfer.setData('application/x-universality-tab-id', tab.id)
+                event.dataTransfer.setData('application/x-datanaut-tab-id', tab.id)
               }}
               onDrop={dropTab}
               onKeyDown={tabKeyDown}
