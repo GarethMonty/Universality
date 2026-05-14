@@ -2,6 +2,7 @@ use super::super::*;
 
 mod catalog;
 mod connection;
+mod editing;
 mod explorer;
 mod metadata;
 mod paging;
@@ -12,6 +13,7 @@ pub(crate) use paging::fetch_mysql_page;
 
 use catalog::mysql_manifest;
 use connection::test_mysql_connection;
+use editing::execute_mysql_data_edit;
 use explorer::{inspect_mysql_explorer_node, list_mysql_explorer_nodes};
 
 pub(crate) struct MysqlLikeAdapter {
@@ -63,6 +65,21 @@ impl DatastoreAdapter for MysqlLikeAdapter {
     ) -> Result<ExecutionResultEnvelope, CommandError> {
         query::execute_mysql_query(self, connection, request, notices).await
     }
+
+    async fn execute_data_edit(
+        &self,
+        connection: &ResolvedConnectionProfile,
+        request: &DataEditExecutionRequest,
+    ) -> Result<DataEditExecutionResponse, CommandError> {
+        execute_mysql_data_edit(
+            self.engine,
+            connection,
+            &self.experience_manifest(),
+            request,
+        )
+        .await
+    }
+
     async fn cancel(
         &self,
         _connection: &ResolvedConnectionProfile,

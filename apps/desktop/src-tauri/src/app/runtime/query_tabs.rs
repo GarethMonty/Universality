@@ -1,0 +1,297 @@
+use serde_json::json;
+
+use super::generate_id;
+use crate::domain::models::{
+    ConnectionProfile, CreateScopedQueryTabRequest, QueryTabState, SavedWorkItem,
+    ScopedQueryTarget, WorkspaceSnapshot,
+};
+
+pub(super) fn default_query_text(connection: &ConnectionProfile) -> String {
+    match connection.engine.as_str() {
+        "mongodb" | "litedb" => {
+            "{\n  \"collection\": \"products\",\n  \"filter\": {},\n  \"limit\": 50\n}".into()
+        }
+        "dynamodb" => "{\n  \"table\": \"Orders\",\n  \"keyCondition\": \"pk = :pk\",\n  \"values\": { \":pk\": \"CUSTOMER#123\" },\n  \"limit\": 25\n}".into(),
+        "cosmosdb" => "select top 50 * from c".into(),
+        "redis" | "valkey" => "SCAN 0 MATCH session:* COUNT 25".into(),
+        "memcached" => "stats".into(),
+        "cassandra" => "select * from keyspace.table limit 25;".into(),
+        "neo4j" => "MATCH (n) RETURN n LIMIT 25".into(),
+        "neptune" | "janusgraph" => "g.V().limit(25)".into(),
+        "arango" => "FOR doc IN collection LIMIT 25 RETURN doc".into(),
+        "influxdb" => "SELECT * FROM measurement LIMIT 25".into(),
+        "prometheus" => "up".into(),
+        "opentsdb" => "{\n  \"start\": \"1h-ago\",\n  \"queries\": [\n    { \"metric\": \"sys.cpu.user\", \"aggregator\": \"avg\" }\n  ]\n}".into(),
+        "elasticsearch" | "opensearch" => {
+            "{\n  \"query\": { \"match_all\": {} },\n  \"size\": 25\n}".into()
+        }
+        _ => "select 1;".into(),
+    }
+}
+
+pub(super) fn language_for_connection(connection: &ConnectionProfile) -> String {
+    match connection.engine.as_str() {
+        "mongodb" => "mongodb".into(),
+        "redis" | "valkey" => "redis".into(),
+        "cassandra" => "cql".into(),
+        "neo4j" => "cypher".into(),
+        "neptune" | "janusgraph" => "gremlin".into(),
+        "arango" => "aql".into(),
+        "prometheus" => "promql".into(),
+        "influxdb" => "influxql".into(),
+        "opentsdb" => "opentsdb".into(),
+        "elasticsearch" | "opensearch" => "query-dsl".into(),
+        "bigquery" => "google-sql".into(),
+        "snowflake" => "snowflake-sql".into(),
+        "clickhouse" => "clickhouse-sql".into(),
+        "dynamodb" | "litedb" => "json".into(),
+        _ => "sql".into(),
+    }
+}
+
+pub(super) fn editor_label_for_connection(connection: &ConnectionProfile) -> String {
+    match language_for_connection(connection).as_str() {
+        "mongodb" | "json" => "Document query".into(),
+        "redis" => {
+            if connection.engine == "valkey" {
+                "Valkey console".into()
+            } else {
+                "Redis console".into()
+            }
+        }
+        "cypher" => "Cypher editor".into(),
+        "gremlin" => "Gremlin editor".into(),
+        "sparql" => "SPARQL editor".into(),
+        "aql" => "AQL editor".into(),
+        "promql" => "PromQL editor".into(),
+        "influxql" | "flux" | "opentsdb" => "Time-series query".into(),
+        "query-dsl" => "Search DSL editor".into(),
+        "google-sql" => "GoogleSQL editor".into(),
+        "snowflake-sql" => "Snowflake SQL editor".into(),
+        "clickhouse-sql" => "ClickHouse SQL editor".into(),
+        "cql" => "CQL editor".into(),
+        _ => "SQL editor".into(),
+    }
+}
+
+pub(super) fn query_tab_title_parts(
+    connection: &ConnectionProfile,
+) -> (&'static str, &'static str) {
+    match connection.family.as_str() {
+        "document" => ("Query", "json"),
+        "keyvalue" => ("Console", "redis"),
+        _ => ("Query", "sql"),
+    }
+}
+
+pub(super) fn next_query_tab_title(
+    snapshot: &WorkspaceSnapshot,
+    connection: &ConnectionProfile,
+) -> String {
+    let (prefix, extension) = query_tab_title_parts(connection);
+    let mut index = 1;
+    let mut title = format!("{prefix} {index}.{extension}");
+
+    while snapshot.tabs.iter().any(|tab| tab.title == title) {
+        index += 1;
+        title = format!("{prefix} {index}.{extension}");
+    }
+
+    title
+}
+
+pub(super) fn normalize_tab_title(title: &str, fallback: &str) -> String {
+    let trimmed = title.trim();
+
+    if trimmed.is_empty() {
+        fallback.into()
+    } else {
+        trimmed.chars().take(80).collect()
+    }
+}
+
+pub(super) fn upsert_saved_work_item(saved_work: &mut Vec<SavedWorkItem>, item: SavedWorkItem) {
+    if let Some(index) = saved_work
+        .iter()
+        .position(|existing| existing.id == item.id)
+    {
+        saved_work[index] = item;
+    } else {
+        saved_work.push(item);
+    }
+}
+
+pub(super) fn build_query_tab(
+    connection: &ConnectionProfile,
+    dirty: bool,
+    title: String,
+) -> QueryTabState {
+    QueryTabState {
+        id: generate_id("tab"),
+        title,
+        connection_id: connection.id.clone(),
+        environment_id: connection
+            .environment_ids
+            .first()
+            .cloned()
+            .unwrap_or_else(|| "env-dev".into()),
+        family: connection.family.clone(),
+        language: language_for_connection(connection),
+        pinned: None,
+        saved_query_id: None,
+        editor_label: editor_label_for_connection(connection),
+        query_text: default_query_text(connection),
+        builder_state: None,
+        status: "idle".into(),
+        dirty,
+        last_run_at: None,
+        result: None,
+        history: Vec::new(),
+        error: None,
+    }
+}
+
+pub(super) fn build_scoped_query_tab(
+    snapshot: &WorkspaceSnapshot,
+    connection: &ConnectionProfile,
+    request: CreateScopedQueryTabRequest,
+) -> QueryTabState {
+    let builder_kind = scoped_builder_kind(connection, &request.target);
+    let target_label = normalized_target_label(&request.target.label);
+    let limit = 50;
+    let query_text = if builder_kind.as_deref() == Some("mongo-find") {
+        mongo_find_query_text(&target_label, limit)
+    } else {
+        request
+            .target
+            .query_template
+            .clone()
+            .unwrap_or_else(|| default_query_text(connection))
+    };
+    let builder_state = builder_kind
+        .filter(|kind| kind == "mongo-find")
+        .map(|_| mongo_find_builder_state(&target_label, &query_text, limit));
+    let title =
+        scoped_query_tab_title(snapshot, connection, &target_label, builder_state.is_some());
+    let environment_id = request
+        .environment_id
+        .or_else(|| connection.environment_ids.first().cloned())
+        .unwrap_or_else(|| "env-dev".into());
+
+    QueryTabState {
+        id: generate_id("tab"),
+        title,
+        connection_id: connection.id.clone(),
+        environment_id,
+        family: connection.family.clone(),
+        language: language_for_connection(connection),
+        pinned: None,
+        saved_query_id: None,
+        editor_label: editor_label_for_connection(connection),
+        query_text,
+        builder_state,
+        status: "idle".into(),
+        dirty: true,
+        last_run_at: None,
+        result: None,
+        history: Vec::new(),
+        error: None,
+    }
+}
+
+fn scoped_builder_kind(
+    connection: &ConnectionProfile,
+    target: &ScopedQueryTarget,
+) -> Option<String> {
+    if connection.engine == "mongodb" && target.preferred_builder.as_deref() == Some("mongo-find") {
+        Some("mongo-find".into())
+    } else {
+        None
+    }
+}
+
+fn scoped_query_tab_title(
+    snapshot: &WorkspaceSnapshot,
+    connection: &ConnectionProfile,
+    target_label: &str,
+    has_builder: bool,
+) -> String {
+    let extension = if connection.family == "document" {
+        "json"
+    } else {
+        "sql"
+    };
+    let candidate = if has_builder {
+        format!("{target_label}.find.{extension}")
+    } else {
+        format!("{target_label}.{extension}")
+    };
+    unique_query_tab_title(snapshot, &candidate)
+}
+
+fn unique_query_tab_title(snapshot: &WorkspaceSnapshot, candidate: &str) -> String {
+    if !snapshot.tabs.iter().any(|tab| tab.title == candidate) {
+        return candidate.into();
+    }
+
+    let (stem, extension) = candidate
+        .rsplit_once('.')
+        .map(|(stem, extension)| (stem.to_string(), format!(".{extension}")))
+        .unwrap_or_else(|| (candidate.to_string(), String::new()));
+    let mut index = 2;
+    let mut title = format!("{stem} {index}{extension}");
+
+    while snapshot.tabs.iter().any(|tab| tab.title == title) {
+        index += 1;
+        title = format!("{stem} {index}{extension}");
+    }
+
+    title
+}
+
+fn normalized_target_label(label: &str) -> String {
+    let trimmed = label.trim();
+
+    if trimmed.is_empty() {
+        "query".into()
+    } else {
+        trimmed
+            .chars()
+            .map(|character| {
+                if character.is_control() || character == '/' || character == '\\' {
+                    '_'
+                } else {
+                    character
+                }
+            })
+            .take(80)
+            .collect()
+    }
+}
+
+fn mongo_find_query_text(collection: &str, limit: u32) -> String {
+    serde_json::to_string_pretty(&json!({
+        "collection": collection,
+        "filter": {},
+        "limit": limit,
+    }))
+    .unwrap_or_else(|_| {
+        format!(
+            "{{\n  \"collection\": \"{collection}\",\n  \"filter\": {{}},\n  \"limit\": {limit}\n}}"
+        )
+    })
+}
+
+fn mongo_find_builder_state(collection: &str, query_text: &str, limit: u32) -> serde_json::Value {
+    json!({
+        "kind": "mongo-find",
+        "collection": collection,
+        "filters": [],
+        "projectionMode": "all",
+        "projectionFields": [],
+        "sort": [],
+        "skip": 0,
+        "limit": limit,
+        "lastAppliedQueryText": query_text,
+    })
+}

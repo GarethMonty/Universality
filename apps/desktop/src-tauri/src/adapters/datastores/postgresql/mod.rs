@@ -6,6 +6,7 @@ use super::super::*;
 
 mod cells;
 mod connection;
+mod editing;
 mod paging;
 mod structure;
 
@@ -16,6 +17,7 @@ mod timescale;
 pub(crate) use cells::stringify_pg_cell;
 pub(crate) use cockroach::CockroachAdapter;
 pub(crate) use connection::postgres_dsn;
+use editing::execute_postgres_data_edit;
 pub(crate) use paging::fetch_postgres_page;
 pub(crate) use postgres::PostgresAdapter;
 pub(crate) use structure::load_postgres_structure;

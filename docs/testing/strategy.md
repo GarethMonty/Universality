@@ -40,5 +40,7 @@ Every pull request should run:
 
 - lint
 - unit tests
-- integration tests
+- dependency-free integration and contract tests
 - production build
+
+The default GitHub CI path must not require Docker, local database ports, desktop WebDriver, cloud credentials, or live datastore services. Fixture-backed adapter tests and desktop E2E remain available through local/manual commands when a developer explicitly opts into them.

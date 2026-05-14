@@ -1,8 +1,12 @@
 import { useState } from 'react'
 import type {
   ConnectionProfile,
+  DataEditExecutionRequest,
+  DataEditExecutionResponse,
+  EnvironmentProfile,
   ExecutionCapabilities,
   ExecutionResultEnvelope,
+  QueryTabState,
   ResultPayload,
 } from '@datanaut/shared-types'
 import { ClockIcon, CopyIcon, DownloadIcon } from '../icons'
@@ -16,21 +20,29 @@ const DEFAULT_RESULT_PAGE_SIZE = 20
 interface ResultsViewProps {
   capabilities: ExecutionCapabilities
   connection?: ConnectionProfile
+  activeTab?: QueryTabState
+  activeEnvironment?: EnvironmentProfile
   payload?: ResultPayload
   renderer?: string
   result?: ExecutionResultEnvelope
   onSelectRenderer(renderer: string): void
   onLoadNextPage(): void
+  onExecuteDataEdit?(
+    request: DataEditExecutionRequest,
+  ): Promise<DataEditExecutionResponse | undefined>
 }
 
 export function ResultsView({
   capabilities,
   connection,
+  activeTab,
+  activeEnvironment,
   payload,
   renderer,
   result,
   onSelectRenderer,
   onLoadNextPage,
+  onExecuteDataEdit,
 }: ResultsViewProps) {
   const [operationMessage, setOperationMessage] = useState('')
   const [pagination, setPagination] = useState({
@@ -124,11 +136,21 @@ export function ResultsView({
 
       <ResultPayloadView
         connection={connection}
+        editContext={
+          activeTab && activeEnvironment
+            ? {
+                connectionId: activeTab.connectionId,
+                environmentId: activeEnvironment.id,
+                queryText: activeTab.queryText,
+              }
+            : undefined
+        }
         pageIndex={safePageIndex}
         pageSize={usesDocumentPaging ? pageSize : undefined}
         payload={payload}
         resultDurationMs={result?.durationMs}
         resultSummary={result?.summary}
+        onExecuteDataEdit={onExecuteDataEdit}
       />
 
       {payload ? (

@@ -1,0 +1,303 @@
+use std::collections::HashMap;
+
+use tauri::AppHandle;
+
+use super::{
+    environments::resolve_environment,
+    fixtures::{
+        fixture_debug_enabled, fixture_workspace_seed, seed_fixture_secrets, workspace_is_empty,
+    },
+    ui::normalize_ui_state,
+    ManagedAppState,
+};
+use crate::{
+    adapters,
+    domain::{
+        error::CommandError,
+        models::{
+            AppHealth, AppPreferences, BootstrapPayload, DiagnosticsCounts, DiagnosticsReport,
+            ExportBundle, LockState, ResolvedEnvironment, UiState, WorkspaceSnapshot,
+        },
+    },
+    persistence, security,
+};
+
+impl ManagedAppState {
+    pub fn load(app: AppHandle) -> Self {
+        let loaded_snapshot = persistence::load_snapshot(&app)
+            .ok()
+            .flatten()
+            .map(migrate_snapshot);
+        let seed_fixture_workspace =
+            fixture_debug_enabled() && loaded_snapshot.as_ref().is_none_or(workspace_is_empty);
+        let snapshot = if seed_fixture_workspace {
+            let seed = fixture_workspace_seed();
+            let _ = seed_fixture_secrets(&seed.secrets);
+            seed.snapshot
+        } else {
+            loaded_snapshot.unwrap_or_else(blank_workspace_snapshot)
+        };
+        let managed = Self { app, snapshot };
+        let _ = persistence::save_snapshot(&managed.app, &sanitize_snapshot(&managed.snapshot));
+        managed
+    }
+
+    pub fn health(&self) -> AppHealth {
+        let secret_storage = if security::using_file_secret_store() {
+            "file"
+        } else {
+            "keyring"
+        };
+
+        AppHealth::desktop(secret_storage)
+    }
+
+    pub fn diagnostics(&self) -> DiagnosticsReport {
+        let mut warnings = Vec::new();
+
+        if self.snapshot.lock_state.is_locked {
+            warnings.push("Application is currently locked.".into());
+        }
+
+        if self.snapshot.preferences.telemetry == "disabled" {
+            warnings.push("Crash reporting is disabled.".into());
+        }
+
+        if self
+            .snapshot
+            .environments
+            .iter()
+            .any(|environment| environment.risk == "critical")
+        {
+            warnings.push("Critical environments are configured in this workspace.".into());
+        }
+
+        DiagnosticsReport {
+            created_at: timestamp_now(),
+            runtime: self.health().runtime,
+            platform: self.health().platform,
+            app_version: env!("CARGO_PKG_VERSION").into(),
+            counts: DiagnosticsCounts {
+                connections: self.snapshot.connections.len(),
+                environments: self.snapshot.environments.len(),
+                tabs: self.snapshot.tabs.len(),
+                saved_work: self.snapshot.saved_work.len(),
+            },
+            warnings,
+        }
+    }
+
+    pub fn resolve_environment(&self, environment_id: &str) -> ResolvedEnvironment {
+        resolve_environment(&self.snapshot.environments, environment_id)
+    }
+
+    pub fn bootstrap_payload(&self) -> BootstrapPayload {
+        BootstrapPayload {
+            health: self.health(),
+            snapshot: self.snapshot.clone(),
+            resolved_environment: self.resolve_environment(&self.snapshot.ui.active_environment_id),
+            diagnostics: self.diagnostics(),
+        }
+    }
+
+    pub fn persist(&self) -> Result<(), CommandError> {
+        persistence::save_snapshot(&self.app, &sanitize_snapshot(&self.snapshot))
+    }
+
+    pub fn ensure_unlocked(&self) -> Result<(), CommandError> {
+        if self.snapshot.lock_state.is_locked {
+            Err(CommandError::new(
+                "workspace-locked",
+                "Unlock the workspace before using privileged desktop commands.",
+            ))
+        } else {
+            Ok(())
+        }
+    }
+
+    pub fn export_bundle(&self, passphrase: &str) -> Result<ExportBundle, CommandError> {
+        self.ensure_unlocked()?;
+        let serialized = serde_json::to_string_pretty(&sanitize_snapshot(&self.snapshot))?;
+        let encrypted_payload = security::encrypt_export_payload(passphrase, &serialized)?;
+        Ok(ExportBundle {
+            format: "datanaut-bundle".into(),
+            version: persistence::SCHEMA_VERSION,
+            encrypted_payload,
+        })
+    }
+
+    pub fn import_bundle(
+        &mut self,
+        passphrase: &str,
+        encrypted_payload: &str,
+    ) -> Result<BootstrapPayload, CommandError> {
+        self.ensure_unlocked()?;
+        let decrypted = security::decrypt_export_payload(passphrase, encrypted_payload)?;
+        let snapshot = serde_json::from_str::<WorkspaceSnapshot>(&decrypted)?;
+        self.snapshot = migrate_snapshot(snapshot);
+        self.persist()?;
+        Ok(self.bootstrap_payload())
+    }
+}
+
+fn sanitize_snapshot(snapshot: &WorkspaceSnapshot) -> WorkspaceSnapshot {
+    let mut sanitized = snapshot.clone();
+
+    for tab in &mut sanitized.tabs {
+        tab.result = None;
+    }
+
+    for closed_tab in &mut sanitized.closed_tabs {
+        closed_tab.tab.result = None;
+    }
+
+    sanitized
+}
+
+pub fn timestamp_now() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    format!("{timestamp}")
+}
+
+pub fn generate_id(prefix: &str) -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    format!("{prefix}-{nanos}")
+}
+
+fn migrate_snapshot(mut snapshot: WorkspaceSnapshot) -> WorkspaceSnapshot {
+    snapshot.schema_version = persistence::SCHEMA_VERSION;
+    snapshot.adapter_manifests = adapters::manifests();
+    strip_demo_records(&mut snapshot);
+
+    for tab in &mut snapshot.tabs {
+        tab.result = None;
+    }
+
+    for closed_tab in &mut snapshot.closed_tabs {
+        closed_tab.tab.result = None;
+    }
+
+    snapshot.ui = normalize_ui_state(&snapshot);
+
+    snapshot
+}
+
+fn strip_demo_records(snapshot: &mut WorkspaceSnapshot) {
+    const DEMO_CONNECTIONS: &[&str] = &[
+        "conn-analytics",
+        "conn-orders",
+        "conn-catalog",
+        "conn-commerce",
+        "conn-local-sqlite",
+        "conn-cache",
+    ];
+    const DEMO_TABS: &[&str] = &[
+        "tab-sql-ops",
+        "tab-orders-audit",
+        "tab-mongo-catalog",
+        "tab-commerce-mysql",
+        "tab-local-sqlite",
+        "tab-redis-session",
+    ];
+    const DEMO_SAVED_WORK: &[&str] = &["saved-locks", "saved-hotkeys", "saved-catalog"];
+    const DEMO_ENVIRONMENTS: &[&str] = &["env-dev", "env-uat", "env-prod"];
+
+    snapshot
+        .connections
+        .retain(|connection| !DEMO_CONNECTIONS.contains(&connection.id.as_str()));
+    snapshot
+        .tabs
+        .retain(|tab| !DEMO_TABS.contains(&tab.id.as_str()));
+    snapshot
+        .closed_tabs
+        .retain(|tab| !DEMO_TABS.contains(&tab.tab.id.as_str()));
+    snapshot
+        .saved_work
+        .retain(|item| !DEMO_SAVED_WORK.contains(&item.id.as_str()));
+    snapshot
+        .explorer_nodes
+        .retain(|node| !node.id.starts_with("explorer-"));
+    snapshot.guardrails.clear();
+
+    let mut referenced_environments: Vec<String> = snapshot
+        .connections
+        .iter()
+        .flat_map(|connection| connection.environment_ids.clone())
+        .collect();
+    referenced_environments.extend(snapshot.tabs.iter().map(|tab| tab.environment_id.clone()));
+    referenced_environments.extend(
+        snapshot
+            .closed_tabs
+            .iter()
+            .map(|tab| tab.tab.environment_id.clone()),
+    );
+    referenced_environments.extend(
+        snapshot
+            .saved_work
+            .iter()
+            .filter_map(|item| item.environment_id.clone()),
+    );
+
+    snapshot.environments.retain(|environment| {
+        !DEMO_ENVIRONMENTS.contains(&environment.id.as_str())
+            || referenced_environments
+                .iter()
+                .any(|environment_id| environment_id == &environment.id)
+    });
+}
+
+pub fn blank_workspace_snapshot() -> WorkspaceSnapshot {
+    let created_at = timestamp_now();
+
+    WorkspaceSnapshot {
+        schema_version: persistence::SCHEMA_VERSION,
+        connections: Vec::new(),
+        environments: Vec::new(),
+        tabs: Vec::new(),
+        closed_tabs: Vec::new(),
+        saved_work: Vec::new(),
+        explorer_nodes: Vec::new(),
+        adapter_manifests: adapters::manifests(),
+        preferences: AppPreferences {
+            theme: "dark".into(),
+            telemetry: "opt-in".into(),
+            lock_after_minutes: 15,
+            safe_mode_enabled: true,
+            command_palette_enabled: true,
+        },
+        guardrails: Vec::new(),
+        lock_state: LockState {
+            is_locked: false,
+            locked_at: None,
+        },
+        ui: UiState {
+            active_connection_id: String::new(),
+            active_environment_id: String::new(),
+            active_tab_id: String::new(),
+            explorer_filter: String::new(),
+            explorer_view: "structure".into(),
+            connection_group_mode: "none".into(),
+            sidebar_section_states: HashMap::new(),
+            active_activity: "connections".into(),
+            sidebar_collapsed: false,
+            active_sidebar_pane: "connections".into(),
+            sidebar_width: 280,
+            bottom_panel_visible: false,
+            active_bottom_panel_tab: "results".into(),
+            bottom_panel_height: 260,
+            right_drawer: "none".into(),
+            right_drawer_width: 360,
+        },
+        updated_at: created_at,
+    }
+}

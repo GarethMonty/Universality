@@ -8,27 +8,35 @@ use crate::domain::{
     error::CommandError,
     models::{
         AdapterDiagnostics, AdapterManifest, CancelExecutionRequest, CancelExecutionResult,
-        ConnectionTestResult, DatastoreOperationManifest, ExecutionCapabilities, ExecutionRequest,
-        ExecutionResultEnvelope, ExplorerInspectRequest, ExplorerInspectResponse, ExplorerNode,
-        ExplorerRequest, ExplorerResponse, LocalDatabaseManifest, OperationExecutionRequest,
-        OperationExecutionResponse, OperationPlan, PermissionInspection, QueryExecutionNotice,
-        ResolvedConnectionProfile, ResultPageInfo, ResultPageRequest, ResultPageResponse,
-        StructureEdge, StructureField, StructureGroup, StructureNode, StructureRequest,
-        StructureResponse,
+        ConnectionTestResult, DataEditChange, DataEditExecutionRequest, DataEditExecutionResponse,
+        DataEditPlanRequest, DataEditPlanResponse, DatastoreDiagnosticsTab, DatastoreEditableScope,
+        DatastoreExperienceAction, DatastoreExperienceBuilder, DatastoreExperienceManifest,
+        DatastoreExperienceObjectKind, DatastoreOperationManifest, ExecutionCapabilities,
+        ExecutionRequest, ExecutionResultEnvelope, ExplorerInspectRequest, ExplorerInspectResponse,
+        ExplorerNode, ExplorerRequest, ExplorerResponse, LocalDatabaseManifest,
+        OperationExecutionRequest, OperationExecutionResponse, OperationPlan, PermissionInspection,
+        QueryExecutionNotice, ResolvedConnectionProfile, ResultPageInfo, ResultPageRequest,
+        ResultPageResponse, StructureEdge, StructureField, StructureGroup, StructureNode,
+        StructureRequest, StructureResponse,
     },
 };
 
 mod common;
 mod contract;
+mod data_edit;
 mod datastores;
+mod experience;
 mod registry;
 mod runtime;
 
 pub(crate) use common::*;
 pub(crate) use contract::DatastoreAdapter;
+pub(crate) use data_edit::{default_data_edit_execution, default_data_edit_plan};
+pub(crate) use experience::experience_manifest_for_manifest;
 pub use registry::{execution_capabilities, manifests};
 pub use runtime::{
-    cancel, collect_diagnostics, execute, execute_operation, fetch_result_page,
-    inspect_explorer_node, inspect_permissions, list_explorer_nodes, load_structure_map,
-    operation_manifests, plan_operation, test_connection,
+    cancel, collect_diagnostics, execute, execute_data_edit, execute_operation,
+    experience_manifests, fetch_result_page, inspect_explorer_node, inspect_permissions,
+    list_explorer_nodes, load_structure_map, operation_manifests, plan_data_edit, plan_operation,
+    test_connection,
 };

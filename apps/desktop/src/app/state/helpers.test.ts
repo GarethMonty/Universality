@@ -3,6 +3,7 @@ import { createSeedSnapshot } from '../../test/fixtures/seed-workspace'
 import {
   evaluateGuardrails,
   migrateWorkspaceSnapshot,
+  normalizeUiState,
   resolveEnvironment,
 } from './helpers'
 
@@ -126,5 +127,54 @@ describe('migrateWorkspaceSnapshot', () => {
     expect(migrated.ui.activeEnvironmentId).toBe('')
     expect(migrated.ui.activeTabId).toBe('')
     expect(migrated.ui.bottomPanelVisible).toBe(false)
+  })
+})
+
+describe('normalizeUiState', () => {
+  it('clamps layout inputs and rejects unknown persisted UI values', () => {
+    const snapshot = createSeedSnapshot()
+    const normalized = normalizeUiState({
+      ...snapshot,
+      ui: {
+        ...snapshot.ui,
+        activeActivity: 'invalid-activity',
+        activeSidebarPane: 'invalid-pane',
+        activeBottomPanelTab: 'invalid-tab',
+        bottomPanelHeight: Number.NaN,
+        sidebarWidth: 9999,
+        rightDrawer: 'surprise-drawer',
+        rightDrawerWidth: 12,
+        connectionGroupMode: 'cluster-by-mood',
+        sidebarSectionStates: {
+          'connections:none:all': true,
+          'connections:none:bad': 'open',
+        },
+      },
+    } as unknown as typeof snapshot)
+
+    expect(normalized.activeActivity).toBe('connections')
+    expect(normalized.activeSidebarPane).toBe('connections')
+    expect(normalized.activeBottomPanelTab).toBe('results')
+    expect(normalized.bottomPanelHeight).toBe(260)
+    expect(normalized.sidebarWidth).toBe(420)
+    expect(normalized.rightDrawer).toBe('none')
+    expect(normalized.rightDrawerWidth).toBe(320)
+    expect(normalized.connectionGroupMode).toBe('none')
+    expect(normalized.sidebarSectionStates).toEqual({ 'connections:none:all': true })
+  })
+
+  it('preserves query history as a first-class bottom panel tab', () => {
+    const snapshot = createSeedSnapshot()
+    const normalized = normalizeUiState({
+      ...snapshot,
+      ui: {
+        ...snapshot.ui,
+        activeBottomPanelTab: 'history',
+        bottomPanelVisible: true,
+      },
+    })
+
+    expect(normalized.activeBottomPanelTab).toBe('history')
+    expect(normalized.bottomPanelVisible).toBe(true)
   })
 })

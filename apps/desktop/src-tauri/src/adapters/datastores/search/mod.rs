@@ -3,12 +3,14 @@ use super::super::*;
 mod catalog;
 mod connection;
 mod diagnostics;
+mod editing;
 mod explorer;
 mod query;
 
 use catalog::*;
 use connection::test_search_connection;
 use diagnostics::collect_search_diagnostics;
+use editing::execute_search_data_edit;
 use explorer::{inspect_search_explorer_node, list_search_explorer_nodes};
 
 pub(crate) struct ElasticsearchAdapter;
@@ -84,6 +86,20 @@ impl DatastoreAdapter for ElasticsearchAdapter {
         Ok(no_additional_pages_response(ELASTICSEARCH.engine, request))
     }
 
+    async fn execute_data_edit(
+        &self,
+        connection: &ResolvedConnectionProfile,
+        request: &DataEditExecutionRequest,
+    ) -> Result<DataEditExecutionResponse, CommandError> {
+        execute_search_data_edit(
+            ELASTICSEARCH,
+            connection,
+            &self.experience_manifest(),
+            request,
+        )
+        .await
+    }
+
     async fn collect_diagnostics(
         &self,
         connection: &ResolvedConnectionProfile,
@@ -152,6 +168,14 @@ impl DatastoreAdapter for OpenSearchAdapter {
         request: &ResultPageRequest,
     ) -> Result<ResultPageResponse, CommandError> {
         Ok(no_additional_pages_response(OPENSEARCH.engine, request))
+    }
+
+    async fn execute_data_edit(
+        &self,
+        connection: &ResolvedConnectionProfile,
+        request: &DataEditExecutionRequest,
+    ) -> Result<DataEditExecutionResponse, CommandError> {
+        execute_search_data_edit(OPENSEARCH, connection, &self.experience_manifest(), request).await
     }
 
     async fn collect_diagnostics(

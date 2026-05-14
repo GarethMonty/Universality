@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import {
   coerceValue,
@@ -21,7 +22,7 @@ interface DocumentGridRowViewProps {
   onScheduleCopyValue(value: unknown): void
   onStopEditing(): void
   onToggleRow(rowId: string): void
-  onUpdateValue(row: DocumentGridRow, nextValue: unknown): void
+  onUpdateValue(row: DocumentGridRow, nextValue: unknown, editKind?: 'set-field' | 'change-field-type'): void
 }
 
 export function DocumentGridRowView({
@@ -41,8 +42,8 @@ export function DocumentGridRowView({
   const editingType = editingCell === 'type'
   const editingValue = editingCell === 'value'
 
-  const handleEditorKeyDown = (event: KeyboardEvent<HTMLInputElement | HTMLSelectElement>) => {
-    if (event.key === 'Enter' || event.key === 'Escape') {
+  const handleTypeKeyDown = (event: KeyboardEvent<HTMLSelectElement>) => {
+    if (event.key === 'Escape') {
       event.preventDefault()
       onStopEditing()
     }
@@ -78,16 +79,10 @@ export function DocumentGridRowView({
           <span className="document-data-grid-spacer" />
         )}
         {editingField ? (
-          <input
-            className="document-data-grid-field-input"
-            aria-label={`Rename field ${row.label}`}
-            value={row.label}
-            autoFocus
-            onChange={(event) => onRenameField(row, event.target.value)}
-            onBlur={onStopEditing}
-            onClick={(event) => event.stopPropagation()}
-            onFocus={(event) => event.currentTarget.select()}
-            onKeyDown={handleEditorKeyDown}
+          <FieldNameEditor
+            row={row}
+            onRenameField={onRenameField}
+            onStopEditing={onStopEditing}
           />
         ) : (
           <span
@@ -110,10 +105,14 @@ export function DocumentGridRowView({
             autoFocus
             onBlur={onStopEditing}
             onChange={(event) => {
-              onUpdateValue(row, coerceValue(row.value, event.target.value as DocumentValueType))
+              onUpdateValue(
+                row,
+                coerceValue(row.value, event.target.value as DocumentValueType),
+                'change-field-type',
+              )
               onStopEditing()
             }}
-            onKeyDown={handleEditorKeyDown}
+            onKeyDown={handleTypeKeyDown}
           >
             {TYPE_OPTIONS.map((type) => (
               <option key={type} value={type}>
@@ -132,15 +131,10 @@ export function DocumentGridRowView({
       </div>
       <div className="document-data-grid-cell document-data-grid-cell--value" role="gridcell">
         {editingValue ? (
-          <input
-            className="document-data-grid-value-input"
-            aria-label={`Edit value ${row.fieldPath}`}
-            value={editableValue(row.value)}
-            autoFocus
-            onChange={(event) => onUpdateValue(row, parseEditedValue(event.target.value, row.type))}
-            onBlur={onStopEditing}
-            onFocus={(event) => event.currentTarget.select()}
-            onKeyDown={handleEditorKeyDown}
+          <FieldValueEditor
+            row={row}
+            onStopEditing={onStopEditing}
+            onUpdateValue={onUpdateValue}
           />
         ) : (
           <button
@@ -159,4 +153,90 @@ export function DocumentGridRowView({
       </div>
     </div>
   )
+}
+
+function FieldNameEditor({
+  row,
+  onRenameField,
+  onStopEditing,
+}: {
+  row: DocumentGridRow
+  onRenameField(row: DocumentGridRow, nextName: string): void
+  onStopEditing(): void
+}) {
+  const [fieldDraft, setFieldDraft] = useState(row.label)
+
+  const commit = () => {
+    const nextName = fieldDraft.trim()
+
+    if (nextName && nextName !== row.label) {
+      onRenameField(row, nextName)
+    }
+
+    onStopEditing()
+  }
+
+  return (
+    <input
+      className="document-data-grid-field-input"
+      aria-label={`Rename field ${row.label}`}
+      value={fieldDraft}
+      autoFocus
+      onBlur={commit}
+      onChange={(event) => setFieldDraft(event.target.value)}
+      onClick={(event) => event.stopPropagation()}
+      onFocus={(event) => event.currentTarget.select()}
+      onKeyDown={(event) => handleDraftEditorKeyDown(event, commit, onStopEditing)}
+    />
+  )
+}
+
+function FieldValueEditor({
+  row,
+  onStopEditing,
+  onUpdateValue,
+}: {
+  row: DocumentGridRow
+  onStopEditing(): void
+  onUpdateValue(
+    row: DocumentGridRow,
+    nextValue: unknown,
+    editKind?: 'set-field' | 'change-field-type',
+  ): void
+}) {
+  const [valueDraft, setValueDraft] = useState(editableValue(row.value))
+
+  const commit = () => {
+    onUpdateValue(row, parseEditedValue(valueDraft, row.type), 'set-field')
+    onStopEditing()
+  }
+
+  return (
+    <input
+      className="document-data-grid-value-input"
+      aria-label={`Edit value ${row.fieldPath}`}
+      value={valueDraft}
+      autoFocus
+      onBlur={commit}
+      onChange={(event) => setValueDraft(event.target.value)}
+      onFocus={(event) => event.currentTarget.select()}
+      onKeyDown={(event) => handleDraftEditorKeyDown(event, commit, onStopEditing)}
+    />
+  )
+}
+
+function handleDraftEditorKeyDown(
+  event: KeyboardEvent<HTMLInputElement>,
+  commit: () => void,
+  cancel: () => void,
+) {
+  if (event.key === 'Enter') {
+    event.preventDefault()
+    commit()
+  }
+
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    cancel()
+  }
 }

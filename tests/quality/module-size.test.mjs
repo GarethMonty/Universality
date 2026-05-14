@@ -6,17 +6,13 @@ import test from 'node:test'
 const repoRoot = path.resolve(import.meta.dirname, '..', '..')
 const defaultMaxLines = 400
 
-const documentedExceptions = new Map(
-  [
-    ['apps/desktop/src/app/components/workbench/SideBar.tsx', 2300, 'legacy sidebar pending area split'],
-    ['apps/desktop/src/app/components/workbench/RightDrawer.tsx', 1600, 'legacy drawer pending area split'],
-    ['apps/desktop/src-tauri/src/app/runtime.rs', 3700, 'legacy runtime shell pending command split'],
-  ].map(([file, maxLines, reason]) => [file, { maxLines, reason }]),
-)
+const documentedExceptions = new Map()
 
 test('workbench and runtime modules stay within documented size budgets', async () => {
   const files = [
     ...(await sourceFiles('apps/desktop/src/app/components/workbench', ['.ts', '.tsx'])),
+    ...(await sourceFiles('apps/desktop/src/app/state', ['.ts', '.tsx'])),
+    ...(await sourceFiles('apps/desktop/src/services/runtime', ['.ts', '.tsx'])),
     ...(await sourceFiles('apps/desktop/src-tauri/src/app', ['.rs'])),
   ].filter((file) => !file.includes('.test.') && !file.endsWith('/mod.rs'))
 

@@ -392,6 +392,150 @@ pub struct AdapterDiagnostics {
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct DatastoreExperienceObjectKind {
+    pub kind: String,
+    pub label: String,
+    pub description: String,
+    pub child_kinds: Vec<String>,
+    pub queryable: bool,
+    pub supports_context_menu: bool,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DatastoreExperienceAction {
+    pub id: String,
+    pub label: String,
+    pub scope: String,
+    pub risk: String,
+    pub operation_id: Option<String>,
+    pub requires_selection: bool,
+    pub description: String,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DatastoreExperienceBuilder {
+    pub kind: String,
+    pub label: String,
+    pub scope: String,
+    pub default_mode: String,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DatastoreEditableScope {
+    pub scope: String,
+    pub label: String,
+    pub edit_kinds: Vec<String>,
+    pub requires_primary_key: bool,
+    pub live_execution: bool,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DatastoreDiagnosticsTab {
+    pub id: String,
+    pub label: String,
+    pub description: String,
+    pub default_renderer: String,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DatastoreExperienceManifest {
+    pub engine: String,
+    pub family: String,
+    pub label: String,
+    pub maturity: String,
+    pub object_kinds: Vec<DatastoreExperienceObjectKind>,
+    pub context_actions: Vec<DatastoreExperienceAction>,
+    pub query_builders: Vec<DatastoreExperienceBuilder>,
+    pub editable_scopes: Vec<DatastoreEditableScope>,
+    pub diagnostics_tabs: Vec<DatastoreDiagnosticsTab>,
+    pub result_renderers: Vec<String>,
+    pub safety_rules: Vec<String>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DatastoreExperienceResponse {
+    pub experiences: Vec<DatastoreExperienceManifest>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct DataEditTarget {
+    pub object_kind: String,
+    #[serde(default)]
+    pub path: Vec<String>,
+    pub schema: Option<String>,
+    pub table: Option<String>,
+    pub collection: Option<String>,
+    pub key: Option<String>,
+    pub document_id: Option<Value>,
+    pub item_key: Option<HashMap<String, Value>>,
+    pub primary_key: Option<HashMap<String, Value>>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct DataEditChange {
+    pub field: Option<String>,
+    pub path: Option<Vec<String>>,
+    pub value: Option<Value>,
+    pub value_type: Option<String>,
+    pub new_name: Option<String>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DataEditPlanRequest {
+    pub connection_id: String,
+    pub environment_id: String,
+    pub edit_kind: String,
+    pub target: DataEditTarget,
+    pub changes: Vec<DataEditChange>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DataEditPlanResponse {
+    pub connection_id: String,
+    pub environment_id: String,
+    pub edit_kind: String,
+    pub execution_support: String,
+    pub plan: OperationPlan,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DataEditExecutionRequest {
+    pub connection_id: String,
+    pub environment_id: String,
+    pub edit_kind: String,
+    pub target: DataEditTarget,
+    pub changes: Vec<DataEditChange>,
+    pub confirmation_text: Option<String>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DataEditExecutionResponse {
+    pub connection_id: String,
+    pub environment_id: String,
+    pub edit_kind: String,
+    pub execution_support: String,
+    pub executed: bool,
+    pub plan: OperationPlan,
+    pub messages: Vec<String>,
+    pub warnings: Vec<String>,
+    pub result: Option<ExecutionResultEnvelope>,
+    pub metadata: Option<Value>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GuardrailDecision {
     pub id: Option<String>,
     pub status: String,

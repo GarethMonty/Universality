@@ -1,7 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { ConnectionProfile } from '@datanaut/shared-types'
+import type {
+  ConnectionProfile,
+  DataEditChange,
+  DataEditExecutionRequest,
+  DataEditExecutionResponse,
+  DataEditKind,
+} from '@datanaut/shared-types'
 import { ClockIcon } from '../icons'
 import { DocumentContextMenu } from './document-context-menu'
+import type { DocumentEditContext } from './document-edit-context'
+import {
+  buildDocumentEditRequest,
+  pathSegments,
+  valueTypeName,
+} from './document-edit-requests'
 import { DocumentGridRowView } from './DocumentGridRowView'
 import { documentResultBehaviorForConnection } from './datastore-result-behaviors'
 import { editablePermissions } from './document-edit-permissions'
@@ -18,10 +30,14 @@ import { formatDurationClock } from './result-runtime'
 
 interface DocumentResultsViewProps {
   connection?: ConnectionProfile
+  editContext?: DocumentEditContext
   documents: Array<Record<string, unknown>>
   resultDurationMs?: number
   resultSummary?: string
   totalDocumentCount?: number
+  onExecuteDataEdit?(
+    request: DataEditExecutionRequest,
+  ): Promise<DataEditExecutionResponse | undefined>
 }
 
 interface ContextMenuState {
@@ -39,10 +55,12 @@ interface ActiveEditorState {
 
 export function DocumentResultsView({
   connection,
+  editContext,
   documents,
   resultDurationMs,
   resultSummary,
   totalDocumentCount,
+  onExecuteDataEdit,
 }: DocumentResultsViewProps) {
   const behavior = documentResultBehaviorForConnection(connection)
   const [draftState, setDraftState] = useState(() => ({
@@ -100,6 +118,47 @@ export function DocumentResultsView({
         documents: updater(currentDocuments),
       }
     })
+  }
+
+  const applyDocumentEdit = (
+    row: DocumentGridRow,
+    editKind: DataEditKind,
+    changes: DataEditChange[],
+    updater: (current: Array<Record<string, unknown>>) => Array<Record<string, unknown>>,
+    successMessage: string,
+  ) => {
+    void (async () => {
+      if (onExecuteDataEdit && editContext && connection) {
+        const request = buildDocumentEditRequest(
+          connection,
+          editContext,
+          draftDocuments,
+          row,
+          editKind,
+          changes,
+        )
+
+        if (!request) {
+          setCopyMessage('Edit kept locally; collection scope or document id is unavailable.')
+          updateDraftDocuments(updater)
+          return
+        }
+
+        const response = await onExecuteDataEdit(request)
+        const failureMessage =
+          response?.warnings.at(-1) ??
+          response?.messages.at(-1) ??
+          'Datastore did not confirm the edit.'
+
+        if (!response?.executed) {
+          setCopyMessage(failureMessage)
+          return
+        }
+      }
+
+      updateDraftDocuments(updater)
+      setCopyMessage(successMessage)
+    })()
   }
 
   const beginEditing = (row: DocumentGridRow, cell: DocumentEditCell) => {
@@ -171,29 +230,56 @@ export function DocumentResultsView({
     setCopyMessage('Copied document JSON.')
   }
 
-  const updateRowValue = (row: DocumentGridRow, nextValue: unknown) => {
+  const updateRowValue = (
+    row: DocumentGridRow,
+    nextValue: unknown,
+    editKind: 'set-field' | 'change-field-type' = 'set-field',
+  ) => {
     if (!behavior.canEditDocuments || row.path.length === 0) {
       return
     }
 
-    updateDraftDocuments((current) =>
-      current.map((document, index) =>
-        index === row.documentIndex ? setValueAtPath(document, row.path, nextValue) : document,
-      ),
+    applyDocumentEdit(
+      row,
+      editKind,
+      [
+        {
+          path: pathSegments(row.path),
+          value: nextValue,
+          valueType: valueTypeName(nextValue),
+        },
+      ],
+      (current) =>
+        current.map((document, index) =>
+          index === row.documentIndex ? setValueAtPath(document, row.path, nextValue) : document,
+        ),
+      editKind === 'change-field-type' ? 'Changed field type.' : 'Updated field value.',
     )
   }
 
-  const renameRowField = (row: DocumentGridRow, nextName: string) => {
-    if (!behavior.canRenameFields || row.path.length === 0 || !nextName.trim()) {
+  const renameRowField = (row: DocumentGridRow, nextFieldName: string) => {
+    if (!behavior.canRenameFields || row.path.length === 0 || !nextFieldName.trim()) {
       return
     }
 
-    updateDraftDocuments((current) =>
-      current.map((document, index) =>
-        index === row.documentIndex
-          ? renameFieldAtPath(document, row.parentPath, row.path.at(-1), nextName.trim())
-          : document,
-      ),
+    const nextName = nextFieldName.trim()
+
+    applyDocumentEdit(
+      row,
+      'rename-field',
+      [
+        {
+          path: pathSegments(row.path),
+          newName: pathSegments([...row.parentPath, nextName]).join('.'),
+        },
+      ],
+      (current) =>
+        current.map((document, index) =>
+          index === row.documentIndex
+            ? renameFieldAtPath(document, row.parentPath, row.path.at(-1), nextName)
+            : document,
+        ),
+      'Renamed field.',
     )
   }
 
@@ -203,10 +289,19 @@ export function DocumentResultsView({
     }
 
     stopEditing()
-    updateDraftDocuments((current) =>
-      current.map((document, index) =>
-        index === row.documentIndex ? deleteValueAtPath(document, row.path) : document,
-      ),
+    applyDocumentEdit(
+      row,
+      'unset-field',
+      [
+        {
+          path: pathSegments(row.path),
+        },
+      ],
+      (current) =>
+        current.map((document, index) =>
+          index === row.documentIndex ? deleteValueAtPath(document, row.path) : document,
+        ),
+      'Deleted field.',
     )
   }
 

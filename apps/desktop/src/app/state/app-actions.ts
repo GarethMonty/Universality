@@ -1,0 +1,45 @@
+import { useMemo } from 'react'
+import { findConnection, findEnvironment } from './app-state-selectors'
+import type { Actions, AppActionContext, AppContextValue } from './app-state-types'
+import { useConnectionActions } from './app-actions-connections'
+import { useQueryTabActions } from './app-actions-tabs'
+import { useRuntimeActions } from './app-actions-runtime'
+import { useWorkspaceActions } from './app-actions-workspace'
+
+type AppActionBindings = Pick<
+  AppContextValue,
+  'actions' | 'activeConnection' | 'activeEnvironment'
+>
+
+export function useAppActions(context: AppActionContext): AppActionBindings {
+  const connectionActions = useConnectionActions(context)
+  const queryTabActions = useQueryTabActions(context)
+  const runtimeActions = useRuntimeActions(context)
+  const workspaceActions = useWorkspaceActions(context)
+
+  const snapshot = context.state.payload?.snapshot
+  const activeConnection =
+    snapshot && snapshot.connections.length > 0
+      ? findConnection(snapshot, snapshot.ui.activeConnectionId)
+      : undefined
+  const activeEnvironment =
+    snapshot && snapshot.environments.length > 0
+      ? findEnvironment(snapshot, snapshot.ui.activeEnvironmentId)
+      : undefined
+
+  const actions = useMemo<Actions>(
+    () => ({
+      ...connectionActions,
+      ...queryTabActions,
+      ...runtimeActions,
+      ...workspaceActions,
+    }),
+    [connectionActions, queryTabActions, runtimeActions, workspaceActions],
+  )
+
+  return {
+    actions,
+    activeConnection,
+    activeEnvironment,
+  }
+}

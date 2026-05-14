@@ -2,6 +2,8 @@ import { useRef, useState } from 'react'
 import type {
   BottomPanelTab,
   ConnectionProfile,
+  DataEditExecutionRequest,
+  DataEditExecutionResponse,
   DiagnosticsReport,
   EnvironmentProfile,
   ExecutionCapabilities,
@@ -45,6 +47,9 @@ interface BottomPanelProps {
   onClose(): void
   onConfirmExecution(guardrailId: string, mode: ExecutionRequest['mode']): void
   onRestoreHistory(queryText: string): void
+  onExecuteDataEdit(
+    request: DataEditExecutionRequest,
+  ): Promise<DataEditExecutionResponse | undefined>
   onDismissWorkbenchMessage(id: string): void
   onClearWorkbenchMessages(): void
 }
@@ -70,6 +75,7 @@ export function BottomPanel({
   onClose,
   onConfirmExecution,
   onRestoreHistory,
+  onExecuteDataEdit,
   onDismissWorkbenchMessage,
   onClearWorkbenchMessages,
 }: BottomPanelProps) {
@@ -196,11 +202,14 @@ export function BottomPanel({
           <ResultsView
             capabilities={capabilities}
             connection={activeConnection}
+            activeTab={activeTab}
+            activeEnvironment={activeEnvironment}
             payload={activePayload}
             renderer={activeRenderer}
             result={activeTab?.result}
             onSelectRenderer={onSelectRenderer}
             onLoadNextPage={onLoadNextPage}
+            onExecuteDataEdit={onExecuteDataEdit}
           />
         ) : null}
 

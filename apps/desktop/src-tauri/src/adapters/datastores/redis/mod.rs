@@ -3,11 +3,13 @@ use super::super::*;
 mod catalog;
 mod commands;
 mod connection;
+mod editing;
 mod explorer;
 mod metadata;
 mod paging;
 mod query;
 
+pub(crate) use editing::execute_redis_data_edit;
 pub(crate) use metadata::load_redis_structure;
 pub(crate) use paging::fetch_redis_page;
 
@@ -58,6 +60,15 @@ impl DatastoreAdapter for RedisAdapter {
     ) -> Result<ExecutionResultEnvelope, CommandError> {
         query::execute_redis_query(self, connection, request, notices).await
     }
+
+    async fn execute_data_edit(
+        &self,
+        connection: &ResolvedConnectionProfile,
+        request: &DataEditExecutionRequest,
+    ) -> Result<DataEditExecutionResponse, CommandError> {
+        execute_redis_data_edit(connection, &self.experience_manifest(), request).await
+    }
+
     async fn cancel(
         &self,
         _connection: &ResolvedConnectionProfile,

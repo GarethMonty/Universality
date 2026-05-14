@@ -1,5 +1,11 @@
-import type { ConnectionProfile, ResultPayload } from '@datanaut/shared-types'
+import type {
+  ConnectionProfile,
+  DataEditExecutionRequest,
+  DataEditExecutionResponse,
+  ResultPayload,
+} from '@datanaut/shared-types'
 import { DataGridView } from './DataGridView'
+import type { DocumentEditContext } from './document-edit-context'
 import { DocumentResultsView } from './DocumentResultsView'
 import { JsonTreeView } from './JsonTreeView'
 import { RawResultView } from './RawResultView'
@@ -12,13 +18,19 @@ export function ResultPayloadView({
   payload,
   resultDurationMs,
   resultSummary,
+  editContext,
+  onExecuteDataEdit,
 }: {
   connection?: ConnectionProfile
+  editContext?: DocumentEditContext
   pageIndex?: number
   pageSize?: number
   payload?: ResultPayload
   resultDurationMs?: number
   resultSummary?: string
+  onExecuteDataEdit?(
+    request: DataEditExecutionRequest,
+  ): Promise<DataEditExecutionResponse | undefined>
 }) {
   if (!payload) {
     return <p className="panel-footnote">No result payload yet.</p>
@@ -38,10 +50,12 @@ export function ResultPayloadView({
       <DocumentResultsView
         key={documentPayloadKey(payload.documents)}
         connection={connection}
+        editContext={editContext}
         documents={sliceItems(payload.documents, pageIndex, pageSize)}
         resultDurationMs={resultDurationMs}
         resultSummary={resultSummary}
         totalDocumentCount={payload.documents.length}
+        onExecuteDataEdit={onExecuteDataEdit}
       />
     )
   }
@@ -88,6 +102,7 @@ export function ResultPayloadView({
 
   return <RawResultView text={payload.renderer === 'raw' ? payload.text : JSON.stringify(payload, null, 2)} />
 }
+
 
 function sliceRecord(
   entries: Record<string, string>,

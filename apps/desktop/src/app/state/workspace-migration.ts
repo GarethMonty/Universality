@@ -1,0 +1,225 @@
+import type { UiState, WorkspaceSnapshot } from '@datanaut/shared-types'
+import { DATANAUT_ADAPTER_MANIFESTS } from '@datanaut/shared-types'
+
+const MIN_BOTTOM_PANEL_HEIGHT = 120
+const DEFAULT_BOTTOM_PANEL_HEIGHT = 260
+const MAX_BOTTOM_PANEL_HEIGHT = 900
+const MIN_SIDEBAR_WIDTH = 220
+const DEFAULT_SIDEBAR_WIDTH = 280
+const MAX_SIDEBAR_WIDTH = 420
+const MIN_RIGHT_DRAWER_WIDTH = 320
+const DEFAULT_RIGHT_DRAWER_WIDTH = 360
+const MAX_RIGHT_DRAWER_WIDTH = 560
+const WORKSPACE_SCHEMA_VERSION = 6
+
+const DEMO_CONNECTION_IDS = new Set([
+  'conn-analytics',
+  'conn-orders',
+  'conn-catalog',
+  'conn-commerce',
+  'conn-local-sqlite',
+  'conn-cache',
+])
+const DEMO_ENVIRONMENT_IDS = new Set(['env-dev', 'env-uat', 'env-prod'])
+const DEMO_TAB_IDS = new Set([
+  'tab-sql-ops',
+  'tab-orders-audit',
+  'tab-mongo-catalog',
+  'tab-commerce-mysql',
+  'tab-local-sqlite',
+  'tab-redis-session',
+])
+const DEMO_SAVED_WORK_IDS = new Set(['saved-locks', 'saved-hotkeys', 'saved-catalog'])
+
+function clampBottomPanelHeight(value: unknown) {
+  if (typeof value !== 'number' || Number.isNaN(value)) {
+    return DEFAULT_BOTTOM_PANEL_HEIGHT
+  }
+
+  return Math.min(
+    MAX_BOTTOM_PANEL_HEIGHT,
+    Math.max(MIN_BOTTOM_PANEL_HEIGHT, Math.round(value)),
+  )
+}
+
+function clampSidebarWidth(value: unknown) {
+  if (typeof value !== 'number' || Number.isNaN(value)) {
+    return DEFAULT_SIDEBAR_WIDTH
+  }
+
+  return Math.min(
+    MAX_SIDEBAR_WIDTH,
+    Math.max(MIN_SIDEBAR_WIDTH, Math.round(value)),
+  )
+}
+
+function clampRightDrawerWidth(value: unknown) {
+  if (typeof value !== 'number' || Number.isNaN(value)) {
+    return DEFAULT_RIGHT_DRAWER_WIDTH
+  }
+
+  return Math.min(
+    MAX_RIGHT_DRAWER_WIDTH,
+    Math.max(MIN_RIGHT_DRAWER_WIDTH, Math.round(value)),
+  )
+}
+
+function isSidebarPane(value: unknown): value is UiState['activeSidebarPane'] {
+  return (
+    value === 'connections' ||
+    value === 'environments' ||
+    value === 'explorer' ||
+    value === 'saved-work' ||
+    value === 'search'
+  )
+}
+
+function isActivity(value: unknown): value is UiState['activeActivity'] {
+  return isSidebarPane(value) || value === 'settings'
+}
+
+function isBottomPanelTab(value: unknown): value is UiState['activeBottomPanelTab'] {
+  return value === 'results' || value === 'messages' || value === 'history' || value === 'details'
+}
+
+function isRightDrawer(value: unknown): value is UiState['rightDrawer'] {
+  return (
+    value === 'none' ||
+    value === 'connection' ||
+    value === 'inspection' ||
+    value === 'diagnostics' ||
+    value === 'operations'
+  )
+}
+
+function isExplorerView(value: unknown): value is UiState['explorerView'] {
+  return value === 'tree' || value === 'structure'
+}
+
+function isConnectionGroupMode(value: unknown): value is UiState['connectionGroupMode'] {
+  return value === 'none' || value === 'environment' || value === 'database-type'
+}
+
+function normalizeSidebarSectionStates(value: unknown): Record<string, boolean> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {}
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).filter(
+      (entry): entry is [string, boolean] =>
+        typeof entry[0] === 'string' && typeof entry[1] === 'boolean',
+    ),
+  )
+}
+
+export function normalizeUiState(snapshot: WorkspaceSnapshot): UiState {
+  const firstTab = snapshot.tabs[0]
+  const firstConnection = snapshot.connections[0]
+  const firstEnvironment = snapshot.environments[0]
+  const legacyUi = snapshot.ui as Partial<UiState> | undefined
+  const activeTab =
+    snapshot.tabs.find((item) => item.id === legacyUi?.activeTabId) ?? firstTab
+  const activeConnection =
+    snapshot.connections.find((item) => item.id === legacyUi?.activeConnectionId) ??
+    (activeTab
+      ? snapshot.connections.find((item) => item.id === activeTab.connectionId)
+      : undefined) ??
+    firstConnection
+  const activeEnvironment =
+    snapshot.environments.find((item) => item.id === legacyUi?.activeEnvironmentId) ??
+    (activeTab
+      ? snapshot.environments.find((item) => item.id === activeTab.environmentId)
+      : undefined) ??
+    firstEnvironment
+  const activeActivity = isActivity(legacyUi?.activeActivity)
+    ? legacyUi.activeActivity
+    : 'connections'
+  const activeSidebarPane = isSidebarPane(legacyUi?.activeSidebarPane)
+    ? legacyUi.activeSidebarPane
+    : activeActivity === 'settings'
+      ? 'connections'
+      : activeActivity
+  const activeBottomPanelTab = isBottomPanelTab(legacyUi?.activeBottomPanelTab)
+    ? legacyUi.activeBottomPanelTab
+    : 'results'
+
+  return {
+    activeConnectionId: activeConnection?.id ?? '',
+    activeEnvironmentId: activeEnvironment?.id ?? '',
+    activeTabId: activeTab?.id ?? '',
+    explorerFilter:
+      typeof legacyUi?.explorerFilter === 'string' ? legacyUi.explorerFilter : '',
+    explorerView: isExplorerView(legacyUi?.explorerView) ? legacyUi.explorerView : 'structure',
+    connectionGroupMode: isConnectionGroupMode(legacyUi?.connectionGroupMode)
+      ? legacyUi.connectionGroupMode
+      : 'none',
+    sidebarSectionStates: normalizeSidebarSectionStates(legacyUi?.sidebarSectionStates),
+    activeActivity,
+    sidebarCollapsed: Boolean(legacyUi?.sidebarCollapsed),
+    activeSidebarPane,
+    sidebarWidth: clampSidebarWidth(legacyUi?.sidebarWidth),
+    bottomPanelVisible:
+      (Boolean(activeTab) || activeBottomPanelTab === 'messages') &&
+      (typeof legacyUi?.bottomPanelVisible === 'boolean' ? legacyUi.bottomPanelVisible : false),
+    activeBottomPanelTab,
+    bottomPanelHeight: clampBottomPanelHeight(legacyUi?.bottomPanelHeight),
+    rightDrawer: isRightDrawer(legacyUi?.rightDrawer) ? legacyUi.rightDrawer : 'none',
+    rightDrawerWidth: clampRightDrawerWidth(legacyUi?.rightDrawerWidth),
+  }
+}
+
+export function migrateWorkspaceSnapshot(snapshot: WorkspaceSnapshot): WorkspaceSnapshot {
+  const next = JSON.parse(JSON.stringify(snapshot)) as WorkspaceSnapshot
+  next.closedTabs ??= []
+  next.adapterManifests = DATANAUT_ADAPTER_MANIFESTS
+  stripDemoRecords(next)
+  next.schemaVersion = WORKSPACE_SCHEMA_VERSION
+  next.ui = normalizeUiState(next)
+
+  for (const tab of next.tabs) {
+    tab.result = undefined
+  }
+
+  for (const tab of next.closedTabs) {
+    tab.result = undefined
+  }
+
+  return next
+}
+
+function stripDemoRecords(snapshot: WorkspaceSnapshot) {
+  snapshot.connections = snapshot.connections.filter(
+    (connection) => !DEMO_CONNECTION_IDS.has(connection.id),
+  )
+  snapshot.tabs = snapshot.tabs.filter((tab) => !DEMO_TAB_IDS.has(tab.id))
+  snapshot.closedTabs = (snapshot.closedTabs ?? []).filter(
+    (tab) => !DEMO_TAB_IDS.has(tab.id),
+  )
+  snapshot.savedWork = snapshot.savedWork.filter(
+    (item) => !DEMO_SAVED_WORK_IDS.has(item.id),
+  )
+  snapshot.explorerNodes = snapshot.explorerNodes.filter(
+    (node) => !node.id.startsWith('explorer-'),
+  )
+  snapshot.guardrails = []
+
+  const referencedEnvironmentIds = new Set<string>()
+  snapshot.connections.forEach((connection) => {
+    connection.environmentIds.forEach((environmentId) =>
+      referencedEnvironmentIds.add(environmentId),
+    )
+  })
+  snapshot.tabs.forEach((tab) => referencedEnvironmentIds.add(tab.environmentId))
+  snapshot.closedTabs.forEach((tab) => referencedEnvironmentIds.add(tab.environmentId))
+  snapshot.savedWork.forEach((item) => {
+    if (item.environmentId) {
+      referencedEnvironmentIds.add(item.environmentId)
+    }
+  })
+  snapshot.environments = snapshot.environments.filter(
+    (environment) =>
+      !DEMO_ENVIRONMENT_IDS.has(environment.id) ||
+      referencedEnvironmentIds.has(environment.id),
+  )
+}

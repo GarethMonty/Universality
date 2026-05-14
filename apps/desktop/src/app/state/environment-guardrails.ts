@@ -1,0 +1,160 @@
+import type {
+  AppHealth,
+  ConnectionProfile,
+  DiagnosticsReport,
+  EnvironmentProfile,
+  GuardrailDecision,
+  ResolvedEnvironment,
+  WorkspaceSnapshot,
+} from '@datanaut/shared-types'
+
+export function resolveEnvironment(
+  environments: EnvironmentProfile[],
+  environmentId: string,
+): ResolvedEnvironment {
+  const fallback =
+    environments[0] ??
+    ({
+      id: 'environment-missing',
+      label: 'Missing environment',
+      color: '#000000',
+      risk: 'low',
+      variables: {},
+      sensitiveKeys: [],
+      requiresConfirmation: false,
+      safeMode: false,
+      exportable: true,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    } satisfies EnvironmentProfile)
+  const environmentMap = new Map(
+    environments.map((environment) => [environment.id, environment]),
+  )
+  const resolvedChain: EnvironmentProfile[] = []
+  const visited = new Set<string>()
+  let current = environmentMap.get(environmentId)
+
+  while (current && !visited.has(current.id)) {
+    visited.add(current.id)
+    resolvedChain.unshift(current)
+    current = current.inheritsFrom
+      ? environmentMap.get(current.inheritsFrom)
+      : undefined
+  }
+
+  const activeEnvironment = environmentMap.get(environmentId) ?? fallback
+  const variables: Record<string, string> = {}
+  const inheritedChain: string[] = []
+  const sensitiveKeys = new Set<string>()
+
+  for (const environment of resolvedChain) {
+    inheritedChain.push(environment.label)
+    Object.assign(variables, environment.variables)
+
+    for (const key of environment.sensitiveKeys) {
+      sensitiveKeys.add(key)
+    }
+  }
+
+  const unresolvedKeys = Object.entries(variables)
+    .filter(([, value]) => value.includes('${'))
+    .map(([key]) => key)
+
+  return {
+    environmentId: activeEnvironment.id,
+    label: activeEnvironment.label,
+    risk: activeEnvironment.risk,
+    variables,
+    unresolvedKeys,
+    inheritedChain,
+    sensitiveKeys: [...sensitiveKeys],
+  }
+}
+
+export function evaluateGuardrails(
+  connection: ConnectionProfile,
+  environment: EnvironmentProfile,
+  resolvedEnvironment: ResolvedEnvironment,
+  queryText: string,
+  safeModeEnabled: boolean,
+): GuardrailDecision {
+  const reasons: string[] = []
+  const normalized = queryText.toLowerCase()
+  const looksWrite = /(insert|update|delete|drop|truncate|alter|create|flushdb|flushall|set )/.test(
+    normalized,
+  )
+
+  if (resolvedEnvironment.unresolvedKeys.length > 0) {
+    reasons.push('Unresolved environment variables must be fixed before execution.')
+    return {
+      status: 'block',
+      reasons,
+      safeModeApplied: safeModeEnabled || environment.safeMode,
+    }
+  }
+
+  if (connection.readOnly && looksWrite) {
+    reasons.push('This connection is marked read-only.')
+    return {
+      status: 'block',
+      reasons,
+      safeModeApplied: safeModeEnabled || environment.safeMode,
+    }
+  }
+
+  if (
+    environment.requiresConfirmation &&
+    (looksWrite || environment.risk === 'critical')
+  ) {
+    reasons.push(`${environment.label} requires confirmation for risky work.`)
+    return {
+      status: 'confirm',
+      reasons,
+      safeModeApplied: safeModeEnabled || environment.safeMode,
+      requiredConfirmationText: `CONFIRM ${environment.label}`,
+    }
+  }
+
+  reasons.push('Guardrails cleared for the current query.')
+
+  return {
+    status: 'allow',
+    reasons,
+    safeModeApplied: safeModeEnabled || environment.safeMode,
+  }
+}
+
+export function buildDiagnosticsReport(
+  snapshot: WorkspaceSnapshot,
+  health: AppHealth,
+): DiagnosticsReport {
+  const warnings: string[] = []
+
+  if (snapshot.lockState.isLocked) {
+    warnings.push('Application is currently locked.')
+  }
+
+  if (snapshot.preferences.telemetry === 'disabled') {
+    warnings.push('Crash reporting is disabled.')
+  }
+
+  if (
+    snapshot.environments.some((environment) => environment.risk === 'critical')
+  ) {
+    warnings.push('Critical environments are configured in this workspace.')
+  }
+
+  return {
+    createdAt: new Date().toISOString(),
+    runtime: health.runtime,
+    platform: health.platform,
+    appVersion: '0.1.0',
+    counts: {
+      connections: snapshot.connections.length,
+      environments: snapshot.environments.length,
+      tabs: snapshot.tabs.length,
+      savedWork: snapshot.savedWork.length,
+    },
+    warnings,
+  }
+}

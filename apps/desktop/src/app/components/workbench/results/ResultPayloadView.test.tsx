@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import type { ConnectionProfile } from '@datanaut/shared-types'
+import type { ConnectionProfile, DataEditExecutionResponse } from '@datanaut/shared-types'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { computeRenderedColumnWidths } from './data-grid-layout'
 import { FIELD_DRAG_MIME } from './field-drag'
@@ -146,16 +146,20 @@ describe('ResultPayloadView', () => {
     expect(screen.getByText('number')).toHaveClass('is-number')
 
     fireEvent.doubleClick(screen.getByText('status'))
-    fireEvent.change(screen.getByLabelText('Rename field status'), {
+    const renameInput = screen.getByLabelText('Rename field status')
+    fireEvent.change(renameInput, {
       target: { value: 'state' },
     })
+    fireEvent.blur(renameInput)
     expect(screen.getByText('state')).toBeInTheDocument()
 
     fireEvent.doubleClick(screen.getByRole('button', { name: 'active' }))
-    fireEvent.change(screen.getByLabelText('Edit value state'), {
+    const valueInput = screen.getByLabelText('Edit value state')
+    fireEvent.change(valueInput, {
       target: { value: 'paused' },
     })
-    expect(screen.getByDisplayValue('paused')).toBeInTheDocument()
+    fireEvent.blur(valueInput)
+    expect(screen.getByRole('button', { name: 'paused' })).toBeInTheDocument()
 
     fireEvent.doubleClick(screen.getByText('number'))
     expect(screen.getByLabelText('Change type count')).toHaveClass('is-number')
@@ -170,6 +174,72 @@ describe('ResultPayloadView', () => {
     await waitFor(() => {
       expect(writeTextSpy).toHaveBeenCalledWith('paused')
     })
+  })
+
+  it('executes Mongo document field edits with collection and document scope', async () => {
+    const executeDataEdit = vi.fn(async (): Promise<DataEditExecutionResponse> => ({
+      connectionId: 'conn-mongo',
+      environmentId: 'env-dev',
+      editKind: 'set-field',
+      executionSupport: 'live',
+      executed: true,
+      plan: {
+        operationId: 'mongodb.data-edit.set-field',
+        engine: 'mongodb',
+        summary: 'Updated document field.',
+        generatedRequest: '{}',
+        requestLanguage: 'mongodb',
+        destructive: false,
+        requiredPermissions: ['update collection document'],
+        warnings: [],
+      },
+      messages: ['Updated document field.'],
+      warnings: [],
+    }))
+
+    render(
+      <ResultPayloadView
+        connection={mongoConnection()}
+        editContext={{
+          connectionId: 'conn-mongo',
+          environmentId: 'env-dev',
+          queryText: '{ "collection": "products", "filter": {}, "limit": 20 }',
+        }}
+        onExecuteDataEdit={executeDataEdit}
+        payload={{
+          renderer: 'document',
+          documents: [{ _id: 'account-1', status: 'active' }],
+        }}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Expand account-1' }))
+    fireEvent.doubleClick(screen.getByRole('button', { name: 'active' }))
+    const valueInput = screen.getByLabelText('Edit value status')
+    fireEvent.change(valueInput, { target: { value: 'paused' } })
+    fireEvent.blur(valueInput)
+
+    await waitFor(() => {
+      expect(executeDataEdit).toHaveBeenCalledWith({
+        connectionId: 'conn-mongo',
+        environmentId: 'env-dev',
+        editKind: 'set-field',
+        target: {
+          objectKind: 'document',
+          path: ['status'],
+          collection: 'products',
+          documentId: 'account-1',
+        },
+        changes: [
+          {
+            path: ['status'],
+            value: 'paused',
+            valueType: 'string',
+          },
+        ],
+      })
+    })
+    expect(screen.getByRole('button', { name: 'paused' })).toBeInTheDocument()
   })
 
   it('keeps non-editable document results read-only on double click', () => {

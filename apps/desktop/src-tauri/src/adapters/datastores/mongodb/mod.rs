@@ -2,6 +2,7 @@ use super::super::*;
 
 mod catalog;
 mod connection;
+mod editing;
 mod explorer;
 mod metadata;
 mod paging;
@@ -12,6 +13,7 @@ pub(crate) use paging::fetch_mongodb_page;
 
 use catalog::*;
 use connection::test_mongodb_connection;
+use editing::execute_mongodb_data_edit;
 use explorer::*;
 
 pub(crate) struct MongoDbAdapter;
@@ -57,6 +59,15 @@ impl DatastoreAdapter for MongoDbAdapter {
     ) -> Result<ExecutionResultEnvelope, CommandError> {
         query::execute_mongodb_query(self, connection, request, notices).await
     }
+
+    async fn execute_data_edit(
+        &self,
+        connection: &ResolvedConnectionProfile,
+        request: &DataEditExecutionRequest,
+    ) -> Result<DataEditExecutionResponse, CommandError> {
+        execute_mongodb_data_edit(self, connection, request).await
+    }
+
     async fn cancel(
         &self,
         _connection: &ResolvedConnectionProfile,

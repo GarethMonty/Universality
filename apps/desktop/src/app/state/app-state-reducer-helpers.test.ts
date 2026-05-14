@@ -1,0 +1,372 @@
+import type {
+  BootstrapPayload,
+  ExplorerResponse,
+  ResultPageResponse,
+  ResultPayload,
+} from '@datanaut/shared-types'
+import { describe, expect, it } from 'vitest'
+import { createSeedBootstrapPayload } from '../../test/fixtures/seed-workspace'
+import {
+  applyResultPageToPayload,
+  createWorkbenchMessage,
+  mergeExplorerResponse,
+  openMessagesPayload,
+} from './app-state-reducer-helpers'
+
+function payloadWithResult(resultPayload: ResultPayload): BootstrapPayload {
+  const payload = createSeedBootstrapPayload()
+  const tab = payload.snapshot.tabs[0]
+
+  if (!tab) {
+    throw new Error('Seed fixture must include at least one tab')
+  }
+
+  payload.snapshot.tabs = [
+    {
+      ...tab,
+      result: {
+        id: 'result-1',
+        engine: 'mongodb',
+        summary: '1 row',
+        defaultRenderer: resultPayload.renderer,
+        rendererModes: [resultPayload.renderer],
+        payloads: [resultPayload],
+        notices: [],
+        executedAt: '2026-05-13T12:00:00.000Z',
+        durationMs: 12,
+        truncated: false,
+        rowLimit: 20,
+        pageInfo: {
+          pageSize: 20,
+          pageIndex: 0,
+          bufferedRows: 1,
+          hasMore: false,
+        },
+      },
+    },
+  ]
+  payload.snapshot.ui.activeTabId = tab.id
+  payload.snapshot.ui.bottomPanelVisible = false
+  payload.snapshot.ui.activeBottomPanelTab = 'messages'
+
+  return payload
+}
+
+function resultFrom(payload: BootstrapPayload | undefined) {
+  const result = payload?.snapshot.tabs[0]?.result
+
+  if (!result) {
+    throw new Error('Expected first tab to have a result envelope')
+  }
+
+  return result
+}
+
+function pageFor(
+  payload: ResultPayload,
+  pageInfo: Partial<ResultPageResponse['pageInfo']> = {},
+  notices: string[] = [],
+): ResultPageResponse {
+  return {
+    tabId: 'tab-sql-ops',
+    payload,
+    notices,
+    pageInfo: {
+      pageSize: 20,
+      pageIndex: 1,
+      bufferedRows: 1,
+      hasMore: false,
+      ...pageInfo,
+    },
+  }
+}
+
+describe('createWorkbenchMessage', () => {
+  it('creates user-facing messages with stable source, severity, and details', () => {
+    const message = createWorkbenchMessage(
+      'Could not run query',
+      'Desktop command',
+      'warning',
+      'Relation accounts was not found.',
+    )
+
+    expect(message.id).toMatch(/^msg-/)
+    expect(message).toMatchObject({
+      severity: 'warning',
+      message: 'Could not run query',
+      source: 'Desktop command',
+      details: 'Relation accounts was not found.',
+    })
+    expect(new Date(message.createdAt).toString()).not.toBe('Invalid Date')
+  })
+})
+
+describe('openMessagesPayload', () => {
+  it('opens the messages panel without mutating the previous payload', () => {
+    const payload = createSeedBootstrapPayload()
+    payload.snapshot.ui.bottomPanelVisible = false
+    payload.snapshot.ui.activeBottomPanelTab = 'results'
+
+    const next = openMessagesPayload(payload)
+
+    expect(next?.snapshot.ui.bottomPanelVisible).toBe(true)
+    expect(next?.snapshot.ui.activeBottomPanelTab).toBe('messages')
+    expect(payload.snapshot.ui.bottomPanelVisible).toBe(false)
+    expect(payload.snapshot.ui.activeBottomPanelTab).toBe('results')
+  })
+
+  it('preserves undefined payloads for startup errors before workspace load', () => {
+    expect(openMessagesPayload(undefined)).toBeUndefined()
+  })
+})
+
+describe('applyResultPageToPayload', () => {
+  it('appends table rows, updates paging state, and opens results', () => {
+    const payload = payloadWithResult({
+      renderer: 'table',
+      columns: ['id', 'name'],
+      rows: [
+        ['1', 'Ada'],
+      ],
+    })
+
+    const next = applyResultPageToPayload(
+      payload,
+      pageFor(
+        {
+          renderer: 'table',
+          columns: ['id', 'name'],
+          rows: [
+            ['2', 'Grace'],
+            ['3', 'Katherine'],
+          ],
+        },
+        { hasMore: true, nextCursor: 'cursor-2' },
+        ['Loaded page 2'],
+      ),
+    )
+
+    const result = resultFrom(next)
+    const table = result?.payloads[0]
+
+    expect(table).toMatchObject({
+      renderer: 'table',
+      rows: [
+        ['1', 'Ada'],
+        ['2', 'Grace'],
+        ['3', 'Katherine'],
+      ],
+    })
+    expect(result?.pageInfo?.bufferedRows).toBe(3)
+    expect(result?.truncated).toBe(true)
+    expect(result?.continuationToken).toBe('cursor-2')
+    expect(result?.notices).toContainEqual({
+      code: 'result-page',
+      level: 'info',
+      message: 'Loaded page 2',
+    })
+    expect(next?.snapshot.ui.bottomPanelVisible).toBe(true)
+    expect(next?.snapshot.ui.activeBottomPanelTab).toBe('results')
+
+    const originalTable = resultFrom(payload).payloads[0]
+    expect(originalTable).toMatchObject({
+      renderer: 'table',
+      rows: [['1', 'Ada']],
+    })
+  })
+
+  it('appends document pages and counts buffered documents only', () => {
+    const payload = payloadWithResult({
+      renderer: 'document',
+      documents: [{ _id: 'product-1', name: 'Keyboard' }],
+    })
+
+    const next = applyResultPageToPayload(
+      payload,
+      pageFor({
+        renderer: 'document',
+        documents: [{ _id: 'product-2', name: 'Mouse' }],
+      }),
+    )
+
+    const result = resultFrom(next)
+    const documentPayload = result?.payloads[0]
+
+    expect(documentPayload).toMatchObject({
+      renderer: 'document',
+      documents: [
+        { _id: 'product-1', name: 'Keyboard' },
+        { _id: 'product-2', name: 'Mouse' },
+      ],
+    })
+    expect(result?.pageInfo?.bufferedRows).toBe(2)
+  })
+
+  it('merges key-value entries while preserving missing incoming metadata', () => {
+    const payload = payloadWithResult({
+      renderer: 'keyvalue',
+      entries: {
+        'session:1': 'active',
+      },
+      ttl: '60s',
+      memoryUsage: '96 bytes',
+    })
+
+    const next = applyResultPageToPayload(
+      payload,
+      pageFor({
+        renderer: 'keyvalue',
+        entries: {
+          'session:2': 'active',
+        },
+        ttl: '30s',
+      }),
+    )
+
+    const result = resultFrom(next)
+
+    expect(result?.payloads[0]).toMatchObject({
+      renderer: 'keyvalue',
+      entries: {
+        'session:1': 'active',
+        'session:2': 'active',
+      },
+      ttl: '30s',
+      memoryUsage: '96 bytes',
+    })
+    expect(result?.pageInfo?.bufferedRows).toBe(2)
+  })
+
+  it('appends schema items and adds newly paged renderer payloads', () => {
+    const schemaPayload = payloadWithResult({
+      renderer: 'schema',
+      items: [{ label: 'accounts', detail: 'table' }],
+    })
+
+    const schemaNext = applyResultPageToPayload(
+      schemaPayload,
+      pageFor({
+        renderer: 'schema',
+        items: [{ label: 'orders', detail: 'table' }],
+      }),
+    )
+
+    expect(resultFrom(schemaNext).payloads[0]).toMatchObject({
+      renderer: 'schema',
+      items: [
+        { label: 'accounts', detail: 'table' },
+        { label: 'orders', detail: 'table' },
+      ],
+    })
+    expect(resultFrom(schemaNext).pageInfo?.bufferedRows).toBe(2)
+
+    const rawPayload = payloadWithResult({ renderer: 'raw', text: 'raw result' })
+    const rawNext = applyResultPageToPayload(
+      rawPayload,
+      pageFor({ renderer: 'json', value: { ok: true } }),
+    )
+
+    expect(resultFrom(rawNext).payloads).toEqual([
+      { renderer: 'raw', text: 'raw result' },
+      {
+        renderer: 'json',
+        value: { ok: true },
+      },
+    ])
+    expect(resultFrom(rawNext).payloads[1]).toEqual({
+      renderer: 'json',
+      value: { ok: true },
+    })
+    expect(resultFrom(rawNext).pageInfo?.bufferedRows).toBe(1)
+  })
+
+  it('ignores page data for tabs without a result envelope', () => {
+    const payload = createSeedBootstrapPayload()
+    const next = applyResultPageToPayload(
+      payload,
+      pageFor({
+        renderer: 'table',
+        columns: ['id'],
+        rows: [['1']],
+      }),
+    )
+
+    expect(next?.snapshot.tabs[0]?.result).toBeUndefined()
+    expect(next).not.toBe(payload)
+  })
+})
+
+describe('mergeExplorerResponse', () => {
+  const current: ExplorerResponse = {
+    connectionId: 'conn-1',
+    environmentId: 'env-dev',
+    summary: 'Initial metadata',
+    capabilities: {
+      canCancel: true,
+      canExplain: false,
+      supportsLiveMetadata: true,
+      editorLanguage: 'sql',
+      defaultRowLimit: 100,
+    },
+    nodes: [
+      {
+        id: 'schema:public',
+        family: 'sql',
+        label: 'public',
+        kind: 'schema',
+        detail: '2 tables',
+      },
+      {
+        id: 'table:accounts',
+        family: 'sql',
+        label: 'accounts',
+        kind: 'table',
+        detail: 'old detail',
+      },
+    ],
+  }
+
+  it('merges explorer nodes for the same connection and environment', () => {
+    const incoming: ExplorerResponse = {
+      ...current,
+      summary: 'Refreshed metadata',
+      nodes: [
+        {
+          id: 'table:accounts',
+          family: 'sql',
+          label: 'accounts',
+          kind: 'table',
+          detail: 'new detail',
+        },
+        {
+          id: 'table:orders',
+          family: 'sql',
+          label: 'orders',
+          kind: 'table',
+          detail: 'fresh table',
+        },
+      ],
+    }
+
+    const merged = mergeExplorerResponse(current, incoming)
+
+    expect(merged.summary).toBe('Refreshed metadata')
+    expect(merged.nodes).toEqual([
+      current.nodes[0],
+      incoming.nodes[0],
+      incoming.nodes[1],
+    ])
+  })
+
+  it('replaces explorer state when the connection or environment changes', () => {
+    const incoming: ExplorerResponse = {
+      ...current,
+      environmentId: 'env-prod',
+      summary: 'Production metadata',
+      nodes: [],
+    }
+
+    expect(mergeExplorerResponse(current, incoming)).toBe(incoming)
+    expect(mergeExplorerResponse(undefined, incoming)).toBe(incoming)
+  })
+})

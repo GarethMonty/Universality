@@ -66,6 +66,13 @@ pub async fn cancel(
         .await
 }
 
+pub fn experience_manifests() -> Vec<DatastoreExperienceManifest> {
+    super::registry::manifests()
+        .into_iter()
+        .map(|manifest| experience_manifest_for_manifest(&manifest))
+        .collect()
+}
+
 pub fn operation_manifests(
     connection: &ResolvedConnectionProfile,
 ) -> Result<Vec<DatastoreOperationManifest>, CommandError> {
@@ -89,6 +96,24 @@ pub async fn execute_operation(
 ) -> Result<OperationExecutionResponse, CommandError> {
     adapter_for_engine(&connection.engine)?
         .execute_operation(connection, request)
+        .await
+}
+
+pub async fn plan_data_edit(
+    connection: &ResolvedConnectionProfile,
+    request: &DataEditPlanRequest,
+) -> Result<DataEditPlanResponse, CommandError> {
+    adapter_for_engine(&connection.engine)?
+        .plan_data_edit(connection, request)
+        .await
+}
+
+pub async fn execute_data_edit(
+    connection: &ResolvedConnectionProfile,
+    request: &DataEditExecutionRequest,
+) -> Result<DataEditExecutionResponse, CommandError> {
+    adapter_for_engine(&connection.engine)?
+        .execute_data_edit(connection, request)
         .await
 }
 

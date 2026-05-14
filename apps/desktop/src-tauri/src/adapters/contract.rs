@@ -7,6 +7,9 @@ use super::*;
 pub trait DatastoreAdapter: Send + Sync {
     fn manifest(&self) -> AdapterManifest;
     fn execution_capabilities(&self) -> ExecutionCapabilities;
+    fn experience_manifest(&self) -> DatastoreExperienceManifest {
+        experience_manifest_for_manifest(&self.manifest())
+    }
     fn operation_manifests(&self) -> Vec<DatastoreOperationManifest> {
         operation_manifests_for_manifest(&self.manifest())
     }
@@ -286,6 +289,24 @@ pub trait DatastoreAdapter: Send + Sync {
             messages,
             warnings,
         })
+    }
+    async fn plan_data_edit(
+        &self,
+        connection: &ResolvedConnectionProfile,
+        request: &DataEditPlanRequest,
+    ) -> Result<DataEditPlanResponse, CommandError> {
+        Ok(default_data_edit_plan(
+            connection,
+            &self.experience_manifest(),
+            request,
+        ))
+    }
+    async fn execute_data_edit(
+        &self,
+        connection: &ResolvedConnectionProfile,
+        request: &DataEditExecutionRequest,
+    ) -> Result<DataEditExecutionResponse, CommandError> {
+        default_data_edit_execution(connection, &self.experience_manifest(), request).await
     }
     async fn test_connection(
         &self,

@@ -1,6 +1,7 @@
 use super::super::*;
 
 mod connection;
+mod editing;
 mod explorer;
 mod metadata;
 mod query;
@@ -8,6 +9,7 @@ mod query;
 pub(crate) use metadata::load_sqlserver_structure;
 
 use connection::sqlserver_client;
+use editing::execute_sqlserver_data_edit;
 
 pub(crate) struct SqlServerAdapter;
 
@@ -80,6 +82,15 @@ impl DatastoreAdapter for SqlServerAdapter {
     ) -> Result<ExecutionResultEnvelope, CommandError> {
         query::execute_sqlserver_query(self, connection, request, notices).await
     }
+
+    async fn execute_data_edit(
+        &self,
+        connection: &ResolvedConnectionProfile,
+        request: &DataEditExecutionRequest,
+    ) -> Result<DataEditExecutionResponse, CommandError> {
+        execute_sqlserver_data_edit(connection, &self.experience_manifest(), request).await
+    }
+
     async fn cancel(
         &self,
         _connection: &ResolvedConnectionProfile,

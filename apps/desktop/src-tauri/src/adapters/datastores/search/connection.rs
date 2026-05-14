@@ -58,6 +58,21 @@ pub(super) async fn search_post_json(
     search_request(connection, "POST", path, Some(body)).await
 }
 
+pub(super) async fn search_put_json(
+    connection: &ResolvedConnectionProfile,
+    path: &str,
+    body: &str,
+) -> Result<SearchResponse, CommandError> {
+    search_request(connection, "PUT", path, Some(body)).await
+}
+
+pub(super) async fn search_delete(
+    connection: &ResolvedConnectionProfile,
+    path: &str,
+) -> Result<SearchResponse, CommandError> {
+    search_request(connection, "DELETE", path, None).await
+}
+
 async fn search_request(
     connection: &ResolvedConnectionProfile,
     method: &str,
@@ -66,6 +81,7 @@ async fn search_request(
 ) -> Result<SearchResponse, CommandError> {
     let endpoint = SearchEndpoint::from_connection(connection)?;
     let path = endpoint.path(path_and_query);
+    let has_body = body.is_some();
     let body = body.unwrap_or("");
     let auth_header = match (&connection.username, &connection.password) {
         (Some(username), Some(password)) => {
@@ -77,7 +93,7 @@ async fn search_request(
         }
         _ => String::new(),
     };
-    let content_headers = if method == "POST" {
+    let content_headers = if has_body {
         format!(
             "Content-Type: application/json\r\nContent-Length: {}\r\n",
             body.len()

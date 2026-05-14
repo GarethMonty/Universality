@@ -87,6 +87,7 @@ npm run tauri:build
 npm run check
 npm run check:native
 npm run check:all
+npm run ci:test
 ```
 
 Useful individual checks:
@@ -177,7 +178,7 @@ Early-stage users should treat production connections with care, keep profiles r
 
 ## CI And Releases
 
-CI runs on pull requests and pushes to `main`, `release/**`, and `app-v*` tags. It covers frontend checks, TypeScript build, Rust formatting/check/test/clippy, adapter integration fixtures, desktop e2e on Linux, and native smoke builds.
+CI runs on pull requests and pushes to `main`, `release/**`, and `app-v*` tags. It intentionally stays deterministic: frontend lint/tests/build, release workflow tests, quality tests, Rust formatting/check/test/clippy, and dependency-free adapter/runtime integration tests. Docker fixtures, desktop E2E, and live datastore/cloud checks remain local or manually triggered workflows for now.
 
 Tagged releases use `.github/workflows/release.yml`. Pushing an `app-v*` tag or running the workflow manually builds draft Tauri desktop release artifacts for Linux, Windows, and macOS, with signing/notarization hooks available through repository secrets.
 

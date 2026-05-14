@@ -12,15 +12,16 @@ use crate::{
             AdapterDiagnosticsRequest, AdapterDiagnosticsResponse, BootstrapPayload,
             CancelExecutionRequest, CancelExecutionResult, ConnectionProfile,
             ConnectionTestRequest, ConnectionTestResult, CreateScopedQueryTabRequest,
-            EnvironmentProfile, ExecutionRequest, ExecutionResponse, ExplorerInspectRequest,
-            ExplorerInspectResponse, ExplorerRequest, ExplorerResponse, ExportBundle,
-            LocalDatabaseCreateRequest, LocalDatabaseCreateResult, LocalDatabasePickRequest,
-            LocalDatabasePickResult, OperationExecutionRequest, OperationExecutionResponse,
-            OperationManifestRequest, OperationManifestResponse, OperationPlanRequest,
-            OperationPlanResponse, PermissionInspectionRequest, PermissionInspectionResponse,
-            QueryTabReorderRequest, ResultPageRequest, ResultPageResponse, SavedWorkItem,
-            StructureRequest, StructureResponse, UpdateQueryBuilderStateRequest,
-            UpdateUiStateRequest,
+            DataEditExecutionRequest, DataEditExecutionResponse, DataEditPlanRequest,
+            DataEditPlanResponse, DatastoreExperienceResponse, EnvironmentProfile,
+            ExecutionRequest, ExecutionResponse, ExplorerInspectRequest, ExplorerInspectResponse,
+            ExplorerRequest, ExplorerResponse, ExportBundle, LocalDatabaseCreateRequest,
+            LocalDatabaseCreateResult, LocalDatabasePickRequest, LocalDatabasePickResult,
+            OperationExecutionRequest, OperationExecutionResponse, OperationManifestRequest,
+            OperationManifestResponse, OperationPlanRequest, OperationPlanResponse,
+            PermissionInspectionRequest, PermissionInspectionResponse, QueryTabReorderRequest,
+            ResultPageRequest, ResultPageResponse, SavedWorkItem, StructureRequest,
+            StructureResponse, UpdateQueryBuilderStateRequest, UpdateUiStateRequest,
         },
     },
 };
@@ -243,6 +244,14 @@ pub async fn load_structure_map(
 }
 
 #[tauri::command]
+pub fn list_datastore_experiences(
+    state: State<'_, SharedAppState>,
+) -> Result<DatastoreExperienceResponse, CommandError> {
+    let runtime = clone_runtime(&state);
+    runtime.list_datastore_experiences()
+}
+
+#[tauri::command]
 pub async fn list_datastore_operations(
     state: State<'_, SharedAppState>,
     request: OperationManifestRequest,
@@ -267,6 +276,24 @@ pub async fn execute_datastore_operation(
 ) -> Result<OperationExecutionResponse, CommandError> {
     let runtime = clone_runtime(&state);
     runtime.execute_operation(request).await
+}
+
+#[tauri::command]
+pub async fn plan_data_edit(
+    state: State<'_, SharedAppState>,
+    request: DataEditPlanRequest,
+) -> Result<DataEditPlanResponse, CommandError> {
+    let runtime = clone_runtime(&state);
+    runtime.plan_data_edit(request).await
+}
+
+#[tauri::command]
+pub async fn execute_data_edit(
+    state: State<'_, SharedAppState>,
+    request: DataEditExecutionRequest,
+) -> Result<DataEditExecutionResponse, CommandError> {
+    let runtime = clone_runtime(&state);
+    runtime.execute_data_edit(request).await
 }
 
 #[tauri::command]

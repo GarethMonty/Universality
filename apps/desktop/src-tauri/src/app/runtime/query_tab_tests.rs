@@ -1,0 +1,133 @@
+use std::collections::HashMap;
+
+use super::{
+    blank_workspace_snapshot,
+    query_tabs::{build_query_tab, build_scoped_query_tab},
+    timestamp_now,
+    ui::{focus_query_tab, is_bottom_panel_tab},
+};
+use crate::domain::models::{
+    ConnectionAuth, ConnectionProfile, CreateScopedQueryTabRequest, EnvironmentProfile,
+};
+
+#[test]
+fn bottom_panel_tab_validator_accepts_history_tab() {
+    assert!(is_bottom_panel_tab("results"));
+    assert!(is_bottom_panel_tab("messages"));
+    assert!(is_bottom_panel_tab("history"));
+    assert!(is_bottom_panel_tab("details"));
+    assert!(!is_bottom_panel_tab("unknown"));
+}
+
+#[test]
+fn focusing_query_tab_closes_connection_drawer() {
+    let connection = test_connection("conn-postgres", "Postgres", "postgresql", "sql");
+    let tab = build_query_tab(&connection, true, "Query 1.sql".into());
+    let mut snapshot = blank_workspace_snapshot();
+    snapshot.ui.right_drawer = "connection".into();
+
+    focus_query_tab(&mut snapshot.ui, &tab);
+
+    assert_eq!(snapshot.ui.active_connection_id, tab.connection_id);
+    assert_eq!(snapshot.ui.active_environment_id, tab.environment_id);
+    assert_eq!(snapshot.ui.active_tab_id, tab.id);
+    assert_eq!(snapshot.ui.right_drawer, "none");
+}
+
+#[test]
+fn scoped_mongodb_collection_tab_gets_builder_state() {
+    let mut snapshot = blank_workspace_snapshot();
+    snapshot.environments.push(EnvironmentProfile {
+        id: "env-dev".into(),
+        label: "Dev".into(),
+        color: "#10b981".into(),
+        risk: "low".into(),
+        inherits_from: None,
+        variables: HashMap::new(),
+        sensitive_keys: Vec::new(),
+        requires_confirmation: false,
+        safe_mode: false,
+        exportable: true,
+        created_at: timestamp_now(),
+        updated_at: timestamp_now(),
+    });
+    let connection = test_connection("conn-mongo", "Mongo", "mongodb", "document");
+    let tab = build_scoped_query_tab(
+        &snapshot,
+        &connection,
+        CreateScopedQueryTabRequest {
+            connection_id: connection.id.clone(),
+            environment_id: None,
+            target: crate::domain::models::ScopedQueryTarget {
+                kind: "collection".into(),
+                label: "products".into(),
+                path: vec!["Mongo".into(), "Collections".into()],
+                scope: Some("collection:products".into()),
+                query_template: None,
+                preferred_builder: Some("mongo-find".into()),
+            },
+        },
+    );
+
+    assert_eq!(tab.title, "products.find.json");
+    assert_eq!(tab.environment_id, "env-dev");
+    assert!(tab.query_text.contains("\"collection\": \"products\""));
+    assert_eq!(
+        tab.builder_state
+            .as_ref()
+            .and_then(|value| value.get("kind"))
+            .and_then(serde_json::Value::as_str),
+        Some("mongo-find")
+    );
+}
+
+#[test]
+fn scoped_raw_query_tab_uses_query_template_without_builder() {
+    let snapshot = blank_workspace_snapshot();
+    let connection = test_connection("conn-postgres", "Postgres", "postgresql", "sql");
+    let tab = build_scoped_query_tab(
+        &snapshot,
+        &connection,
+        CreateScopedQueryTabRequest {
+            connection_id: connection.id.clone(),
+            environment_id: Some("env-dev".into()),
+            target: crate::domain::models::ScopedQueryTarget {
+                kind: "table".into(),
+                label: "accounts".into(),
+                path: vec!["Postgres".into(), "public".into()],
+                scope: Some("table:public.accounts".into()),
+                query_template: Some("select * from public.accounts limit 100;".into()),
+                preferred_builder: None,
+            },
+        },
+    );
+
+    assert_eq!(tab.title, "accounts.sql");
+    assert_eq!(tab.query_text, "select * from public.accounts limit 100;");
+    assert!(tab.builder_state.is_none());
+}
+
+fn test_connection(id: &str, name: &str, engine: &str, family: &str) -> ConnectionProfile {
+    ConnectionProfile {
+        id: id.into(),
+        name: name.into(),
+        engine: engine.into(),
+        family: family.into(),
+        host: "localhost".into(),
+        port: Some(5432),
+        database: Some("datanaut".into()),
+        connection_string: None,
+        connection_mode: Some("native".into()),
+        environment_ids: vec!["env-dev".into()],
+        tags: Vec::new(),
+        favorite: false,
+        read_only: false,
+        icon: engine.into(),
+        color: None,
+        group: None,
+        notes: None,
+        auth: ConnectionAuth::default(),
+        created_at: timestamp_now(),
+        updated_at: timestamp_now(),
+    }
+}

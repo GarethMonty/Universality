@@ -3,12 +3,14 @@ use super::super::*;
 mod catalog;
 mod connection;
 mod diagnostics;
+mod editing;
 mod explorer;
 mod query;
 
 use catalog::*;
 use connection::test_dynamodb_connection;
 use diagnostics::collect_dynamodb_diagnostics;
+use editing::execute_dynamodb_data_edit;
 use explorer::{inspect_dynamodb_explorer_node, list_dynamodb_explorer_nodes};
 
 pub(crate) struct DynamoDbAdapter;
@@ -61,6 +63,14 @@ impl DatastoreAdapter for DynamoDbAdapter {
         request: &ResultPageRequest,
     ) -> Result<ResultPageResponse, CommandError> {
         Ok(no_additional_pages_response("dynamodb", request))
+    }
+
+    async fn execute_data_edit(
+        &self,
+        connection: &ResolvedConnectionProfile,
+        request: &DataEditExecutionRequest,
+    ) -> Result<DataEditExecutionResponse, CommandError> {
+        execute_dynamodb_data_edit(connection, &self.experience_manifest(), request).await
     }
 
     async fn collect_diagnostics(

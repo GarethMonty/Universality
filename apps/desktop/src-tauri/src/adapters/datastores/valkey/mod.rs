@@ -1,7 +1,7 @@
 use serde_json::json;
 
 use super::super::*;
-use super::redis::{fetch_redis_page, load_redis_structure, RedisAdapter};
+use super::redis::{execute_redis_data_edit, fetch_redis_page, load_redis_structure, RedisAdapter};
 
 pub(crate) struct ValkeyAdapter;
 
@@ -72,6 +72,14 @@ impl DatastoreAdapter for ValkeyAdapter {
         notices: Vec<QueryExecutionNotice>,
     ) -> Result<ExecutionResultEnvelope, CommandError> {
         RedisAdapter.execute(connection, request, notices).await
+    }
+
+    async fn execute_data_edit(
+        &self,
+        connection: &ResolvedConnectionProfile,
+        request: &DataEditExecutionRequest,
+    ) -> Result<DataEditExecutionResponse, CommandError> {
+        execute_redis_data_edit(connection, &self.experience_manifest(), request).await
     }
 
     async fn fetch_result_page(

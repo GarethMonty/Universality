@@ -2,6 +2,7 @@ use super::super::*;
 
 mod catalog;
 mod connection;
+mod editing;
 mod explorer;
 mod metadata;
 mod paging;
@@ -12,6 +13,7 @@ pub(crate) use paging::fetch_sqlite_page;
 
 use catalog::sqlite_manifest;
 use connection::test_sqlite_connection;
+use editing::execute_sqlite_data_edit;
 use explorer::{inspect_sqlite_explorer_node, list_sqlite_explorer_nodes};
 
 pub(crate) struct SqliteAdapter;
@@ -57,6 +59,15 @@ impl DatastoreAdapter for SqliteAdapter {
     ) -> Result<ExecutionResultEnvelope, CommandError> {
         query::execute_sqlite_query(self, connection, request, notices).await
     }
+
+    async fn execute_data_edit(
+        &self,
+        connection: &ResolvedConnectionProfile,
+        request: &DataEditExecutionRequest,
+    ) -> Result<DataEditExecutionResponse, CommandError> {
+        execute_sqlite_data_edit(connection, &self.experience_manifest(), request).await
+    }
+
     async fn cancel(
         &self,
         _connection: &ResolvedConnectionProfile,

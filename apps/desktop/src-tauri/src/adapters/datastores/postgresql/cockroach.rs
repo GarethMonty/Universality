@@ -155,6 +155,14 @@ impl DatastoreAdapter for CockroachAdapter {
         PostgresAdapter.execute(connection, request, notices).await
     }
 
+    async fn execute_data_edit(
+        &self,
+        connection: &ResolvedConnectionProfile,
+        request: &DataEditExecutionRequest,
+    ) -> Result<DataEditExecutionResponse, CommandError> {
+        execute_postgres_data_edit(connection, &self.experience_manifest(), request).await
+    }
+
     async fn cancel(
         &self,
         _connection: &ResolvedConnectionProfile,

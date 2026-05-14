@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::env;
 use std::fs;
 
@@ -6,9 +6,13 @@ use datanaut_desktop_lib::{
     adapters,
     domain::{
         error::CommandError,
-        models::{ExecutionRequest, ExplorerRequest, ResolvedConnectionProfile, ResultPageRequest},
+        models::{
+            DataEditChange, DataEditExecutionRequest, DataEditPlanRequest, DataEditTarget,
+            ExecutionRequest, ExplorerRequest, ResolvedConnectionProfile, ResultPageRequest,
+        },
     },
 };
+use serde_json::json;
 use sqlx::Executor;
 
 fn fixtures_enabled() -> bool {
@@ -230,6 +234,214 @@ fn manifests_register_cockroach_and_beta_adapters() {
         assert_eq!(manifest.maturity, "beta");
         assert!(!manifest.capabilities.is_empty());
     }
+}
+
+#[test]
+fn core_popular_engines_have_datastore_experience_manifests() {
+    let experiences = adapters::experience_manifests();
+
+    for engine in [
+        "postgresql",
+        "cockroachdb",
+        "sqlserver",
+        "mysql",
+        "mariadb",
+        "sqlite",
+        "mongodb",
+        "redis",
+        "valkey",
+        "elasticsearch",
+        "opensearch",
+        "dynamodb",
+        "cassandra",
+    ] {
+        let experience = experiences
+            .iter()
+            .find(|item| item.engine == engine)
+            .unwrap_or_else(|| panic!("{engine} experience manifest"));
+        assert!(
+            !experience.object_kinds.is_empty(),
+            "{engine} needs object kinds for context menus"
+        );
+        assert!(
+            !experience.context_actions.is_empty(),
+            "{engine} needs context actions"
+        );
+        assert!(
+            !experience.diagnostics_tabs.is_empty(),
+            "{engine} needs diagnostics tabs"
+        );
+        assert!(
+            !experience.safety_rules.is_empty(),
+            "{engine} needs safety rules"
+        );
+    }
+
+    let mongodb = experiences
+        .iter()
+        .find(|item| item.engine == "mongodb")
+        .expect("mongodb experience");
+    assert!(mongodb
+        .query_builders
+        .iter()
+        .any(|builder| builder.kind == "mongo-find"));
+    assert!(mongodb
+        .editable_scopes
+        .iter()
+        .any(|scope| scope.edit_kinds.iter().any(|kind| kind == "rename-field")));
+    assert!(mongodb.editable_scopes.iter().any(|scope| {
+        scope.live_execution && scope.edit_kinds.iter().any(|kind| kind == "set-field")
+    }));
+
+    let postgres = experiences
+        .iter()
+        .find(|item| item.engine == "postgresql")
+        .expect("postgres experience");
+    assert!(postgres
+        .query_builders
+        .iter()
+        .any(|builder| builder.kind == "sql-select"));
+    assert!(postgres.editable_scopes.iter().any(|scope| {
+        scope.live_execution && scope.edit_kinds.iter().any(|kind| kind == "update-row")
+    }));
+
+    let cockroach = experiences
+        .iter()
+        .find(|item| item.engine == "cockroachdb")
+        .expect("cockroachdb experience");
+    assert!(cockroach.editable_scopes.iter().any(|scope| {
+        scope.live_execution && scope.edit_kinds.iter().any(|kind| kind == "update-row")
+    }));
+
+    for engine in ["sqlserver", "mysql", "mariadb"] {
+        let experience = experiences
+            .iter()
+            .find(|item| item.engine == engine)
+            .unwrap_or_else(|| panic!("{engine} experience"));
+        assert!(experience.editable_scopes.iter().any(|scope| {
+            scope.live_execution && scope.edit_kinds.iter().any(|kind| kind == "update-row")
+        }));
+    }
+
+    for engine in ["redis", "valkey"] {
+        let experience = experiences
+            .iter()
+            .find(|item| item.engine == engine)
+            .unwrap_or_else(|| panic!("{engine} experience"));
+        assert!(experience.editable_scopes.iter().any(|scope| {
+            scope.live_execution && scope.edit_kinds.iter().any(|kind| kind == "set-key-value")
+        }));
+    }
+
+    let dynamodb = experiences
+        .iter()
+        .find(|item| item.engine == "dynamodb")
+        .expect("dynamodb experience");
+    assert!(dynamodb.editable_scopes.iter().any(|scope| {
+        scope.live_execution && scope.edit_kinds.iter().any(|kind| kind == "update-item")
+    }));
+
+    for engine in ["elasticsearch", "opensearch"] {
+        let experience = experiences
+            .iter()
+            .find(|item| item.engine == engine)
+            .unwrap_or_else(|| panic!("{engine} experience"));
+        assert!(experience.editable_scopes.iter().any(|scope| {
+            scope.live_execution
+                && scope
+                    .edit_kinds
+                    .iter()
+                    .any(|kind| kind == "update-document")
+        }));
+    }
+}
+
+#[tokio::test]
+async fn data_edit_plans_are_guarded_and_engine_specific() -> Result<(), CommandError> {
+    let connection = ResolvedConnectionProfile {
+        read_only: true,
+        ..resolved_connection("mongodb", "document")
+    };
+    let request = DataEditPlanRequest {
+        connection_id: connection.id.clone(),
+        environment_id: "env-dev".into(),
+        edit_kind: "rename-field".into(),
+        target: DataEditTarget {
+            object_kind: "document".into(),
+            collection: Some("products".into()),
+            document_id: Some(json!("item-1")),
+            ..Default::default()
+        },
+        changes: vec![DataEditChange {
+            field: Some("sku".into()),
+            new_name: Some("stockKeepingUnit".into()),
+            ..Default::default()
+        }],
+    };
+
+    let plan = adapters::plan_data_edit(&connection, &request).await?;
+    assert_eq!(plan.execution_support, "plan-only");
+    assert_eq!(plan.plan.request_language, "mongodb");
+    assert!(plan.plan.generated_request.contains("\"$rename\""));
+    assert!(plan.plan.confirmation_text.is_some());
+
+    let execution = adapters::execute_data_edit(
+        &connection,
+        &datanaut_desktop_lib::domain::models::DataEditExecutionRequest {
+            connection_id: request.connection_id,
+            environment_id: request.environment_id,
+            edit_kind: request.edit_kind,
+            target: request.target,
+            changes: request.changes,
+            confirmation_text: None,
+        },
+    )
+    .await?;
+    assert!(!execution.executed);
+    assert!(execution
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("read-only")));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn sql_data_edit_plan_requires_primary_key_for_updates() -> Result<(), CommandError> {
+    let connection = resolved_connection("postgresql", "sql");
+    let request = DataEditPlanRequest {
+        connection_id: connection.id.clone(),
+        environment_id: "env-dev".into(),
+        edit_kind: "update-row".into(),
+        target: DataEditTarget {
+            object_kind: "row".into(),
+            schema: Some("public".into()),
+            table: Some("accounts".into()),
+            primary_key: Some(HashMap::from([("id".into(), json!(1))])),
+            ..Default::default()
+        },
+        changes: vec![DataEditChange {
+            field: Some("name".into()),
+            value: Some(json!("Datanaut Labs")),
+            value_type: Some("string".into()),
+            ..Default::default()
+        }],
+    };
+
+    let plan = adapters::plan_data_edit(&connection, &request).await?;
+    assert_eq!(plan.plan.request_language, "sql");
+    assert!(plan
+        .plan
+        .generated_request
+        .contains("update \"public\".\"accounts\" set \"name\" = $1 where \"id\" = $2;"));
+    assert!(plan
+        .plan
+        .estimated_scan_impact
+        .as_deref()
+        .unwrap_or_default()
+        .contains("Single object"));
+
+    Ok(())
 }
 
 #[tokio::test]
@@ -542,6 +754,38 @@ async fn postgres_adapter_fixture_roundtrip() -> Result<(), CommandError> {
     assert_eq!(result.engine, "postgresql");
     assert!(!result.payloads.is_empty());
 
+    let edit = adapters::execute_data_edit(
+        &connection,
+        &DataEditExecutionRequest {
+            connection_id: connection.id.clone(),
+            environment_id: "env-dev".into(),
+            edit_kind: "update-row".into(),
+            target: DataEditTarget {
+                object_kind: "row".into(),
+                schema: Some("observability".into()),
+                table: Some("table_health".into()),
+                primary_key: Some(HashMap::from([("table_name".into(), json!("alerts"))])),
+                ..Default::default()
+            },
+            changes: vec![DataEditChange {
+                field: Some("rows_estimate".into()),
+                value: Some(json!(441)),
+                value_type: Some("number".into()),
+                ..Default::default()
+            }],
+            confirmation_text: None,
+        },
+    )
+    .await?;
+    assert!(edit.executed);
+    assert_eq!(
+        edit.metadata
+            .as_ref()
+            .and_then(|value| value.get("rowsAffected"))
+            .and_then(serde_json::Value::as_u64),
+        Some(1)
+    );
+
     let scalar_result = adapters::execute(
         &connection,
         &execution_request(
@@ -621,6 +865,39 @@ async fn sqlserver_adapter_fixture_roundtrip() -> Result<(), CommandError> {
     .await?;
     assert_eq!(result.engine, "sqlserver");
     assert!(!result.payloads.is_empty());
+
+    let edit = adapters::execute_data_edit(
+        &connection,
+        &DataEditExecutionRequest {
+            connection_id: connection.id.clone(),
+            environment_id: "env-dev".into(),
+            edit_kind: "update-row".into(),
+            target: DataEditTarget {
+                object_kind: "row".into(),
+                schema: Some("dbo".into()),
+                table: Some("orders".into()),
+                primary_key: Some(HashMap::from([("order_id".into(), json!(103))])),
+                ..Default::default()
+            },
+            changes: vec![DataEditChange {
+                field: Some("status".into()),
+                value: Some(json!("review")),
+                value_type: Some("string".into()),
+                ..Default::default()
+            }],
+            confirmation_text: None,
+        },
+    )
+    .await?;
+    assert!(edit.executed);
+    assert_eq!(
+        edit.metadata
+            .as_ref()
+            .and_then(|value| value.get("rowsAffected"))
+            .and_then(serde_json::Value::as_u64),
+        Some(1)
+    );
+
     Ok(())
 }
 
@@ -664,6 +941,58 @@ async fn mysql_adapter_fixture_roundtrip() -> Result<(), CommandError> {
     .await?;
     assert_eq!(result.engine, "mysql");
     assert!(!result.payloads.is_empty());
+
+    let id_result = adapters::execute(
+        &connection,
+        &execution_request(
+            &connection.id,
+            "env-dev",
+            "sql",
+            "select id from inventory_items where sku = 'luna-lamp' order by id desc limit 1;",
+        ),
+        Vec::new(),
+    )
+    .await?;
+    let item_id = id_result.payloads[0]
+        .get("rows")
+        .and_then(|value| value.as_array())
+        .and_then(|rows| rows.first())
+        .and_then(|row| row.as_array())
+        .and_then(|row| row.first())
+        .and_then(|value| value.as_str())
+        .and_then(|value| value.parse::<i64>().ok())
+        .expect("fixture inventory item id");
+    let edit = adapters::execute_data_edit(
+        &connection,
+        &DataEditExecutionRequest {
+            connection_id: connection.id.clone(),
+            environment_id: "env-dev".into(),
+            edit_kind: "update-row".into(),
+            target: DataEditTarget {
+                object_kind: "row".into(),
+                table: Some("inventory_items".into()),
+                primary_key: Some(HashMap::from([("id".into(), json!(item_id))])),
+                ..Default::default()
+            },
+            changes: vec![DataEditChange {
+                field: Some("inventory_available".into()),
+                value: Some(json!(19)),
+                value_type: Some("number".into()),
+                ..Default::default()
+            }],
+            confirmation_text: None,
+        },
+    )
+    .await?;
+    assert!(edit.executed);
+    assert_eq!(
+        edit.metadata
+            .as_ref()
+            .and_then(|value| value.get("rowsAffected"))
+            .and_then(serde_json::Value::as_u64),
+        Some(1)
+    );
+
     Ok(())
 }
 
@@ -680,8 +1009,12 @@ async fn sqlite_adapter_fixture_roundtrip() -> Result<(), CommandError> {
         "create table if not exists organizations (id integer primary key, name text not null);",
     )
     .await?;
-    pool.execute("insert into users (email) values ('first@example.com'), ('second@example.com');")
-        .await?;
+    pool.execute("delete from users;").await?;
+    pool.execute("delete from organizations;").await?;
+    pool.execute(
+        "insert into users (id, email) values (1, 'first@example.com'), (2, 'second@example.com');",
+    )
+    .await?;
 
     let connection = ResolvedConnectionProfile {
         id: "conn-sqlite".into(),
@@ -737,6 +1070,117 @@ async fn sqlite_adapter_fixture_roundtrip() -> Result<(), CommandError> {
     .await?;
     assert_eq!(result.engine, "sqlite");
     assert!(!result.payloads.is_empty());
+
+    let update = adapters::execute_data_edit(
+        &connection,
+        &DataEditExecutionRequest {
+            connection_id: connection.id.clone(),
+            environment_id: "env-dev".into(),
+            edit_kind: "update-row".into(),
+            target: DataEditTarget {
+                object_kind: "row".into(),
+                table: Some("users".into()),
+                primary_key: Some(HashMap::from([("id".into(), json!(1))])),
+                ..Default::default()
+            },
+            changes: vec![DataEditChange {
+                field: Some("email".into()),
+                value: Some(json!("updated@example.com")),
+                value_type: Some("string".into()),
+                ..Default::default()
+            }],
+            confirmation_text: None,
+        },
+    )
+    .await?;
+    assert!(update.executed);
+    assert_eq!(
+        update
+            .metadata
+            .as_ref()
+            .and_then(|value| value.get("rowsAffected"))
+            .and_then(serde_json::Value::as_u64),
+        Some(1)
+    );
+    let updated_email: String = sqlx::query_scalar("select email from users where id = 1;")
+        .fetch_one(&pool)
+        .await?;
+    assert_eq!(updated_email, "updated@example.com");
+
+    let insert = adapters::execute_data_edit(
+        &connection,
+        &DataEditExecutionRequest {
+            connection_id: connection.id.clone(),
+            environment_id: "env-dev".into(),
+            edit_kind: "insert-row".into(),
+            target: DataEditTarget {
+                object_kind: "row".into(),
+                table: Some("organizations".into()),
+                ..Default::default()
+            },
+            changes: vec![DataEditChange {
+                field: Some("name".into()),
+                value: Some(json!("Datanaut Labs")),
+                value_type: Some("string".into()),
+                ..Default::default()
+            }],
+            confirmation_text: None,
+        },
+    )
+    .await?;
+    assert!(insert.executed);
+    let organization_count: i64 =
+        sqlx::query_scalar("select count(*) from organizations where name = 'Datanaut Labs';")
+            .fetch_one(&pool)
+            .await?;
+    assert_eq!(organization_count, 1);
+
+    let blocked_delete = adapters::execute_data_edit(
+        &connection,
+        &DataEditExecutionRequest {
+            connection_id: connection.id.clone(),
+            environment_id: "env-dev".into(),
+            edit_kind: "delete-row".into(),
+            target: DataEditTarget {
+                object_kind: "row".into(),
+                table: Some("users".into()),
+                primary_key: Some(HashMap::from([("id".into(), json!(2))])),
+                ..Default::default()
+            },
+            changes: Vec::new(),
+            confirmation_text: None,
+        },
+    )
+    .await?;
+    assert!(!blocked_delete.executed);
+    assert!(blocked_delete
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("CONFIRM SQLITE DELETE-ROW")));
+
+    let delete = adapters::execute_data_edit(
+        &connection,
+        &DataEditExecutionRequest {
+            connection_id: connection.id.clone(),
+            environment_id: "env-dev".into(),
+            edit_kind: "delete-row".into(),
+            target: DataEditTarget {
+                object_kind: "row".into(),
+                table: Some("users".into()),
+                primary_key: Some(HashMap::from([("id".into(), json!(2))])),
+                ..Default::default()
+            },
+            changes: Vec::new(),
+            confirmation_text: Some("CONFIRM SQLITE DELETE-ROW".into()),
+        },
+    )
+    .await?;
+    assert!(delete.executed);
+    let remaining_user_count: i64 = sqlx::query_scalar("select count(*) from users where id = 2;")
+        .fetch_one(&pool)
+        .await?;
+    assert_eq!(remaining_user_count, 0);
+
     pool.close().await;
     Ok(())
 }
@@ -815,6 +1259,101 @@ async fn mongodb_adapter_fixture_roundtrip() -> Result<(), CommandError> {
     assert_eq!(json_documents.len(), documents.len());
     assert!(raw_text.contains("sku") || raw_text.contains("_id"));
     assert!(!raw_text.contains("\"collection\": \"products\""));
+
+    let target_document = documents
+        .iter()
+        .find(|document| document.get("sku").and_then(|value| value.as_str()) == Some("luna-lamp"))
+        .or_else(|| documents.first())
+        .expect("seeded product document");
+    let document_id = target_document
+        .get("_id")
+        .cloned()
+        .expect("seeded product id");
+    let edit_result = adapters::execute_data_edit(
+        &connection,
+        &DataEditExecutionRequest {
+            connection_id: connection.id.clone(),
+            environment_id: "env-dev".into(),
+            edit_kind: "set-field".into(),
+            target: DataEditTarget {
+                object_kind: "document".into(),
+                collection: Some("products".into()),
+                document_id: Some(document_id.clone()),
+                ..Default::default()
+            },
+            changes: vec![DataEditChange {
+                path: Some(vec!["datanautLiveEdit".into()]),
+                value: Some(json!("ok")),
+                value_type: Some("string".into()),
+                ..Default::default()
+            }],
+            confirmation_text: None,
+        },
+    )
+    .await?;
+    assert!(edit_result.executed);
+    assert_eq!(edit_result.execution_support, "live");
+    assert!(
+        edit_result
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.get("matchedCount"))
+            .and_then(|value| value.as_u64())
+            .unwrap_or_default()
+            >= 1
+    );
+
+    let edited_result = adapters::execute(
+        &connection,
+        &execution_request(
+            &connection.id,
+            "env-dev",
+            "mongodb",
+            "{\n  \"collection\": \"products\",\n  \"filter\": { \"sku\": \"luna-lamp\" },\n  \"limit\": 1\n}",
+        ),
+        Vec::new(),
+    )
+    .await?;
+    let edited_payload = edited_result
+        .payloads
+        .iter()
+        .find(|payload| {
+            payload.get("renderer").and_then(|value| value.as_str()) == Some("document")
+        })
+        .expect("edited document payload");
+    let edited_documents = edited_payload
+        .get("documents")
+        .and_then(|value| value.as_array())
+        .expect("edited document rows");
+    assert_eq!(
+        edited_documents
+            .first()
+            .and_then(|document| document.get("datanautLiveEdit"))
+            .and_then(|value| value.as_str()),
+        Some("ok")
+    );
+
+    let cleanup_result = adapters::execute_data_edit(
+        &connection,
+        &DataEditExecutionRequest {
+            connection_id: connection.id.clone(),
+            environment_id: "env-dev".into(),
+            edit_kind: "unset-field".into(),
+            target: DataEditTarget {
+                object_kind: "document".into(),
+                collection: Some("products".into()),
+                document_id: Some(document_id),
+                ..Default::default()
+            },
+            changes: vec![DataEditChange {
+                path: Some(vec!["datanautLiveEdit".into()]),
+                ..Default::default()
+            }],
+            confirmation_text: None,
+        },
+    )
+    .await?;
+    assert!(cleanup_result.executed);
     Ok(())
 }
 
@@ -879,6 +1418,91 @@ async fn redis_adapter_fixture_roundtrip() -> Result<(), CommandError> {
     .await?;
     assert_eq!(result.engine, "redis");
     assert!(!result.payloads.is_empty());
+
+    let edit = adapters::execute_data_edit(
+        &connection,
+        &DataEditExecutionRequest {
+            connection_id: connection.id.clone(),
+            environment_id: "env-prod".into(),
+            edit_kind: "set-key-value".into(),
+            target: DataEditTarget {
+                object_kind: "key".into(),
+                key: Some("datanaut:live-edit".into()),
+                ..Default::default()
+            },
+            changes: vec![DataEditChange {
+                value: Some(json!("ok")),
+                value_type: Some("string".into()),
+                ..Default::default()
+            }],
+            confirmation_text: None,
+        },
+    )
+    .await?;
+    assert!(edit.executed);
+    assert_eq!(edit.execution_support, "live");
+
+    let ttl = adapters::execute_data_edit(
+        &connection,
+        &DataEditExecutionRequest {
+            connection_id: connection.id.clone(),
+            environment_id: "env-prod".into(),
+            edit_kind: "set-ttl".into(),
+            target: DataEditTarget {
+                object_kind: "key".into(),
+                key: Some("datanaut:live-edit".into()),
+                ..Default::default()
+            },
+            changes: vec![DataEditChange {
+                value: Some(json!(60)),
+                value_type: Some("number".into()),
+                ..Default::default()
+            }],
+            confirmation_text: None,
+        },
+    )
+    .await?;
+    assert!(ttl.executed);
+
+    let delete_without_confirmation = adapters::execute_data_edit(
+        &connection,
+        &DataEditExecutionRequest {
+            connection_id: connection.id.clone(),
+            environment_id: "env-prod".into(),
+            edit_kind: "delete-key".into(),
+            target: DataEditTarget {
+                object_kind: "key".into(),
+                key: Some("datanaut:live-edit".into()),
+                ..Default::default()
+            },
+            changes: vec![],
+            confirmation_text: None,
+        },
+    )
+    .await?;
+    assert!(!delete_without_confirmation.executed);
+    assert!(delete_without_confirmation
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("CONFIRM REDIS DELETE-KEY")));
+
+    let deleted = adapters::execute_data_edit(
+        &connection,
+        &DataEditExecutionRequest {
+            connection_id: connection.id.clone(),
+            environment_id: "env-prod".into(),
+            edit_kind: "delete-key".into(),
+            target: DataEditTarget {
+                object_kind: "key".into(),
+                key: Some("datanaut:live-edit".into()),
+                ..Default::default()
+            },
+            changes: vec![],
+            confirmation_text: Some("CONFIRM REDIS DELETE-KEY".into()),
+        },
+    )
+    .await?;
+    assert!(deleted.executed);
     Ok(())
 }
 
@@ -917,6 +1541,37 @@ async fn cache_profile_fixture_roundtrips() -> Result<(), CommandError> {
         .await?;
         assert_eq!(result.engine, engine);
         assert!(!result.payloads.is_empty());
+
+        let edit = adapters::execute_data_edit(
+            &connection,
+            &DataEditExecutionRequest {
+                connection_id: connection.id.clone(),
+                environment_id: "env-dev".into(),
+                edit_kind: "update-document".into(),
+                target: DataEditTarget {
+                    object_kind: "document".into(),
+                    table: Some("orders".into()),
+                    document_id: Some(json!("101")),
+                    ..Default::default()
+                },
+                changes: vec![DataEditChange {
+                    field: Some("status".into()),
+                    value: Some(json!("fulfilled")),
+                    value_type: Some("string".into()),
+                    ..Default::default()
+                }],
+                confirmation_text: None,
+            },
+        )
+        .await?;
+        assert!(edit.executed);
+        assert_eq!(
+            edit.metadata
+                .as_ref()
+                .and_then(|value| value.get("path"))
+                .and_then(serde_json::Value::as_str),
+            Some("/orders/_update/101?refresh=true")
+        );
     }
 
     Ok(())
@@ -954,6 +1609,30 @@ async fn sqlplus_profile_fixture_roundtrips() -> Result<(), CommandError> {
     .await?;
     assert_eq!(mariadb_result.engine, "mariadb");
     assert!(!mariadb_result.payloads.is_empty());
+
+    let mariadb_edit = adapters::execute_data_edit(
+        &mariadb,
+        &DataEditExecutionRequest {
+            connection_id: mariadb.id.clone(),
+            environment_id: "env-dev".into(),
+            edit_kind: "update-row".into(),
+            target: DataEditTarget {
+                object_kind: "row".into(),
+                table: Some("orders".into()),
+                primary_key: Some(HashMap::from([("order_id".into(), json!(103))])),
+                ..Default::default()
+            },
+            changes: vec![DataEditChange {
+                field: Some("status".into()),
+                value: Some(json!("review")),
+                value_type: Some("string".into()),
+                ..Default::default()
+            }],
+            confirmation_text: None,
+        },
+    )
+    .await?;
+    assert!(mariadb_edit.executed);
 
     let timescale = ResolvedConnectionProfile {
         id: "conn-timescaledb".into(),
@@ -1232,6 +1911,38 @@ async fn cloud_contract_profile_fixture_roundtrips() -> Result<(), CommandError>
     .await?;
     assert_eq!(dynamodb_result.engine, "dynamodb");
     assert!(!dynamodb_result.payloads.is_empty());
+
+    let dynamodb_edit = adapters::execute_data_edit(
+        &dynamodb,
+        &DataEditExecutionRequest {
+            connection_id: dynamodb.id.clone(),
+            environment_id: "env-dev".into(),
+            edit_kind: "update-item".into(),
+            target: DataEditTarget {
+                object_kind: "item".into(),
+                table: Some("orders".into()),
+                item_key: Some(HashMap::from([("order_id".into(), json!("101"))])),
+                ..Default::default()
+            },
+            changes: vec![DataEditChange {
+                field: Some("status".into()),
+                value: Some(json!("fulfilled")),
+                value_type: Some("string".into()),
+                ..Default::default()
+            }],
+            confirmation_text: None,
+        },
+    )
+    .await?;
+    assert!(dynamodb_edit.executed);
+    assert_eq!(
+        dynamodb_edit
+            .metadata
+            .as_ref()
+            .and_then(|value| value.get("operation"))
+            .and_then(serde_json::Value::as_str),
+        Some("UpdateItem")
+    );
 
     let bigquery = ResolvedConnectionProfile {
         id: "conn-bigquery".into(),

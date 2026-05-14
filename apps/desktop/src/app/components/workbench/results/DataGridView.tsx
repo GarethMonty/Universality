@@ -1,27 +1,27 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { computeRenderedColumnWidths } from './data-grid-layout'
+import {
+  autoFitColumnWidth,
+  buildVisibleGridRows,
+  DEFAULT_COLUMN_WIDTH,
+  gridTextForMode,
+  type GridSelection,
+  type GridSort,
+  isSelected,
+  ROW_NUMBER_WIDTH,
+} from './data-grid-model'
 import { writeFieldDragData } from './field-drag'
 import { copyText } from './payload-export'
-
-const DEFAULT_COLUMN_WIDTH = 160
-const ROW_NUMBER_WIDTH = 48
 
 interface DataGridViewProps {
   columns: string[]
   rows: string[][]
 }
 
-interface GridSelection {
-  startRow: number
-  startColumn: number
-  endRow: number
-  endColumn: number
-}
-
 export function DataGridView({ columns, rows }: DataGridViewProps) {
   const [filter, setFilter] = useState('')
-  const [sort, setSort] = useState<{ column: number; direction: 'asc' | 'desc' }>()
+  const [sort, setSort] = useState<GridSort>()
   const [focusedCell, setFocusedCell] = useState<{ row: number; column: number }>()
   const [selection, setSelection] = useState<GridSelection>()
   const [columnWidths, setColumnWidths] = useState<Record<number, number>>({})
@@ -31,30 +31,7 @@ export function DataGridView({ columns, rows }: DataGridViewProps) {
   const dragStartRef = useRef<{ row: number; column: number } | null>(null)
   const resizeStartRef = useRef<{ column: number; x: number; width: number } | null>(null)
 
-  const visibleRows = useMemo(() => {
-    const normalizedFilter = filter.trim().toLowerCase()
-    const withSourceIndex = rows.map((row, index) => ({ row, sourceIndex: index }))
-    const filtered = normalizedFilter
-      ? withSourceIndex.filter(({ row }) =>
-          row.some((cell) => cell.toLowerCase().includes(normalizedFilter)),
-        )
-      : withSourceIndex
-
-    if (!sort) {
-      return filtered
-    }
-
-    return [...filtered].sort((left, right) => {
-      const leftValue = left.row[sort.column] ?? ''
-      const rightValue = right.row[sort.column] ?? ''
-      const result = leftValue.localeCompare(rightValue, undefined, {
-        numeric: true,
-        sensitivity: 'base',
-      })
-
-      return sort.direction === 'asc' ? result : -result
-    })
-  }, [filter, rows, sort])
+  const visibleRows = useMemo(() => buildVisibleGridRows(rows, filter, sort), [filter, rows, sort])
 
   // TanStack Virtual intentionally returns imperative helpers; keep this component un-memoized.
   // eslint-disable-next-line react-hooks/incompatible-library
@@ -100,14 +77,9 @@ export function DataGridView({ columns, rows }: DataGridViewProps) {
   }
 
   const autoFitColumn = (column: number) => {
-    const headerWidth = columns[column]?.length ?? 0
-    const sampleWidth = visibleRows.reduce(
-      (max, item) => Math.max(max, (item.row[column] ?? '').length),
-      headerWidth,
-    )
     setColumnWidths((current) => ({
       ...current,
-      [column]: Math.min(Math.max(sampleWidth * 8 + 36, 90), 420),
+      [column]: autoFitColumnWidth(column, columns, visibleRows),
     }))
   }
 
@@ -323,51 +295,4 @@ export function DataGridView({ columns, rows }: DataGridViewProps) {
       </div>
     </div>
   )
-}
-
-function isSelected(row: number, column: number, selection: GridSelection | undefined) {
-  if (!selection) {
-    return false
-  }
-
-  const minRow = Math.min(selection.startRow, selection.endRow)
-  const maxRow = Math.max(selection.startRow, selection.endRow)
-  const minColumn = Math.min(selection.startColumn, selection.endColumn)
-  const maxColumn = Math.max(selection.startColumn, selection.endColumn)
-
-  return row >= minRow && row <= maxRow && column >= minColumn && column <= maxColumn
-}
-
-function gridTextForMode(
-  mode: 'selection' | 'row' | 'all',
-  columns: string[],
-  rows: string[][],
-  selection: GridSelection | undefined,
-) {
-  if (mode === 'all') {
-    return [columns, ...rows].map((row) => row.join('\t')).join('\n')
-  }
-
-  if (mode === 'row') {
-    if (!selection) {
-      return ''
-    }
-
-    const rowIndex = selection.endRow
-    return rows[rowIndex]?.join('\t') ?? ''
-  }
-
-  if (!selection) {
-    return ''
-  }
-
-  const minRow = Math.min(selection.startRow, selection.endRow)
-  const maxRow = Math.max(selection.startRow, selection.endRow)
-  const minColumn = Math.min(selection.startColumn, selection.endColumn)
-  const maxColumn = Math.max(selection.startColumn, selection.endColumn)
-
-  return rows
-    .slice(minRow, maxRow + 1)
-    .map((row) => row.slice(minColumn, maxColumn + 1).join('\t'))
-    .join('\n')
 }

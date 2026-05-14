@@ -43,6 +43,9 @@ export const DATASTORE_OPERATION_SCOPES = [
   'schema',
   'table',
   'collection',
+  'document',
+  'key',
+  'item',
   'index',
   'query',
   'user',
@@ -105,6 +108,132 @@ export interface AdapterDiagnostics {
   queryHistory: ResultPayload[]
   costEstimates: ResultPayload[]
   warnings: string[]
+}
+
+export interface DatastoreExperienceObjectKind {
+  kind: string
+  label: string
+  description: string
+  childKinds: string[]
+  queryable: boolean
+  supportsContextMenu: boolean
+}
+
+export interface DatastoreExperienceAction {
+  id: string
+  label: string
+  scope: DatastoreOperationScope
+  risk: DatastoreOperationRisk
+  operationId?: string
+  requiresSelection: boolean
+  description: string
+}
+
+export interface DatastoreExperienceBuilder {
+  kind: QueryBuilderKind | 'sql-select' | 'search-dsl' | 'dynamodb-key-condition' | 'cql-partition'
+  label: string
+  scope: DatastoreOperationScope
+  defaultMode: 'visual' | 'split' | 'raw'
+}
+
+export interface DatastoreEditableScope {
+  scope: DatastoreOperationScope
+  label: string
+  editKinds: DataEditKind[]
+  requiresPrimaryKey: boolean
+  liveExecution: boolean
+}
+
+export interface DatastoreDiagnosticsTab {
+  id: string
+  label: string
+  description: string
+  defaultRenderer: ResultRenderer
+}
+
+export interface DatastoreExperienceManifest {
+  engine: DatastoreEngine
+  family: DatastoreFamily
+  label: string
+  maturity: 'mvp' | 'beta' | 'planned'
+  objectKinds: DatastoreExperienceObjectKind[]
+  contextActions: DatastoreExperienceAction[]
+  queryBuilders: DatastoreExperienceBuilder[]
+  editableScopes: DatastoreEditableScope[]
+  diagnosticsTabs: DatastoreDiagnosticsTab[]
+  resultRenderers: ResultRenderer[]
+  safetyRules: string[]
+}
+
+export interface DatastoreExperienceResponse {
+  experiences: DatastoreExperienceManifest[]
+}
+
+export type DataEditKind =
+  | 'insert-row'
+  | 'update-row'
+  | 'delete-row'
+  | 'set-field'
+  | 'unset-field'
+  | 'rename-field'
+  | 'change-field-type'
+  | 'set-key-value'
+  | 'set-ttl'
+  | 'delete-key'
+  | 'put-item'
+  | 'update-item'
+
+export interface DataEditTarget {
+  objectKind: string
+  path: string[]
+  schema?: string
+  table?: string
+  collection?: string
+  key?: string
+  documentId?: unknown
+  itemKey?: Record<string, unknown>
+  primaryKey?: Record<string, unknown>
+}
+
+export interface DataEditChange {
+  field?: string
+  path?: string[]
+  value?: unknown
+  valueType?: string
+  newName?: string
+}
+
+export interface DataEditPlanRequest {
+  connectionId: string
+  environmentId: string
+  editKind: DataEditKind
+  target: DataEditTarget
+  changes: DataEditChange[]
+}
+
+export interface DataEditPlanResponse {
+  connectionId: string
+  environmentId: string
+  editKind: DataEditKind
+  executionSupport: DatastoreOperationExecutionSupport
+  plan: OperationPlan
+}
+
+export interface DataEditExecutionRequest extends DataEditPlanRequest {
+  confirmationText?: string
+}
+
+export interface DataEditExecutionResponse {
+  connectionId: string
+  environmentId: string
+  editKind: DataEditKind
+  executionSupport: DatastoreOperationExecutionSupport
+  executed: boolean
+  plan: OperationPlan
+  messages: string[]
+  warnings: string[]
+  result?: ExecutionResultEnvelope
+  metadata?: unknown
 }
 
 export interface OperationManifestRequest {
