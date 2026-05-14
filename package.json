@@ -24,6 +24,7 @@
     "check:all": "npm run check && npm run quality:test && npm run check:native",
     "ci:workflow:test": "node --test tests/ci/*.test.mjs",
     "ci:test": "npm run ci:workflow:test && npm run release:test && npm run check:all",
+    "release:bump": "node tests/release/bump-release-version.mjs",
     "release:validate": "node tests/release/validate-release-version.mjs",
     "release:workflow:validate": "node tests/release/validate-release-workflow.mjs",
     "release:test": "node --test tests/release/*.test.mjs",

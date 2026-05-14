@@ -34,6 +34,53 @@ function readCargoPackageVersion(repoRoot, path) {
   throw new Error(`${path} [package] section does not contain a version`)
 }
 
+function readCargoLockPackageVersion(repoRoot, path, packageName) {
+  const text = readFileSync(resolve(repoRoot, path), 'utf8')
+  let inPackage = false
+  let foundPackage = false
+
+  for (const line of text.split(/\r?\n/)) {
+    if (/^\s*\[\[package\]\]\s*$/.test(line)) {
+      inPackage = true
+      foundPackage = false
+      continue
+    }
+
+    if (!inPackage) {
+      continue
+    }
+
+    const name = line.match(/^\s*name\s*=\s*"([^"]+)"\s*$/)
+    if (name) {
+      foundPackage = name[1] === packageName
+      continue
+    }
+
+    if (foundPackage) {
+      const version = line.match(/^\s*version\s*=\s*"([^"]+)"\s*$/)
+      if (version) {
+        return version[1]
+      }
+    }
+  }
+
+  throw new Error(`${path} does not contain package ${packageName}`)
+}
+
+function readPackageLockVersion(repoRoot, packagePath, label) {
+  const lock = JSON.parse(readFileSync(resolve(repoRoot, 'package-lock.json'), 'utf8'))
+  const version =
+    packagePath === null
+      ? lock.version
+      : lock.packages && lock.packages[packagePath] && lock.packages[packagePath].version
+
+  if (typeof version !== 'string' || version.length === 0) {
+    throw new Error(`package-lock.json does not contain a string version for ${label}`)
+  }
+
+  return version
+}
+
 export function isValidReleaseVersion(version) {
   return SEMVER_PATTERN.test(version)
 }
@@ -51,9 +98,47 @@ export function readReleaseVersions(repoRoot = process.cwd()) {
       version: readJsonVersion(repoRoot, 'apps/desktop/package.json')
     },
     {
+      name: 'shared types package.json',
+      path: 'packages/shared-types/package.json',
+      version: readJsonVersion(repoRoot, 'packages/shared-types/package.json')
+    },
+    {
+      name: 'package-lock root',
+      path: 'package-lock.json#version',
+      version: readPackageLockVersion(repoRoot, null, 'root')
+    },
+    {
+      name: 'package-lock workspace root',
+      path: 'package-lock.json#packages[""]',
+      version: readPackageLockVersion(repoRoot, '', 'workspace root')
+    },
+    {
+      name: 'package-lock desktop',
+      path: 'package-lock.json#packages["apps/desktop"]',
+      version: readPackageLockVersion(repoRoot, 'apps/desktop', 'apps/desktop')
+    },
+    {
+      name: 'package-lock shared types',
+      path: 'package-lock.json#packages["packages/shared-types"]',
+      version: readPackageLockVersion(
+        repoRoot,
+        'packages/shared-types',
+        'packages/shared-types'
+      )
+    },
+    {
       name: 'desktop Cargo.toml',
       path: 'apps/desktop/src-tauri/Cargo.toml',
       version: readCargoPackageVersion(repoRoot, 'apps/desktop/src-tauri/Cargo.toml')
+    },
+    {
+      name: 'desktop Cargo.lock',
+      path: 'apps/desktop/src-tauri/Cargo.lock#datanaut-desktop',
+      version: readCargoLockPackageVersion(
+        repoRoot,
+        'apps/desktop/src-tauri/Cargo.lock',
+        'datanaut-desktop'
+      )
     },
     {
       name: 'desktop tauri.conf.json',

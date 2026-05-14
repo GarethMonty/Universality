@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Semantic version to release, matching checked-in app versions.'
+        description: 'Semantic version to release. The workflow updates version files, commits, tags, and builds it.'
         required: true
         type: string
 
@@ -22,6 +22,7 @@ jobs:
     outputs:
       tag-name: ${{ steps.release.outputs.tag_name }}
       prerelease: ${{ steps.release.outputs.prerelease }}
+      release-sha: ${{ steps.release.outputs.release_sha }}
 
     steps:
       - name: Checkout
@@ -35,11 +36,37 @@ jobs:
           node-version: 24
           cache: npm
 
+      - name: Bump release version files
+        run: npm run release:bump -- "${{ inputs.version }}"
+
       - name: Validate release version
         run: npm run release:validate -- "${{ inputs.version }}"
 
       - name: Validate release workflow
         run: npm run release:workflow:validate
+
+      - name: Commit release version files
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            package.json \
+            package-lock.json \
+            apps/desktop/package.json \
+            packages/shared-types/package.json \
+            apps/desktop/src-tauri/Cargo.toml \
+            apps/desktop/src-tauri/Cargo.lock \
+            apps/desktop/src-tauri/tauri.conf.json
+
+          if git diff --cached --quiet; then
+            echo "Release version files already match ${{ inputs.version }}."
+          else
+            git commit -m "chore: release v${{ inputs.version }}"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi
 
       - name: Create or validate release tag
         id: release
@@ -51,6 +78,7 @@ jobs:
           set -euo pipefail
 
           tag="app-v${RELEASE_VERSION}"
+          release_sha="$(git rev-parse HEAD)"
           prerelease="false"
           if [[ "${RELEASE_VERSION}" == *-* ]]; then
             prerelease="true"
@@ -58,15 +86,16 @@ jobs:
 
           echo "tag_name=${tag}" >> "${GITHUB_OUTPUT}"
           echo "prerelease=${prerelease}" >> "${GITHUB_OUTPUT}"
+          echo "release_sha=${release_sha}" >> "${GITHUB_OUTPUT}"
 
           if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
             tag_sha="$(git rev-list -n 1 "${tag}")"
-            if [[ "${tag_sha}" != "${GITHUB_SHA}" ]]; then
-              echo "::error title=Release tag points elsewhere::${tag} points to ${tag_sha}, not ${GITHUB_SHA}."
+            if [[ "${tag_sha}" != "${release_sha}" ]]; then
+              echo "::error title=Release tag points elsewhere::${tag} points to ${tag_sha}, not ${release_sha}."
               exit 1
             fi
           else
-            git tag "${tag}" "${GITHUB_SHA}"
+            git tag "${tag}" "${release_sha}"
             git push origin "refs/tags/${tag}"
           fi
 
@@ -107,6 +136,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          ref: ${{ needs.validate.outputs.release-sha }}
           fetch-depth: 0
 
       - name: Install Linux desktop dependencies
@@ -162,5 +192,5 @@ jobs:
             Release checklist: docs/release-checklist.md
           releaseDraft: true
           prerelease: ${{ contains(inputs.version, '-') }}
-          releaseCommitish: ${{ github.sha }}
+          releaseCommitish: ${{ needs.validate.outputs.release-sha }}
           args: ${{ matrix.args }}

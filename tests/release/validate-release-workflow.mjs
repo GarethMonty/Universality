@@ -45,6 +45,21 @@ export function validateReleaseWorkflow(repoRoot = process.cwd()) {
     /npm\s+run\s+release:validate\s+--\s+"\$\{\{\s*inputs\.version\s*\}\}"/,
     'release workflow must run the shared release version validator'
   )
+  requireMatch(
+    text,
+    /npm\s+run\s+release:bump\s+--\s+"\$\{\{\s*inputs\.version\s*\}\}"/,
+    'release workflow must auto-update release version files'
+  )
+  requireMatch(
+    text,
+    /release-sha:\s*\$\{\{\s*steps\.release\.outputs\.release_sha\s*\}\}/,
+    'release workflow must expose the committed release SHA'
+  )
+  requireMatch(
+    text,
+    /ref:\s*\$\{\{\s*needs\.validate\.outputs\.release-sha\s*\}\}/,
+    'release workflow publish jobs must check out the committed release SHA'
+  )
 
   for (const platform of REQUIRED_PLATFORMS) {
     requireMatch(
