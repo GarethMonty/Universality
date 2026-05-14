@@ -1,6 +1,6 @@
 [package]
 name = "datanaut-desktop"
-version = "0.1.0"
+version = "0.1.1"
 description = "Datanaut desktop shell"
 edition = "2021"
 
