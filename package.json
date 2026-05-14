@@ -1,7 +1,7 @@
 {
   "name": "datanaut",
   "private": true,
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Datanaut is a modular Tauri workstation for exploring multiple datastore families from one desktop app.",
   "workspaces": [
     "apps/*",
