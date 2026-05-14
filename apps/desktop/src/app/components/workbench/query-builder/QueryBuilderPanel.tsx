@@ -4,6 +4,9 @@ import type {
   QueryBuilderState,
   QueryTabState,
 } from '@datanaut/shared-types'
+import { useState } from 'react'
+import type { DragEvent } from 'react'
+import { readFieldDragPayload } from '../results/field-drag'
 import { CqlPartitionBuilder } from './CqlPartitionBuilder'
 import { isCqlPartitionBuilderState } from './cql-partition'
 import { DynamoDbKeyConditionBuilder } from './DynamoDbKeyConditionBuilder'
@@ -17,6 +20,7 @@ import {
   MongoProjectionBuilderSection,
   MongoSortBuilderSection,
 } from './MongoFindBuilderSections'
+import { mongoFilterRowFromDroppedField } from './mongo-filter-row'
 import { isSqlSelectBuilderState } from './sql-select'
 import { SqlSelectBuilder } from './SqlSelectBuilder'
 import { isSearchDslBuilderState } from './search-dsl'
@@ -118,6 +122,7 @@ function MongoFindBuilder({
 }) {
   const draft = builderState
   const filterGroups = draft.filterGroups ?? []
+  const [builderDragActive, setBuilderDragActive] = useState(false)
   const resolvedCollectionOptions = uniqueValues([
     draft.collection,
     ...collectionOptions,
@@ -135,8 +140,50 @@ function MongoFindBuilder({
     }
   }
 
+  const handleBuilderDragOver = (event: DragEvent<HTMLElement>) => {
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'copy'
+    setBuilderDragActive((current) => current || true)
+  }
+
+  const handleBuilderDragLeave = (event: DragEvent<HTMLElement>) => {
+    const nextTarget = event.relatedTarget
+
+    if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) {
+      return
+    }
+
+    setBuilderDragActive(false)
+  }
+
+  const handleBuilderDrop = (event: DragEvent<HTMLElement>) => {
+    event.preventDefault()
+    setBuilderDragActive(false)
+
+    const payload = readFieldDragPayload(event)
+
+    if (!payload?.fieldPath) {
+      return
+    }
+
+    updateDraft({
+      filterGroups,
+      filters: [
+        ...draft.filters,
+        mongoFilterRowFromDroppedField(filterGroups[0]?.id, payload.fieldPath, payload),
+      ],
+    })
+  }
+
   return (
-    <section className="query-builder-panel" aria-label="MongoDB query builder">
+    <section
+      className={`query-builder-panel${builderDragActive ? ' is-drag-over' : ''}`}
+      aria-label="MongoDB query builder"
+      onDragEnterCapture={handleBuilderDragOver}
+      onDragOverCapture={handleBuilderDragOver}
+      onDragLeave={handleBuilderDragLeave}
+      onDrop={handleBuilderDrop}
+    >
       <div className="query-builder-grid">
         <label className="query-builder-field">
           <span>Collection</span>

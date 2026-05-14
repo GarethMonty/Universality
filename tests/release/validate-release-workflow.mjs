@@ -25,8 +25,8 @@ export function validateReleaseWorkflow(repoRoot = process.cwd()) {
   requireMatch(text, /^\s*contents:\s*write\s*$/m, 'release workflow must grant contents: write')
   requireMatch(
     text,
-    /tauri-apps\/tauri-action@v1/,
-    'release workflow must use tauri-apps/tauri-action@v1'
+    /tauri-apps\/tauri-action@v0/,
+    'release workflow must use tauri-apps/tauri-action@v0'
   )
   requireMatch(text, /projectPath:\s*apps\/desktop/, 'release workflow must set projectPath')
   requireMatch(

@@ -2125,6 +2125,11 @@ button:disabled:hover {
   background: var(--panel-bg);
 }
 
+.query-builder-panel.is-drag-over {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
 .query-builder-header,
 .query-builder-section-header,
 .query-builder-status {

@@ -282,6 +282,7 @@ describe('App', () => {
     const menu = await screen.findByRole('menu', {
       name: 'Connection options for PostgreSQL connection',
     })
+    expect(within(menu).getAllByRole('menuitem')[0]).toHaveTextContent('New Query')
     expect(
       screen.queryByRole('button', {
         name: 'Delete connection PostgreSQL connection',

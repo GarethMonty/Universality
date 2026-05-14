@@ -1,14 +1,9 @@
-import type {
-  MongoBuilderValueType,
-  MongoFindFilterGroup,
-  MongoFindFilterRow,
-  MongoFilterOperator,
-} from '@datanaut/shared-types'
-import type { FieldDragPayload } from '../results/field-drag'
+import type { MongoBuilderValueType, MongoFindFilterGroup, MongoFindFilterRow, MongoFilterOperator } from '@datanaut/shared-types'
 import { BuilderSection } from './BuilderSection'
 import type { MongoFindSectionProps } from './MongoBuilderSection.types'
 import { rowId } from './MongoBuilderSection.types'
 import { defaultFilterGroup } from './mongo-find-defaults'
+import { mongoFilterRow, mongoFilterRowFromDroppedField } from './mongo-filter-row'
 
 const FILTER_OPERATORS: Array<{ value: MongoFilterOperator; label: string }> = [
   { value: 'eq', label: '=' },
@@ -42,7 +37,7 @@ export function MongoFilterBuilderSection({
           filterGroups,
           filters: [
             ...draft.filters,
-            filterRowFromDroppedField(
+            mongoFilterRowFromDroppedField(
               hasExplicitGroups ? filterGroups[0]?.id : undefined,
               field,
               payload,
@@ -55,7 +50,7 @@ export function MongoFilterBuilderSection({
           filterGroups,
           filters: [
             ...draft.filters,
-            filterRow(hasExplicitGroups ? filterGroups[0]?.id : undefined),
+            mongoFilterRow(hasExplicitGroups ? filterGroups[0]?.id : undefined),
           ],
         })
       }
@@ -133,7 +128,7 @@ function FilterGroup({
           onClick={() =>
             updateDraft({
               filterGroups,
-              filters: [...draft.filters, filterRow(group.id)],
+              filters: [...draft.filters, mongoFilterRow(group.id)],
             })
           }
         >
@@ -283,69 +278,4 @@ function FilterRows({
       ))}
     </>
   )
-}
-
-function filterRow(groupId: string | undefined, field = '') {
-  return {
-    id: rowId('filter'),
-    enabled: true,
-    field,
-    groupId,
-    operator: 'eq' as const,
-    value: '',
-    valueType: 'string' as const,
-  }
-}
-
-function filterRowFromDroppedField(
-  groupId: string | undefined,
-  field: string,
-  payload: FieldDragPayload,
-) {
-  const valueType = mongoBuilderValueType(payload.value, payload.valueType)
-
-  return {
-    ...filterRow(groupId, field),
-    value: mongoBuilderValue(payload.value, valueType),
-    valueType,
-  }
-}
-
-function mongoBuilderValueType(
-  value: unknown,
-  dragValueType: string | undefined,
-): MongoBuilderValueType {
-  if (dragValueType === 'number' || typeof value === 'number') {
-    return 'number'
-  }
-
-  if (dragValueType === 'boolean' || typeof value === 'boolean') {
-    return 'boolean'
-  }
-
-  if (dragValueType === 'null' || value === null) {
-    return 'null'
-  }
-
-  if (
-    dragValueType === 'object' ||
-    dragValueType === 'array' ||
-    (typeof value === 'object' && value !== null)
-  ) {
-    return 'json'
-  }
-
-  return 'string'
-}
-
-function mongoBuilderValue(value: unknown, valueType: MongoBuilderValueType) {
-  if (valueType === 'null') {
-    return ''
-  }
-
-  if (valueType === 'json') {
-    return JSON.stringify(value ?? null)
-  }
-
-  return value === undefined || value === null ? '' : String(value)
 }

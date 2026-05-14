@@ -69,6 +69,25 @@ describe('QueryBuilderPanel', () => {
     expect(onBuilderStateChange).toHaveBeenCalledOnce()
   })
 
+  it('treats the whole Mongo builder panel as a valid field drop target', () => {
+    const onBuilderStateChange = vi.fn()
+
+    render(<BuilderHarness onBuilderStateChange={onBuilderStateChange} tab={mongoTab()} />)
+
+    const builder = screen.getByLabelText('MongoDB query builder')
+    const dataTransfer = createFieldDataTransfer('sku')
+
+    fireEvent.dragOver(builder, { dataTransfer })
+
+    expect(builder).toHaveClass('is-drag-over')
+    expect(dataTransfer.dropEffect).toBe('copy')
+
+    fireEvent.drop(builder, { dataTransfer })
+
+    expect(screen.getByLabelText('Filter field')).toHaveValue('sku')
+    expect(builder).not.toHaveClass('is-drag-over')
+  })
+
   it('adds document result fields to the Mongo builder section they are dropped on', () => {
     const onBuilderStateChange = vi.fn()
     const tab = mongoTab()

@@ -56,6 +56,16 @@ export function ConnectionContextMenu({
         type="button"
         role="menuitem"
         className="connection-context-menu-item"
+        aria-label={`Create query tab for ${connection.name}`}
+        onClick={() => runAndClose(() => onCreateTab(connection.id))}
+      >
+        <PlayIcon className="connection-context-menu-icon" />
+        <span>New Query</span>
+      </button>
+      <button
+        type="button"
+        role="menuitem"
+        className="connection-context-menu-item"
         aria-label={`Open Explorer for ${connection.name}`}
         onClick={() => runAndClose(() => onOpenConnectionExplorer(connection.id))}
       >
@@ -71,16 +81,6 @@ export function ConnectionContextMenu({
       >
         <RenameIcon className="connection-context-menu-icon" />
         <span>Edit connection</span>
-      </button>
-      <button
-        type="button"
-        role="menuitem"
-        className="connection-context-menu-item"
-        aria-label={`Create query tab for ${connection.name}`}
-        onClick={() => runAndClose(() => onCreateTab(connection.id))}
-      >
-        <PlayIcon className="connection-context-menu-icon" />
-        <span>New Query</span>
       </button>
       <button
         type="button"
