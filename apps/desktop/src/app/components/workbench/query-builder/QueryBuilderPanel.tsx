@@ -3,7 +3,7 @@ import type {
   MongoFindBuilderState,
   QueryBuilderState,
   QueryTabState,
-} from '@datanaut/shared-types'
+} from '@datapadplusplus/shared-types'
 import { useState } from 'react'
 import type { DragEvent } from 'react'
 import { readFieldDragPayload } from '../results/field-drag'

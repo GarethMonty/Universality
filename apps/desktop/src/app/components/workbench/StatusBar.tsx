@@ -4,7 +4,7 @@ import type {
   EnvironmentProfile,
   QueryTabState,
   WorkspaceSnapshot,
-} from '@datanaut/shared-types'
+} from '@datapadplusplus/shared-types'
 import { PanelIcon, SettingsIcon, WarningIcon } from './icons'
 
 interface StatusBarProps {

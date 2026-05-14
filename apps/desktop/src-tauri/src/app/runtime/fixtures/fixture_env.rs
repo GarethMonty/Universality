@@ -11,23 +11,30 @@ pub(super) fn fixture_env_value(env_key: &str) -> Option<String> {
         .ok()
         .filter(|value| !value.trim().is_empty())
         .or_else(|| {
-            legacy_datanaut_env_key(env_key).and_then(|legacy_key| {
-                std::env::var(legacy_key)
+            legacy_env_keys(env_key).into_iter().find_map(|legacy_key| {
+                std::env::var(&legacy_key)
                     .ok()
                     .filter(|value| !value.trim().is_empty())
             })
         })
         .or_else(|| fixture_generated_env_value(env_key))
         .or_else(|| {
-            legacy_datanaut_env_key(env_key)
-                .and_then(|legacy_key| fixture_generated_env_value(&legacy_key))
+            legacy_env_keys(env_key)
+                .into_iter()
+                .find_map(|legacy_key| fixture_generated_env_value(&legacy_key))
         })
 }
 
-fn legacy_datanaut_env_key(env_key: &str) -> Option<String> {
+fn legacy_env_keys(env_key: &str) -> Vec<String> {
     env_key
-        .strip_prefix("DATANAUT_")
-        .map(|suffix| format!("UNIVERSALITY_{suffix}"))
+        .strip_prefix("DATAPADPLUSPLUS_")
+        .map(|suffix| {
+            vec![
+                format!("DATANAUT_{suffix}"),
+                format!("UNIVERSALITY_{suffix}"),
+            ]
+        })
+        .unwrap_or_default()
 }
 
 fn fixture_generated_env_value(env_key: &str) -> Option<String> {

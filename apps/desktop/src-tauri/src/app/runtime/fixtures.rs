@@ -28,7 +28,7 @@ use fixture_env::{fixture_env_value, fixture_port, resolve_fixture_connection_st
 use saved_work::{fixture_closed_tabs, fixture_snippets};
 
 pub(super) fn fixture_debug_enabled() -> bool {
-    fixture_env_value("DATANAUT_FIXTURE_RUN")
+    fixture_env_value("DATAPADPLUSPLUS_FIXTURE_RUN")
         .map(|value| value == "1" || value.eq_ignore_ascii_case("true"))
         .unwrap_or(false)
 }
@@ -41,9 +41,9 @@ pub(super) fn workspace_is_empty(snapshot: &WorkspaceSnapshot) -> bool {
 }
 
 pub(super) fn fixture_workspace_seed() -> FixtureWorkspaceSeed {
-    let profile_value = fixture_env_value("DATANAUT_FIXTURE_PROFILE");
-    let sqlite_fixture = fixture_env_value("DATANAUT_SQLITE_FIXTURE")
-        .unwrap_or_else(|| "tests/fixtures/sqlite/datanaut.sqlite3".into());
+    let profile_value = fixture_env_value("DATAPADPLUSPLUS_FIXTURE_PROFILE");
+    let sqlite_fixture = fixture_env_value("DATAPADPLUSPLUS_SQLITE_FIXTURE")
+        .unwrap_or_else(|| "tests/fixtures/sqlite/datapadplusplus.sqlite3".into());
     fixture_workspace_seed_for_profile(profile_value.as_deref(), &sqlite_fixture)
 }
 
@@ -144,7 +144,7 @@ pub(super) fn seed_fixture_secrets(secrets: &[(SecretRef, String)]) -> Result<()
     if !security::using_file_secret_store() {
         return Err(CommandError::new(
             "fixture-secret-store",
-            "Fixture workspace seeding requires DATANAUT_SECRET_STORE=file.",
+            "Fixture workspace seeding requires DATAPADPLUSPLUS_SECRET_STORE=file.",
         ));
     }
 
@@ -216,7 +216,7 @@ fn build_fixture_connection(
     let secret_ref = seed.password.map(|_| SecretRef {
         id: format!("secret-{}", seed.id),
         provider: "file".into(),
-        service: "DatanautFixture".into(),
+        service: "DataPadPlusPlusFixture".into(),
         account: seed.id.into(),
         label: format!("{} fixture credential", seed.name),
     });

@@ -8,7 +8,7 @@ import type {
   ExecutionResultEnvelope,
   QueryTabState,
   ResultPayload,
-} from '@datanaut/shared-types'
+} from '@datapadplusplus/shared-types'
 import { ClockIcon, CopyIcon, DownloadIcon } from '../icons'
 import { ResultPayloadView } from './ResultPayloadView'
 import { copyText, exportPayload, payloadToText } from './payload-export'

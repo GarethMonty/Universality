@@ -1312,7 +1312,7 @@ export const DATASTORE_FEATURE_BACKLOG: DatastoreFeatureBacklogEntry[] = [
     managementModel: 'HBase-backed time-series store with metrics, tags, aggregators, downsampling, UID metadata, trees, and stats endpoints.',
     queryModel: 'Metric/tag query builder with aggregator and downsample controls plus raw API JSON.',
     presentationModel: 'Chart-ready series, tables, raw API output, stats panels, UID/tree metadata, and warnings.',
-    securityModel: 'No native auth in many deployments, so Datanaut should surface network ACL/auth-proxy warnings and read-only guardrails.',
+    securityModel: 'No native auth in many deployments, so DataPad++ should surface network ACL/auth-proxy warnings and read-only guardrails.',
     resultRenderers: [...seriesRenderers, 'raw'],
     capabilities: [
       'supports_time_series_charting',
@@ -1700,7 +1700,7 @@ export const PLANNED_ADAPTER_ENGINES = DATASTORE_FEATURE_BACKLOG.filter(
   (entry) => entry.maturity === 'planned',
 ).map((entry) => entry.engine)
 
-export const DATANAUT_ADAPTER_MANIFESTS: AdapterManifest[] =
+export const DATAPADPLUSPLUS_ADAPTER_MANIFESTS: AdapterManifest[] =
   DATASTORE_FEATURE_BACKLOG.map((entry) => ({
     id: `adapter-${entry.engine}`,
     engine: entry.engine,

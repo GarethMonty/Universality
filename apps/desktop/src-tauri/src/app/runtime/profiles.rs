@@ -286,7 +286,7 @@ fn fixture_connection_warnings(connection: &ResolvedConnectionProfile) -> Vec<St
 
     if connection.port != Some(endpoint.port) {
         warnings.push(format!(
-            "Datanaut Docker fixtures expose {} on localhost:{}.",
+            "DataPad++ Docker fixtures expose {} on localhost:{}.",
             endpoint.label, endpoint.port
         ));
     }
@@ -325,30 +325,30 @@ fn fixture_endpoint_for_engine(engine: &str) -> Option<FixtureEndpoint> {
         "postgresql" => Some(FixtureEndpoint {
             label: "PostgreSQL",
             port: 54329,
-            database: Some("datanaut"),
-            username: Some("datanaut"),
-            password: Some("datanaut"),
+            database: Some("datapadplusplus"),
+            username: Some("datapadplusplus"),
+            password: Some("datapadplusplus"),
         }),
         "mysql" => Some(FixtureEndpoint {
             label: "MySQL",
             port: 33060,
             database: Some("commerce"),
-            username: Some("datanaut"),
-            password: Some("datanaut"),
+            username: Some("datapadplusplus"),
+            password: Some("datapadplusplus"),
         }),
         "sqlserver" => Some(FixtureEndpoint {
             label: "SQL Server",
             port: 14333,
-            database: Some("datanaut"),
+            database: Some("datapadplusplus"),
             username: Some("sa"),
-            password: Some("Datanaut_pwd_123"),
+            password: Some("DataPadPlusPlus_pwd_123"),
         }),
         "mongodb" => Some(FixtureEndpoint {
             label: "MongoDB",
             port: 27018,
             database: Some("catalog"),
-            username: Some("datanaut"),
-            password: Some("datanaut"),
+            username: Some("datapadplusplus"),
+            password: Some("datapadplusplus"),
         }),
         "redis" => Some(FixtureEndpoint {
             label: "Redis",
@@ -381,10 +381,10 @@ mod tests {
         assert_eq!(
             warnings,
             vec![
-                "Datanaut Docker fixtures expose MongoDB on localhost:27018.",
+                "DataPad++ Docker fixtures expose MongoDB on localhost:27018.",
                 "Fixture database is \"catalog\".",
-                "Fixture user is \"datanaut\".",
-                "Fixture password is \"datanaut\".",
+                "Fixture user is \"datapadplusplus\".",
+                "Fixture password is \"datapadplusplus\".",
             ]
         );
     }
@@ -395,13 +395,13 @@ mod tests {
             "mongodb",
             27017,
             Some("catalog"),
-            Some("datanaut"),
-            Some("datanaut"),
+            Some("datapadplusplus"),
+            Some("datapadplusplus"),
         );
 
         assert_eq!(
             fixture_connection_warnings(&connection),
-            vec!["Datanaut Docker fixtures expose MongoDB on localhost:27018."]
+            vec!["DataPad++ Docker fixtures expose MongoDB on localhost:27018."]
         );
     }
 

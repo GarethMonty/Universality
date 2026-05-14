@@ -4,7 +4,7 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "datanaut:rust:build",
+      "label": "datapadplusplus:rust:build",
       "type": "shell",
       "command": "cargo",
       "args": [
@@ -18,7 +18,7 @@
       "problemMatcher": []
     },
     {
-      "label": "datanaut:fixtures:up:core",
+      "label": "datapadplusplus:fixtures:up:core",
       "type": "shell",
       "command": "npm",
       "args": [
@@ -31,14 +31,14 @@
       "problemMatcher": []
     },
     {
-      "label": "datanaut:fixtures:up:profile",
+      "label": "datapadplusplus:fixtures:up:profile",
       "type": "shell",
       "command": "npm",
       "args": [
         "run",
         "fixtures:up:profile",
         "--",
-        "${input:datanautFixtureProfile}"
+        "${input:datapadplusplusFixtureProfile}"
       ],
       "options": {
         "cwd": "${workspaceFolder}"
@@ -46,7 +46,7 @@
       "problemMatcher": []
     },
     {
-      "label": "datanaut:fixtures:up:all",
+      "label": "datapadplusplus:fixtures:up:all",
       "type": "shell",
       "command": "npm",
       "args": [
@@ -59,7 +59,7 @@
       "problemMatcher": []
     },
     {
-      "label": "datanaut:fixtures:seed",
+      "label": "datapadplusplus:fixtures:seed",
       "type": "shell",
       "command": "npm",
       "args": [
@@ -72,7 +72,7 @@
       "problemMatcher": []
     },
     {
-      "label": "datanaut:fixtures:seed:all",
+      "label": "datapadplusplus:fixtures:seed:all",
       "type": "shell",
       "command": "npm",
       "args": [
@@ -85,7 +85,7 @@
       "problemMatcher": []
     },
     {
-      "label": "datanaut:fixtures:down",
+      "label": "datapadplusplus:fixtures:down",
       "type": "shell",
       "command": "npm",
       "args": [
@@ -98,34 +98,34 @@
       "problemMatcher": []
     },
     {
-      "label": "datanaut:fixtures:ready:core",
+      "label": "datapadplusplus:fixtures:ready:core",
       "dependsOn": [
-        "datanaut:fixtures:up:core",
-        "datanaut:fixtures:seed"
+        "datapadplusplus:fixtures:up:core",
+        "datapadplusplus:fixtures:seed"
       ],
       "dependsOrder": "sequence",
       "problemMatcher": []
     },
     {
-      "label": "datanaut:fixtures:ready:profile",
+      "label": "datapadplusplus:fixtures:ready:profile",
       "dependsOn": [
-        "datanaut:fixtures:up:profile",
-        "datanaut:fixtures:seed"
+        "datapadplusplus:fixtures:up:profile",
+        "datapadplusplus:fixtures:seed"
       ],
       "dependsOrder": "sequence",
       "problemMatcher": []
     },
     {
-      "label": "datanaut:fixtures:ready:all",
+      "label": "datapadplusplus:fixtures:ready:all",
       "dependsOn": [
-        "datanaut:fixtures:up:all",
-        "datanaut:fixtures:seed:all"
+        "datapadplusplus:fixtures:up:all",
+        "datapadplusplus:fixtures:seed:all"
       ],
       "dependsOrder": "sequence",
       "problemMatcher": []
     },
     {
-      "label": "datanaut:ui:dev",
+      "label": "datapadplusplus:ui:dev",
       "type": "shell",
       "command": "node",
       "args": [
@@ -137,66 +137,66 @@
       "problemMatcher": []
     },
     {
-      "label": "datanaut:dev",
+      "label": "datapadplusplus:dev",
       "dependsOn": [
-        "datanaut:rust:build",
-        "datanaut:ui:dev"
+        "datapadplusplus:rust:build",
+        "datapadplusplus:ui:dev"
       ],
       "dependsOrder": "parallel"
     },
     {
-      "label": "datanaut:ui:fixtures:core",
+      "label": "datapadplusplus:ui:fixtures:core",
       "dependsOn": [
-        "datanaut:ui:dev",
-        "datanaut:fixtures:ready:core"
+        "datapadplusplus:ui:dev",
+        "datapadplusplus:fixtures:ready:core"
       ],
       "dependsOrder": "parallel",
       "problemMatcher": []
     },
     {
-      "label": "datanaut:ui:fixtures:profile",
+      "label": "datapadplusplus:ui:fixtures:profile",
       "dependsOn": [
-        "datanaut:ui:dev",
-        "datanaut:fixtures:ready:profile"
+        "datapadplusplus:ui:dev",
+        "datapadplusplus:fixtures:ready:profile"
       ],
       "dependsOrder": "parallel",
       "problemMatcher": []
     },
     {
-      "label": "datanaut:ui:fixtures:all",
+      "label": "datapadplusplus:ui:fixtures:all",
       "dependsOn": [
-        "datanaut:ui:dev",
-        "datanaut:fixtures:ready:all"
+        "datapadplusplus:ui:dev",
+        "datapadplusplus:fixtures:ready:all"
       ],
       "dependsOrder": "parallel",
       "problemMatcher": []
     },
     {
-      "label": "datanaut:dev:fixtures:core",
+      "label": "datapadplusplus:dev:fixtures:core",
       "dependsOn": [
-        "datanaut:rust:build",
-        "datanaut:ui:dev",
-        "datanaut:fixtures:ready:core"
+        "datapadplusplus:rust:build",
+        "datapadplusplus:ui:dev",
+        "datapadplusplus:fixtures:ready:core"
       ],
       "dependsOrder": "parallel",
       "problemMatcher": []
     },
     {
-      "label": "datanaut:dev:fixtures:profile",
+      "label": "datapadplusplus:dev:fixtures:profile",
       "dependsOn": [
-        "datanaut:rust:build",
-        "datanaut:ui:dev",
-        "datanaut:fixtures:ready:profile"
+        "datapadplusplus:rust:build",
+        "datapadplusplus:ui:dev",
+        "datapadplusplus:fixtures:ready:profile"
       ],
       "dependsOrder": "parallel",
       "problemMatcher": []
     },
     {
-      "label": "datanaut:dev:fixtures:all",
+      "label": "datapadplusplus:dev:fixtures:all",
       "dependsOn": [
-        "datanaut:rust:build",
-        "datanaut:ui:dev",
-        "datanaut:fixtures:ready:all"
+        "datapadplusplus:rust:build",
+        "datapadplusplus:ui:dev",
+        "datapadplusplus:fixtures:ready:all"
       ],
       "dependsOrder": "parallel",
       "problemMatcher": []
@@ -204,7 +204,7 @@
   ],
   "inputs": [
     {
-      "id": "datanautFixtureProfile",
+      "id": "datapadplusplusFixtureProfile",
       "type": "pickString",
       "description": "Fixture profile to start before debugging",
       "options": [

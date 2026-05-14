@@ -36,7 +36,7 @@ pub(super) async fn collect_opentsdb_diagnostics(
         "version": version,
     })));
     diagnostics.warnings.push(
-        "OpenTSDB does not define a universal authentication model; keep write/admin surfaces behind network and Datanaut guardrails."
+        "OpenTSDB does not define a universal authentication model; keep write/admin surfaces behind network and DataPad++ guardrails."
             .into(),
     );
     Ok(diagnostics)

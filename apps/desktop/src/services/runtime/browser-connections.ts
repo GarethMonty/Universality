@@ -1,4 +1,4 @@
-import type { ConnectionProfile, EnvironmentProfile, WorkspaceSnapshot } from '@datanaut/shared-types'
+import type { ConnectionProfile, EnvironmentProfile, WorkspaceSnapshot } from '@datapadplusplus/shared-types'
 import { cloneSnapshot } from './browser-store'
 import { createQueryTabForConnection } from './browser-tabs'
 

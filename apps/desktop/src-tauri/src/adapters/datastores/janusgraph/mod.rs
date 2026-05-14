@@ -81,7 +81,7 @@ impl DatastoreAdapter for JanusGraphAdapter {
             ok: false,
             supported: false,
             message: format!(
-                "JanusGraph Gremlin HTTP execution {} cannot be cancelled by Datanaut after dispatch.",
+                "JanusGraph Gremlin HTTP execution {} cannot be cancelled by DataPad++ after dispatch.",
                 request.execution_id
             ),
         })

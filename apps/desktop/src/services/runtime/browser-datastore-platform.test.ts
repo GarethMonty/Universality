@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { ConnectionProfile, DataEditPlanRequest } from '@datanaut/shared-types'
+import type { ConnectionProfile, DataEditPlanRequest } from '@datapadplusplus/shared-types'
 import {
   buildDatastoreExperiences,
   executeDataEditLocally,
@@ -110,7 +110,7 @@ describe('browser datastore platform contracts', () => {
         table: 'accounts',
         primaryKey: { id: 1 },
       },
-      changes: [{ field: 'name', value: 'Datanaut Labs' }],
+      changes: [{ field: 'name', value: 'DataPad++ Labs' }],
     }
 
     const plan = planDataEditLocally(connection, request)
@@ -132,7 +132,7 @@ describe('browser datastore platform contracts', () => {
         table: 'accounts',
         primaryKey: { account_id: 1 },
       },
-      changes: [{ field: 'display_name', value: 'Datanaut Labs' }],
+      changes: [{ field: 'display_name', value: 'DataPad++ Labs' }],
     }
 
     const sqlServerPlan = planDataEditLocally(connectionProfile('sqlserver', 'sql'), request)

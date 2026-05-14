@@ -26,7 +26,7 @@ export class ErrorBoundary extends Component<Props, State> {
         <div className="boot-screen">
           <div className="boot-card">
             <p className="workspace-label">Desktop recovery</p>
-            <h1>Datanaut hit an unexpected UI failure.</h1>
+            <h1>DataPad++ hit an unexpected UI failure.</h1>
             <p className="workspace-copy">
               Reload the desktop shell to recover. Workspace persistence is designed
               to survive renderer crashes.

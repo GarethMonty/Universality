@@ -4,7 +4,7 @@ import type {
   DynamoDbConditionRow,
   DynamoDbKeyConditionBuilderState,
   QueryBuilderState,
-} from '@datanaut/shared-types'
+} from '@datapadplusplus/shared-types'
 
 const COMPARISON_OPERATORS: Record<
   Extract<DynamoDbConditionOperator, 'eq' | 'ne' | 'gt' | 'gte' | 'lt' | 'lte'>,

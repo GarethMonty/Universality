@@ -1,7 +1,7 @@
 import type {
   ExecutionCapabilities,
   ExplorerInspectResponse,
-} from '@datanaut/shared-types'
+} from '@datapadplusplus/shared-types'
 import { ExplorerIcon } from './icons'
 import { DrawerHeader } from './RightDrawer.primitives'
 

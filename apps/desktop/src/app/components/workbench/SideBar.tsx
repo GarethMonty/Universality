@@ -8,7 +8,7 @@ import type {
   SavedWorkItem,
   ScopedQueryTarget,
   UiState,
-} from '@datanaut/shared-types'
+} from '@datapadplusplus/shared-types'
 import { ConnectionsPane } from './SideBar.connections-pane'
 import { connectionGroupLabel } from './SideBar.helpers'
 import { EnvironmentsPane } from './SideBar.environments-pane'

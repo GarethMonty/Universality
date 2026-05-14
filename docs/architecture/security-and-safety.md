@@ -1,6 +1,6 @@
 # Security And Safety
 
-Datanaut is expected to handle live credentials and production systems, so security and safety need to be part of the architecture rather than later polish.
+DataPad++ is expected to handle live credentials and production systems, so security and safety need to be part of the architecture rather than later polish.
 
 ## Secret handling
 
@@ -10,6 +10,7 @@ Preferred approach:
 - keep only references in regular app persistence
 - redact secret values in logs, previews, and exports by default
 - require explicit opt-in for any export that includes secrets
+- keep connection tests and diagnostics from echoing raw passwords, tokens, private keys, or connection strings
 
 ## Environment safeguards
 
@@ -30,6 +31,35 @@ Guardrails should be policy-driven and connection-aware:
 - banners for production or restricted environments
 - warnings for large result sets or long-running operations
 - unresolved variable detection before connect or execute
+- preview-only plans for admin/destructive/schema/cloud-cost workflows
+- explicit warnings for profiling operations that execute the query, such as `EXPLAIN ANALYZE`
+- disabled-action reasons when permissions, adapter maturity, read-only mode, or missing identity prevent an action
+
+## Safe edits
+
+DataPad++ supports safe live data edits only when an adapter can identify the target unambiguously and build a native or parameterized request.
+
+Examples:
+
+- SQL row edits require table and primary-key context.
+- MongoDB document edits require a collection and document id.
+- Redis/Valkey key edits require a concrete key.
+- DynamoDB item edits require complete key conditions.
+- Cassandra row edits require complete primary-key conditions.
+
+When those conditions are missing, the UI should show a disabled action or a guarded plan instead of attempting a best-effort write.
+
+## Operation previews
+
+Guarded operation plans should show:
+
+- generated SQL, command text, or API request body
+- risk level
+- destructive/costly flags
+- required permissions
+- estimated cost or scan impact where available
+- environment/read-only guardrail status
+- exact confirmation text when execution is supported
 
 ## Desktop protection
 
@@ -39,6 +69,10 @@ The native layer should support:
 - optional master password or biometric unlock when feasible
 - encrypted exports for portable artifacts
 - clear separation between UI code and privileged native commands
+
+## Compatibility fallbacks
+
+`DATAPADPLUSPLUS_*` is the current environment variable prefix. Legacy `DATANAUT_*` and `UNIVERSALITY_*` variables may still be read by the native host for local workspace, fixture, and secret-store compatibility. New docs, scripts, and examples should use the DataPad++ prefix.
 
 ## Tracked dependency exceptions
 

@@ -1,4 +1,4 @@
-import type { ExecutionRequest, ExecutionResponse } from '@datanaut/shared-types'
+import type { ExecutionRequest, ExecutionResponse } from '@datapadplusplus/shared-types'
 import type { WorkbenchMessage } from '../../../state/app-state'
 import { CloseIcon, WarningIcon } from '../icons'
 

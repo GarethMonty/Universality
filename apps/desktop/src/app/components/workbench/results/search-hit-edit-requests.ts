@@ -3,7 +3,7 @@ import type {
   DataEditExecutionRequest,
   DataEditKind,
   ResultPayload,
-} from '@datanaut/shared-types'
+} from '@datapadplusplus/shared-types'
 import type { DocumentEditContext } from './document-edit-context'
 
 export type SearchHit = Extract<ResultPayload, { renderer: 'searchHits' }>['hits'][number] & {

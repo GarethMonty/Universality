@@ -9,40 +9,40 @@ const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm'
 const driverExecutable = process.platform === 'win32' ? 'tauri-driver.exe' : 'tauri-driver'
 const cargoDriverBin = join(process.env.CARGO_HOME ?? join(homedir(), '.cargo'), 'bin', driverExecutable)
 const driverBin =
-  process.env.DATANAUT_TAURI_DRIVER_BIN ??
+  process.env.DATAPADPLUSPLUS_TAURI_DRIVER_BIN ??
   (existsSync(cargoDriverBin) ? cargoDriverBin : 'tauri-driver')
-const driverPort = process.env.DATANAUT_TAURI_DRIVER_PORT ?? '4444'
-const nativeDriverBin = process.env.DATANAUT_NATIVE_WEBDRIVER_BIN
+const driverPort = process.env.DATAPADPLUSPLUS_TAURI_DRIVER_PORT ?? '4444'
+const nativeDriverBin = process.env.DATAPADPLUSPLUS_NATIVE_WEBDRIVER_BIN
 const workspaceDir =
-  process.env.DATANAUT_WORKSPACE_DIR ??
-  mkdtempSync(join(tmpdir(), 'datanaut-e2e-workspace-'))
+  process.env.DATAPADPLUSPLUS_WORKSPACE_DIR ??
+  mkdtempSync(join(tmpdir(), 'datapadplusplus-e2e-workspace-'))
 
 function candidateBinaries() {
   const releaseDir = resolve(repoRoot, 'apps', 'desktop', 'src-tauri', 'target', 'release')
 
   if (process.platform === 'win32') {
     return [
-      join(releaseDir, 'datanaut-desktop.exe'),
-      join(releaseDir, 'Datanaut.exe'),
+      join(releaseDir, 'datapadplusplus-desktop.exe'),
+      join(releaseDir, 'DataPad++.exe'),
     ]
   }
 
   if (process.platform === 'darwin') {
     return [
-      join(releaseDir, 'bundle', 'macos', 'Datanaut.app'),
-      join(releaseDir, 'datanaut-desktop'),
+      join(releaseDir, 'bundle', 'macos', 'DataPad++.app'),
+      join(releaseDir, 'datapadplusplus-desktop'),
     ]
   }
 
   return [
-    join(releaseDir, 'datanaut-desktop'),
-    join(releaseDir, 'bundle', 'appimage', 'Datanaut.AppImage'),
+    join(releaseDir, 'datapadplusplus-desktop'),
+    join(releaseDir, 'bundle', 'appimage', 'DataPad++.AppImage'),
   ]
 }
 
 function resolveApplicationBinary() {
-  if (process.env.DATANAUT_DESKTOP_BINARY) {
-    return resolve(process.env.DATANAUT_DESKTOP_BINARY)
+  if (process.env.DATAPADPLUSPLUS_DESKTOP_BINARY) {
+    return resolve(process.env.DATAPADPLUSPLUS_DESKTOP_BINARY)
   }
 
   const binary = candidateBinaries().find((candidate) => existsSync(candidate))
@@ -50,8 +50,8 @@ function resolveApplicationBinary() {
   if (!binary) {
     throw new Error(
       [
-        'Unable to find a built Datanaut desktop binary.',
-        'Run `npm run tauri:build` first or set DATANAUT_DESKTOP_BINARY.',
+        'Unable to find a built DataPad++ desktop binary.',
+        'Run `npm run tauri:build` first or set DATAPADPLUSPLUS_DESKTOP_BINARY.',
       ].join(' '),
     )
   }
@@ -68,7 +68,7 @@ function ensureTauriDriver() {
 
   if (probe.status !== 0) {
     throw new Error(
-      'tauri-driver is required for desktop E2E. Install it with `cargo install tauri-driver --locked` or set DATANAUT_TAURI_DRIVER_BIN.',
+      'tauri-driver is required for desktop E2E. Install it with `cargo install tauri-driver --locked` or set DATAPADPLUSPLUS_TAURI_DRIVER_BIN.',
     )
   }
 }
@@ -76,19 +76,19 @@ function ensureTauriDriver() {
 function runWdio(application) {
   const result = spawnSync(
     npm,
-    ['exec', '--workspace', '@datanaut/desktop', '--', 'wdio', 'run', 'apps/desktop/e2e/wdio.conf.mjs'],
+    ['exec', '--workspace', '@datapadplusplus/desktop', '--', 'wdio', 'run', 'apps/desktop/e2e/wdio.conf.mjs'],
     {
       cwd: repoRoot,
       env: {
         ...process.env,
-        DATANAUT_DESKTOP_BINARY: application,
-        DATANAUT_FIXTURE_RUN: process.env.DATANAUT_FIXTURE_RUN ?? '1',
-        DATANAUT_FIXTURE_PROFILE: process.env.DATANAUT_FIXTURE_PROFILE ?? '',
-        DATANAUT_WORKSPACE_DIR: workspaceDir,
-        DATANAUT_SECRET_STORE: 'file',
-        DATANAUT_SECRET_FILE: join(workspaceDir, 'secrets.json'),
-        DATANAUT_SQLITE_FIXTURE: resolve(repoRoot, 'tests', 'fixtures', 'sqlite', 'datanaut.sqlite3'),
-        DATANAUT_TAURI_DRIVER_PORT: driverPort,
+        DATAPADPLUSPLUS_DESKTOP_BINARY: application,
+        DATAPADPLUSPLUS_FIXTURE_RUN: process.env.DATAPADPLUSPLUS_FIXTURE_RUN ?? '1',
+        DATAPADPLUSPLUS_FIXTURE_PROFILE: process.env.DATAPADPLUSPLUS_FIXTURE_PROFILE ?? '',
+        DATAPADPLUSPLUS_WORKSPACE_DIR: workspaceDir,
+        DATAPADPLUSPLUS_SECRET_STORE: 'file',
+        DATAPADPLUSPLUS_SECRET_FILE: join(workspaceDir, 'secrets.json'),
+        DATAPADPLUSPLUS_SQLITE_FIXTURE: resolve(repoRoot, 'tests', 'fixtures', 'sqlite', 'datapadplusplus.sqlite3'),
+        DATAPADPLUSPLUS_TAURI_DRIVER_PORT: driverPort,
       },
       stdio: 'inherit',
       shell: false,
@@ -124,7 +124,7 @@ try {
 } finally {
   driver.kill()
 
-  if (!process.env.DATANAUT_WORKSPACE_DIR) {
+  if (!process.env.DATAPADPLUSPLUS_WORKSPACE_DIR) {
     rmSync(workspaceDir, { recursive: true, force: true })
   }
 }

@@ -33,10 +33,10 @@ describe('right drawer helper behavior', () => {
     expect(
       inferConnectionName({
         ...sqlite,
-        database: 'C:\\data\\datanaut.db',
-        host: 'C:\\data\\datanaut.db',
+        database: 'C:\\data\\datapadplusplus.db',
+        host: 'C:\\data\\datapadplusplus.db',
       }),
-    ).toBe('datanaut')
+    ).toBe('datapadplusplus')
   })
 
   it('detects generated connection names as non-custom', () => {
@@ -71,11 +71,11 @@ describe('right drawer helper behavior', () => {
 
     expect(
       redactEnvironmentSecrets(
-        'postgres://developer:super-secret@db.internal/datanaut_dev',
+        'postgres://developer:super-secret@db.internal/datapadplusplus_dev',
         'env-prod',
         environments,
       ),
-    ).toBe('postgres://developer:********@db.internal/datanaut_dev')
+    ).toBe('postgres://developer:********@db.internal/datapadplusplus_dev')
   })
 
   it('normalizes short environment colors for drawer accents', () => {

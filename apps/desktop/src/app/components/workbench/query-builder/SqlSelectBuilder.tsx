@@ -5,7 +5,7 @@ import type {
   SqlBuilderValueType,
   SqlSelectBuilderState,
   SqlSelectFilterOperator,
-} from '@datanaut/shared-types'
+} from '@datapadplusplus/shared-types'
 import { BuilderSection } from './BuilderSection'
 import {
   buildSqlSelectQueryText,

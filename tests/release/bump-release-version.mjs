@@ -124,7 +124,7 @@ export function bumpReleaseVersion(version, repoRoot = process.cwd()) {
   updateCargoLockPackageVersion(
     repoRoot,
     'apps/desktop/src-tauri/Cargo.lock',
-    'datanaut-desktop',
+    'datapadplusplus-desktop',
     normalizedVersion
   )
 

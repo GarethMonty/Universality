@@ -3,7 +3,7 @@ import type {
   ConnectionProfile,
   DataEditExecutionRequest,
   DataEditExecutionResponse,
-} from '@datanaut/shared-types'
+} from '@datapadplusplus/shared-types'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { computeRenderedColumnWidths } from './data-grid-layout'
 import { FIELD_DRAG_MIME, FIELD_DRAG_PAYLOAD_MIME } from './field-drag'
@@ -1459,11 +1459,11 @@ function mongoConnection(): ConnectionProfile {
     readOnly: false,
     icon: 'mongodb',
     auth: {
-      username: 'datanaut',
+      username: 'datapadplusplus',
       secretRef: {
         id: 'secret-mongo',
         provider: 'manual',
-        service: 'Datanaut',
+        service: 'DataPad++',
         account: 'conn-mongo',
         label: 'Mongo credential',
       },
@@ -1481,7 +1481,7 @@ function sqlConnection(): ConnectionProfile {
     family: 'sql',
     host: '127.0.0.1',
     port: 1433,
-    database: 'datanaut',
+    database: 'datapadplusplus',
     environmentIds: ['env-dev'],
     tags: [],
     favorite: false,
@@ -1492,7 +1492,7 @@ function sqlConnection(): ConnectionProfile {
       secretRef: {
         id: 'secret-sql',
         provider: 'manual',
-        service: 'Datanaut',
+        service: 'DataPad++',
         account: 'conn-sql',
         label: 'SQL credential',
       },
@@ -1521,7 +1521,7 @@ function redisConnection(): ConnectionProfile {
       secretRef: {
         id: 'secret-redis',
         provider: 'manual',
-        service: 'Datanaut',
+        service: 'DataPad++',
         account: 'conn-redis',
         label: 'Redis credential',
       },
@@ -1550,7 +1550,7 @@ function dynamoConnection(): ConnectionProfile {
       secretRef: {
         id: 'secret-dynamodb',
         provider: 'manual',
-        service: 'Datanaut',
+        service: 'DataPad++',
         account: 'conn-dynamodb',
         label: 'DynamoDB credential',
       },
@@ -1579,7 +1579,7 @@ function cassandraConnection(): ConnectionProfile {
       secretRef: {
         id: 'secret-cassandra',
         provider: 'manual',
-        service: 'Datanaut',
+        service: 'DataPad++',
         account: 'conn-cassandra',
         label: 'Cassandra credential',
       },
@@ -1607,7 +1607,7 @@ function searchConnection(): ConnectionProfile {
       secretRef: {
         id: 'secret-search',
         provider: 'manual',
-        service: 'Datanaut',
+        service: 'DataPad++',
         account: 'conn-search',
         label: 'Search credential',
       },

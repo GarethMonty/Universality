@@ -120,7 +120,7 @@ impl ManagedAppState {
         let serialized = serde_json::to_string_pretty(&sanitize_snapshot(&self.snapshot))?;
         let encrypted_payload = security::encrypt_export_payload(passphrase, &serialized)?;
         Ok(ExportBundle {
-            format: "datanaut-bundle".into(),
+            format: "datapadplusplus-bundle".into(),
             version: persistence::SCHEMA_VERSION,
             encrypted_payload,
         })

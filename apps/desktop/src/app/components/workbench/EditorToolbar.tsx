@@ -1,6 +1,6 @@
 import type {
   ExecutionCapabilities,
-} from '@datanaut/shared-types'
+} from '@datapadplusplus/shared-types'
 import {
   ExplainIcon,
   PanelIcon,

@@ -5,7 +5,7 @@ import type {
   QueryTabState,
   ResultPayload,
   WorkspaceSnapshot,
-} from '@datanaut/shared-types'
+} from '@datapadplusplus/shared-types'
 import {
   createDefaultCqlPartitionBuilderState,
   isCqlPartitionBuilderState,

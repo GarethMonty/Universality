@@ -8,7 +8,7 @@ const root = dirname(fileURLToPath(import.meta.url))
 const requestedProfiles = new Set(
   [
     process.argv[2],
-    process.env.DATANAUT_FIXTURE_PROFILE,
+    process.env.DATAPADPLUSPLUS_FIXTURE_PROFILE,
   ]
     .filter(Boolean)
     .flatMap((value) => String(value).split(','))
@@ -86,7 +86,7 @@ function seedRedisPerfKeys(container, command = 'redis-cli') {
     return
   }
 
-  const keyCount = Number.parseInt(process.env.DATANAUT_REDIS_PERF_KEYS ?? '50000', 10)
+  const keyCount = Number.parseInt(process.env.DATAPADPLUSPLUS_REDIS_PERF_KEYS ?? '50000', 10)
   const commands = []
 
   commands.push(redisProtocolCommand(['DEL', 'perf:manifest']))
@@ -97,7 +97,7 @@ function seedRedisPerfKeys(container, command = 'redis-cli') {
       'keyCount',
       String(keyCount),
       'description',
-      'Synthetic keys for Datanaut result and explorer performance tests.',
+      'Synthetic keys for DataPad++ result and explorer performance tests.',
     ]),
   )
 
@@ -190,56 +190,56 @@ function tcpRequest(port, payload) {
 
 async function seedCore() {
   seedSqlWithStdin(
-    'datanaut-postgres',
+    'datapadplusplus-postgres',
     'psql',
-    ['-U', 'datanaut', '-d', 'datanaut'],
+    ['-U', 'datapadplusplus', '-d', 'datapadplusplus'],
     join(root, 'postgres', 'init', '001_seed.sql'),
   )
 
   seedSqlWithStdin(
-    'datanaut-mysql',
+    'datapadplusplus-mysql',
     'mysql',
-    ['-udatanaut', '-pdatanaut', 'commerce'],
+    ['-udatapadplusplus', '-pdatapadplusplus', 'commerce'],
     join(root, 'mysql', 'init', '001_seed.sql'),
   )
 
-  if (containerRunning('datanaut-sqlserver')) {
+  if (containerRunning('datapadplusplus-sqlserver')) {
     docker([
       'exec',
-      'datanaut-sqlserver',
+      'datapadplusplus-sqlserver',
       '/opt/mssql-tools18/bin/sqlcmd',
       '-S',
       'localhost',
       '-U',
       'sa',
       '-P',
-      'Datanaut_pwd_123',
+      'DataPadPlusPlus_pwd_123',
       '-C',
       '-i',
       '/work/001_seed.sql',
     ])
   }
 
-  if (containerRunning('datanaut-mongodb')) {
+  if (containerRunning('datapadplusplus-mongodb')) {
     docker([
       'exec',
-      'datanaut-mongodb',
+      'datapadplusplus-mongodb',
       'mongosh',
       '--quiet',
       '--username',
-      'datanaut',
+      'datapadplusplus',
       '--password',
-      'datanaut',
+      'datapadplusplus',
       '--authenticationDatabase',
       'admin',
       '/docker-entrypoint-initdb.d/001_seed.js',
     ])
   }
 
-  if (containerRunning('datanaut-redis')) {
+  if (containerRunning('datapadplusplus-redis')) {
     docker([
       'exec',
-      'datanaut-redis',
+      'datapadplusplus-redis',
       'redis-cli',
       'HSET',
       'session:9f2d7e1a',
@@ -250,26 +250,26 @@ async function seedCore() {
       'active',
       '1',
     ])
-    docker(['exec', 'datanaut-redis', 'redis-cli', 'EXPIRE', 'session:9f2d7e1a', '1800'])
+    docker(['exec', 'datapadplusplus-redis', 'redis-cli', 'EXPIRE', 'session:9f2d7e1a', '1800'])
     docker([
       'exec',
-      'datanaut-redis',
+      'datapadplusplus-redis',
       'redis-cli',
       'SET',
       'cache:feature-flags',
       '{"beta":true,"region":"local"}',
     ])
-    seedRedisPerfKeys('datanaut-redis')
+    seedRedisPerfKeys('datapadplusplus-redis')
   }
 
   runPython(join(root, 'sqlite', 'seed.py'))
 }
 
 async function seedCache() {
-  if (shouldSeed('datanaut-valkey', 'cache')) {
+  if (shouldSeed('datapadplusplus-valkey', 'cache')) {
     docker([
       'exec',
-      'datanaut-valkey',
+      'datapadplusplus-valkey',
       'valkey-cli',
       'HSET',
       'session:9f2d7e1a',
@@ -280,11 +280,11 @@ async function seedCache() {
       'active',
       '1',
     ])
-    docker(['exec', 'datanaut-valkey', 'valkey-cli', 'EXPIRE', 'session:9f2d7e1a', '1800'])
-    seedRedisPerfKeys('datanaut-valkey', 'valkey-cli')
+    docker(['exec', 'datapadplusplus-valkey', 'valkey-cli', 'EXPIRE', 'session:9f2d7e1a', '1800'])
+    seedRedisPerfKeys('datapadplusplus-valkey', 'valkey-cli')
   }
 
-  if (shouldSeed('datanaut-memcached', 'cache')) {
+  if (shouldSeed('datapadplusplus-memcached', 'cache')) {
     await tcpRequest(
       11212,
       'set cache:feature-flags 0 3600 30\r\n{"beta":true,"region":"local"}\r\nquit\r\n',
@@ -293,19 +293,19 @@ async function seedCache() {
 }
 
 async function seedSqlPlus() {
-  if (shouldSeed('datanaut-mariadb', 'sqlplus')) {
+  if (shouldSeed('datapadplusplus-mariadb', 'sqlplus')) {
     seedSqlWithStdin(
-      'datanaut-mariadb',
+      'datapadplusplus-mariadb',
       'mariadb',
-      ['-udatanaut', '-pdatanaut', 'commerce'],
+      ['-udatapadplusplus', '-pdatapadplusplus', 'commerce'],
       join(root, 'mariadb', 'init', '001_seed.sql'),
     )
   }
 
-  if (shouldSeed('datanaut-cockroachdb', 'sqlplus')) {
+  if (shouldSeed('datapadplusplus-cockroachdb', 'sqlplus')) {
     docker([
       'exec',
-      'datanaut-cockroachdb',
+      'datapadplusplus-cockroachdb',
       '/cockroach/cockroach',
       'sql',
       '--insecure',
@@ -313,27 +313,27 @@ async function seedSqlPlus() {
     ])
   }
 
-  if (shouldSeed('datanaut-timescaledb', 'sqlplus')) {
+  if (shouldSeed('datapadplusplus-timescaledb', 'sqlplus')) {
     seedSqlWithStdin(
-      'datanaut-timescaledb',
+      'datapadplusplus-timescaledb',
       'psql',
-      ['-U', 'datanaut', '-d', 'metrics'],
+      ['-U', 'datapadplusplus', '-d', 'metrics'],
       join(root, 'timescaledb', 'init', '001_seed.sql'),
     )
   }
 }
 
 async function seedAnalytics() {
-  if (shouldSeed('datanaut-clickhouse', 'analytics')) {
+  if (shouldSeed('datapadplusplus-clickhouse', 'analytics')) {
     seedSqlWithStdin(
-      'datanaut-clickhouse',
+      'datapadplusplus-clickhouse',
       'clickhouse-client',
-      ['--user', 'datanaut', '--password', 'datanaut', '--multiquery'],
+      ['--user', 'datapadplusplus', '--password', 'datapadplusplus', '--multiquery'],
       join(root, 'clickhouse', 'init', '001_seed.sql'),
     )
   }
 
-  if (shouldSeed('datanaut-influxdb', 'analytics')) {
+  if (shouldSeed('datapadplusplus-influxdb', 'analytics')) {
     await httpRequest({ port: 8087, path: '/query?q=CREATE+DATABASE+metrics' })
     for (const query of [
       'INSERT order_latency,region=eu-west-1,account_id=1 value=18.4 1767225600000000000',
@@ -350,8 +350,8 @@ async function seedAnalytics() {
 
 async function seedSearch() {
   for (const [container, port] of [
-    ['datanaut-opensearch', 9201],
-    ['datanaut-elasticsearch', 9202],
+    ['datapadplusplus-opensearch', 9201],
+    ['datapadplusplus-elasticsearch', 9202],
   ]) {
     if (!shouldSeed(container, 'search')) {
       continue
@@ -387,13 +387,13 @@ async function seedSearch() {
 }
 
 async function seedGraph() {
-  if (shouldSeed('datanaut-neo4j', 'graph')) {
+  if (shouldSeed('datapadplusplus-neo4j', 'graph')) {
     await httpRequest({
       method: 'POST',
       port: 7475,
       path: '/db/neo4j/tx/commit',
       headers: {
-        authorization: `Basic ${Buffer.from('neo4j:datanaut').toString('base64')}`,
+        authorization: `Basic ${Buffer.from('neo4j:datapadplusplus').toString('base64')}`,
       },
       body: {
         statements: [
@@ -406,15 +406,15 @@ async function seedGraph() {
     })
   }
 
-  if (shouldSeed('datanaut-arangodb', 'graph')) {
-    const auth = { authorization: `Basic ${Buffer.from('root:datanaut').toString('base64')}` }
-    await httpRequest({ method: 'POST', port: 8529, path: '/_api/database', headers: auth, body: { name: 'datanaut' } }).catch(() => undefined)
-    await httpRequest({ method: 'POST', port: 8529, path: '/_db/datanaut/_api/collection', headers: auth, body: { name: 'accounts' } }).catch(() => undefined)
-    await httpRequest({ method: 'POST', port: 8529, path: '/_db/datanaut/_api/collection', headers: auth, body: { name: 'orders' } }).catch(() => undefined)
+  if (shouldSeed('datapadplusplus-arangodb', 'graph')) {
+    const auth = { authorization: `Basic ${Buffer.from('root:datapadplusplus').toString('base64')}` }
+    await httpRequest({ method: 'POST', port: 8529, path: '/_api/database', headers: auth, body: { name: 'datapadplusplus' } }).catch(() => undefined)
+    await httpRequest({ method: 'POST', port: 8529, path: '/_db/datapadplusplus/_api/collection', headers: auth, body: { name: 'accounts' } }).catch(() => undefined)
+    await httpRequest({ method: 'POST', port: 8529, path: '/_db/datapadplusplus/_api/collection', headers: auth, body: { name: 'orders' } }).catch(() => undefined)
     await httpRequest({
       method: 'POST',
       port: 8529,
-      path: '/_db/datanaut/_api/cursor',
+      path: '/_db/datapadplusplus/_api/cursor',
       headers: auth,
       body: {
         query:
@@ -425,25 +425,25 @@ async function seedGraph() {
 }
 
 async function seedWideColumn() {
-  if (shouldSeed('datanaut-cassandra', 'widecolumn')) {
-    docker(['exec', 'datanaut-cassandra', 'cqlsh', '-f', '/work/001_seed.cql'])
+  if (shouldSeed('datapadplusplus-cassandra', 'widecolumn')) {
+    docker(['exec', 'datapadplusplus-cassandra', 'cqlsh', '-f', '/work/001_seed.cql'])
   }
 }
 
 async function seedOracle() {
-  if (shouldSeed('datanaut-oracle', 'oracle')) {
+  if (shouldSeed('datapadplusplus-oracle', 'oracle')) {
     docker([
       'exec',
-      'datanaut-oracle',
+      'datapadplusplus-oracle',
       'bash',
       '-lc',
-      "sqlplus -s datanaut/datanaut@//localhost:1521/FREEPDB1 @/container-entrypoint-initdb.d/001_seed.sql",
+      "sqlplus -s datapadplusplus/datapadplusplus@//localhost:1521/FREEPDB1 @/container-entrypoint-initdb.d/001_seed.sql",
     ])
   }
 }
 
 async function seedCloudContract() {
-  if (!shouldSeed('datanaut-dynamodb', 'cloud-contract')) {
+  if (!shouldSeed('datapadplusplus-dynamodb', 'cloud-contract')) {
     return
   }
 

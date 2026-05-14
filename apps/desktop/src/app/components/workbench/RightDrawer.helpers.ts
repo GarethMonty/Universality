@@ -1,9 +1,9 @@
 import type { CSSProperties } from 'react'
-import type { ConnectionProfile, EnvironmentProfile } from '@datanaut/shared-types'
+import type { ConnectionProfile, EnvironmentProfile } from '@datapadplusplus/shared-types'
 import {
   DATASTORE_FAMILIES,
   DATASTORE_FEATURE_BACKLOG,
-} from '@datanaut/shared-types'
+} from '@datapadplusplus/shared-types'
 
 export const ENGINE_OPTIONS = DATASTORE_FEATURE_BACKLOG.map((entry) => ({
   value: entry.engine,

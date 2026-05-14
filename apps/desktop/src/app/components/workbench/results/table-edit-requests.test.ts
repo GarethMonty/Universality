@@ -1,4 +1,4 @@
-import type { ConnectionProfile } from '@datanaut/shared-types'
+import type { ConnectionProfile } from '@datapadplusplus/shared-types'
 import { describe, expect, it } from 'vitest'
 import {
   buildTableCellEditRequest,
@@ -203,7 +203,7 @@ function sqlConnection(): ConnectionProfile {
     family: 'sql',
     host: '127.0.0.1',
     port: 1433,
-    database: 'datanaut',
+    database: 'datapadplusplus',
     environmentIds: ['env-dev'],
     tags: [],
     favorite: false,
@@ -214,7 +214,7 @@ function sqlConnection(): ConnectionProfile {
       secretRef: {
         id: 'secret-sql',
         provider: 'manual',
-        service: 'Datanaut',
+        service: 'DataPad++',
         account: 'conn-sql',
         label: 'SQL credential',
       },

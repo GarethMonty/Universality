@@ -1,6 +1,6 @@
-create database if not exists datanaut;
+create database if not exists datapadplusplus;
 
-use datanaut;
+use datapadplusplus;
 
 create table if not exists accounts (
   id int primary key,

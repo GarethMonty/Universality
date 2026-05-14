@@ -53,7 +53,7 @@ async function snowflakeHandler(req, res) {
 async function cosmosHandler(req, res) {
   if (req.url === '/health') return json(res, { ok: true, service: 'cosmosdb' })
   if (req.url.endsWith('/dbs')) {
-    return json(res, { Databases: [{ id: 'datanaut' }] })
+    return json(res, { Databases: [{ id: 'datapadplusplus' }] })
   }
   if (req.url.includes('/colls') && !req.url.includes('/docs')) {
     return json(res, { DocumentCollections: [{ id: 'orders' }] })
@@ -89,6 +89,6 @@ for (const [port, handler] of handlers) {
       json(res, { error: String(error?.message ?? error) }, 500)
     })
   }).listen(port, '0.0.0.0', () => {
-    console.log(`Datanaut cloud-contract fixture listening on ${port}`)
+    console.log(`DataPad++ cloud-contract fixture listening on ${port}`)
   })
 }

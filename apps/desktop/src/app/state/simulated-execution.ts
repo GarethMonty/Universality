@@ -6,7 +6,7 @@ import type {
   QueryTabState,
   ResolvedEnvironment,
   ResultPayload,
-} from '@datanaut/shared-types'
+} from '@datapadplusplus/shared-types'
 import { evaluateGuardrails } from './environment-guardrails'
 import { createId } from './query-defaults'
 

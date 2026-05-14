@@ -3,7 +3,7 @@ import type {
   EnvironmentProfile,
   LocalDatabaseCreateRequest,
   LocalDatabaseManifest,
-} from '@datanaut/shared-types'
+} from '@datapadplusplus/shared-types'
 import { FavoriteIcon, ReadOnlyIcon } from './icons'
 import {
   defaultPortForEngine,

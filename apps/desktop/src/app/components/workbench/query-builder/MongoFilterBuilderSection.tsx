@@ -1,4 +1,4 @@
-import type { MongoBuilderValueType, MongoFindFilterGroup, MongoFindFilterRow, MongoFilterOperator } from '@datanaut/shared-types'
+import type { MongoBuilderValueType, MongoFindFilterGroup, MongoFindFilterRow, MongoFilterOperator } from '@datapadplusplus/shared-types'
 import { BuilderSection } from './BuilderSection'
 import type { MongoFindSectionProps } from './MongoBuilderSection.types'
 import { rowId } from './MongoBuilderSection.types'

@@ -8,7 +8,7 @@ import type {
   ResultPayload,
   SearchDslBuilderState,
   SqlSelectBuilderState,
-} from '@datanaut/shared-types'
+} from '@datapadplusplus/shared-types'
 import { createSeedSnapshot } from '../test/fixtures/seed-workspace'
 import {
   appendFieldToQueryText,

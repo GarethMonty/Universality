@@ -1,35 +1,43 @@
-# Datanaut
+# DataPad++
 
-[![CI](https://github.com/GarethMonty/Datanaut/actions/workflows/ci.yml/badge.svg)](https://github.com/GarethMonty/Datanaut/actions/workflows/ci.yml)
+[![CI](https://github.com/FullMontyDevelopment/DataPadPlusPlus/actions/workflows/ci.yml/badge.svg)](https://github.com/FullMontyDevelopment/DataPadPlusPlus/actions/workflows/ci.yml)
 
-Datanaut is a cross-platform desktop workbench for exploring, querying, inspecting, and managing multiple datastore families from one consistent interface.
+DataPad++ is a cross-platform desktop workbench for exploring, querying, inspecting, and managing multiple datastore families from one consistent interface.
 
 The project is built as a Tauri desktop application with a React and TypeScript workbench, a Rust native host, and shared datastore contracts. It is intentionally desktop-first: the web frontend exists to render the Tauri shell, not to ship a hosted web app.
 
 ## Project Status
 
-Datanaut is early-stage software. The repository contains the desktop foundation, shared domain contracts, adapter catalog, native command surface, fixture-backed integration tests, and the first capability-driven datastore adapter work.
+DataPad++ is early-stage software, but the repository now contains a substantial desktop workbench: connection and environment management, scoped query tabs, visual builders, rich result views, safe data-edit planning, adapter manifests, Docker fixtures, release automation, and dependency-free CI checks.
 
 Public docs use two labels:
 
-- **Current app foundation**: workflows that exist in the repository today, including the desktop workbench, local workspace state, environments, query tabs, adapter manifests, diagnostics, fixtures, and Tauri command wiring.
-- **Adapter roadmap**: datastore support that is represented in contracts, manifests, beta adapters, tests, or roadmap documents. Some adapters are read/diagnostic-oriented or preview-only while the product hardens live execution paths.
+- **Current product surface**: workflows that exist in the repository today, including the desktop workbench, local workspace state, environments, explicit query-tab creation, scoped object actions, visual query builders, rich result renderers, diagnostics, fixtures, and Tauri command wiring.
+- **Adapter roadmap**: datastore support that is represented in contracts, manifests, beta adapters, tests, or roadmap documents. Some adapters are read/diagnostic-oriented or preview-only while live execution and cloud identity paths are hardened.
 
-## What Datanaut Does
+## What DataPad++ Does
 
-Datanaut is designed for developers and operators who move between different data systems and want one local, safety-aware workstation instead of a stack of disconnected tools.
+DataPad++ is designed for developers and operators who move between different data systems and want one local, safety-aware workstation instead of a stack of disconnected tools.
 
 Current workbench capabilities include:
 
-- connection profiles with engine, family, environment, read-only, tags, notes, and secret reference metadata
-- environment profiles with variables, inheritance, risk levels, safe mode, sensitive-key redaction, and confirmation settings
-- query tabs with datastore-aware editor language selection, saved queries, closed-tab recovery, result history, and dirty-state handling
-- capability-driven adapter manifests so the UI can react to features instead of hardcoding engine branches
-- explorer and structure views for datastore metadata
+- connection profiles with engine, family, environment, read-only, tags, notes, secret references, datastore icons, test-connection feedback, and explicit save semantics
+- environment profiles with variables, risk levels, safe mode, sensitive-key redaction, clone/save workflows, and confirmation settings
+- explicit query-tab creation from connection and object context menus, without auto-opening query tabs or connection drawers on selection
+- query tabs with datastore-aware editor language selection, simplified visible titles, saved queries, closed-tab recovery, query history, result history, and dirty-state handling
+- visual query builders for MongoDB, SQL SELECT targets, DynamoDB key conditions, Cassandra partition-key CQL, and search DSL targets
+- builder/raw layout controls that show Builder + Raw, Builder only, or Raw only for builder-capable tabs
+- capability-driven adapter and experience manifests so the UI can react to features instead of hardcoding engine branches
+- explorer and structure views for datastore metadata, opened from scoped connection/object actions
 - normalized result payloads for tables, JSON, documents, key-value data, schemas, graphs, charts, plans, metrics, series, search hits, profiles, and cost estimates
-- guardrail decisions for read-only connections, risky environments, destructive-looking queries, and unresolved variables
-- workspace lock, diagnostics, encrypted workspace bundle import/export, and local/browser-preview fallback behavior
+- rich results workbench with SSMS-like table behavior, Studio 3T-style document trees, document-only paging, non-document virtualization, copy/export, runtime footer, and query history
+- drag-and-drop document fields into query-builder filters, projections, and sort sections
+- safe live data-edit planning/execution for supported row/document/key/item edits when identity is unambiguous
+- guarded operation plans for admin/destructive work, explain-analyze/profile flows, backup/restore, import/export, and cloud-cost operations
+- workspace lock, diagnostics, encrypted workspace bundle import/export, local database create/open flows, and local/browser-preview fallback behavior
 - Docker fixture flows and Tauri/WebDriver e2e plumbing for adapter and desktop validation
+
+For a fuller product walkthrough, see [Feature Guide](docs/features.md).
 
 ## Datastore Coverage
 
@@ -37,8 +45,8 @@ The adapter model separates UI capability from engine-specific implementation. M
 
 | Maturity | Datastores | Meaning |
 | --- | --- | --- |
-| MVP target / active foundation | PostgreSQL, CockroachDB, SQL Server / Azure SQL, MySQL, MariaDB, SQLite, MongoDB, Redis | Core workbench paths are being built and tested first. Local fixture coverage exists for the primary SQL/document/cache set where practical. |
-| Beta / contract-oriented | Oracle, TimescaleDB, DynamoDB, Cassandra, Cosmos DB, LiteDB, Valkey, Memcached, Neo4j, Amazon Neptune, ArangoDB, JanusGraph, InfluxDB, Prometheus, OpenTSDB, Elasticsearch, OpenSearch, ClickHouse, DuckDB, Snowflake, BigQuery | Adapters and catalog entries expose capability, operation, permission, diagnostics, and preview behavior while live execution and cloud identity paths are hardened. |
+| Core+popular completion priority | PostgreSQL, CockroachDB, SQL Server / Azure SQL, MySQL, MariaDB, SQLite, MongoDB, Redis / Valkey, Elasticsearch / OpenSearch, DynamoDB, Cassandra | These engines drive the main product experience: explorer, query execution, builders where useful, rich results, permissions, diagnostics, safe edits, and operation planning. |
+| Beta / contract-oriented | Oracle, TimescaleDB, Cosmos DB, LiteDB, Memcached, Neo4j, Amazon Neptune, ArangoDB, JanusGraph, InfluxDB, Prometheus, OpenTSDB, ClickHouse, DuckDB, Snowflake, BigQuery | Adapters and catalog entries expose capability, operation, permission, diagnostics, preview behavior, local/mock fixtures, or file-backed behavior while live execution and cloud identity paths are hardened. |
 | Roadmap families | SQL, document, key-value, graph, time-series, wide-column, search, warehouse, embedded OLAP | The product direction is broader than the initial MVP, but public docs distinguish roadmap from finished support. |
 
 For the deeper implementation plan, see [Datastore Adapter Roadmap](docs/architecture/datastore-adapter-roadmap.md).
@@ -129,7 +137,7 @@ npm run check:e2e
 ## Repository Layout
 
 ```text
-Datanaut/
+DataPadPlusPlus/
   apps/
     desktop/           React workbench, Vite app, and Tauri host
   packages/
@@ -144,7 +152,7 @@ Datanaut/
 
 ## Architecture
 
-Datanaut is organized around a capability-driven desktop architecture:
+DataPad++ is organized around a capability-driven desktop architecture:
 
 1. The React UI shell owns layout, navigation, workbench panes, query editors, result surfaces, and user interaction.
 2. The application layer coordinates workspace state, active connection/environment selection, guardrails, query execution, saved work, and diagnostics.
@@ -156,16 +164,17 @@ Key docs:
 
 - [Architecture Overview](docs/architecture/overview.md)
 - [Adapter Model](docs/architecture/adapter-model.md)
+- [Feature Guide](docs/features.md)
 - [Security And Safety](docs/architecture/security-and-safety.md)
 - [Datastore Adapter Roadmap](docs/architecture/datastore-adapter-roadmap.md)
 - [Development Guide](docs/contributing/development.md)
 - [Testing Strategy](docs/testing/strategy.md)
 
-The public wiki is intended to live at [github.com/GarethMonty/Datanaut/wiki](https://github.com/GarethMonty/Datanaut/wiki).
+The public wiki is intended to live at [github.com/FullMontyDevelopment/DataPadPlusPlus/wiki](https://github.com/FullMontyDevelopment/DataPadPlusPlus/wiki).
 
 ## Security And Safety
 
-Datanaut is designed for workflows that may touch live credentials and production systems. The safety model is part of the architecture:
+DataPad++ is designed for workflows that may touch live credentials and production systems. The safety model is part of the architecture:
 
 - keep secret values in the OS credential store where available and persist only references in regular workspace state
 - redact sensitive values in previews, logs, diagnostics, and exports by default

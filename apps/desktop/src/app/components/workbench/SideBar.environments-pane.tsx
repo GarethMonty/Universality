@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react'
-import type { EnvironmentProfile } from '@datanaut/shared-types'
+import type { EnvironmentProfile } from '@datapadplusplus/shared-types'
 import {
   ChevronRightIcon,
   EnvironmentsIcon,

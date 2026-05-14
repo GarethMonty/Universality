@@ -1,4 +1,4 @@
-import type { MongoFindBuilderState, MongoFindFilterGroup } from '@datanaut/shared-types'
+import type { MongoFindBuilderState, MongoFindFilterGroup } from '@datapadplusplus/shared-types'
 
 export type BuilderUpdater = (patch: Partial<MongoFindBuilderState>) => void
 

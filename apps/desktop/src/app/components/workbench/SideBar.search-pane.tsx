@@ -4,7 +4,7 @@ import type {
   ConnectionProfile,
   EnvironmentProfile,
   SavedWorkItem,
-} from '@datanaut/shared-types'
+} from '@datapadplusplus/shared-types'
 import {
   DatabaseIcon,
   EnvironmentsIcon,

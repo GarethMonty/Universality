@@ -402,7 +402,7 @@ mod tests {
             "update-row",
             vec![DataEditChange {
                 field: Some("name".into()),
-                value: Some(json!("Datanaut Labs")),
+                value: Some(json!("DataPad++ Labs")),
                 ..Default::default()
             }],
             Some(HashMap::from([
@@ -417,7 +417,7 @@ mod tests {
             PgEditStatement {
                 sql: r#"update "public"."accounts" set "name" = $1 where "id" = $2 and "tenant_id" = $3;"#
                     .into(),
-                values: vec![json!("Datanaut Labs"), json!(1), json!(7)],
+                values: vec![json!("DataPad++ Labs"), json!(1), json!(7)],
             }
         );
     }

@@ -1,5 +1,5 @@
 {
-  "name": "@datanaut/desktop",
+  "name": "@datapadplusplus/desktop",
   "private": true,
   "version": "0.1.2",
   "type": "module",
@@ -15,7 +15,7 @@
     "tauri:build": "tauri build"
   },
   "dependencies": {
-    "@datanaut/shared-types": "file:../../packages/shared-types",
+    "@datapadplusplus/shared-types": "file:../../packages/shared-types",
     "@monaco-editor/react": "^4.7.0",
     "@tanstack/react-virtual": "^3.13.24",
     "@tauri-apps/api": "^2.8.0",

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { ConnectionProfile } from '@datanaut/shared-types'
+import type { ConnectionProfile } from '@datapadplusplus/shared-types'
 import {
   buildConnectionTestFailure,
   fixtureWarningsForConnection,
@@ -22,7 +22,7 @@ describe('connection test results', () => {
     expect(result.message).toContain('connection refused')
     expect(result.resolvedHost).toBe('localhost')
     expect(result.warnings).toContain(
-      'Datanaut Docker fixtures expose MongoDB on localhost:27018.',
+      'DataPad++ Docker fixtures expose MongoDB on localhost:27018.',
     )
   })
 
@@ -38,10 +38,10 @@ describe('connection test results', () => {
     )
 
     expect(warnings).toEqual([
-      'Datanaut Docker fixtures expose MongoDB on localhost:27018.',
+      'DataPad++ Docker fixtures expose MongoDB on localhost:27018.',
       'Fixture database is "catalog".',
-      'Fixture user is "datanaut".',
-      'Fixture password is "datanaut".',
+      'Fixture user is "datapadplusplus".',
+      'Fixture password is "datapadplusplus".',
     ])
 
     expect(
@@ -51,11 +51,11 @@ describe('connection test results', () => {
           family: 'document',
           port: 27017,
           database: 'catalog',
-          username: 'datanaut',
+          username: 'datapadplusplus',
         }),
-        'datanaut',
+        'datapadplusplus',
       ),
-    ).toEqual(['Datanaut Docker fixtures expose MongoDB on localhost:27018.'])
+    ).toEqual(['DataPad++ Docker fixtures expose MongoDB on localhost:27018.'])
 
     expect(
       fixtureWarningsForConnection(

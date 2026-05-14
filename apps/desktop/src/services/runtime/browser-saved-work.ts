@@ -1,4 +1,4 @@
-import type { QueryTabState, SavedWorkItem, WorkspaceSnapshot } from '@datanaut/shared-types'
+import type { QueryTabState, SavedWorkItem, WorkspaceSnapshot } from '@datapadplusplus/shared-types'
 import { createId, editorLabelForConnection, languageForConnection } from '../../app/state/helpers'
 import { cloneSnapshot, findTab } from './browser-store'
 import { upsertTab } from './browser-tabs'

@@ -1,4 +1,8 @@
-use tauri::Manager;
+use tauri::{
+    menu::{Menu, MenuItem},
+    tray::{MouseButton, TrayIconBuilder, TrayIconEvent},
+    AppHandle, Manager, Runtime,
+};
 
 pub mod adapters;
 pub mod app;
@@ -9,6 +13,60 @@ pub mod infrastructure;
 pub mod persistence;
 pub mod security;
 
+const TRAY_SHOW_ID: &str = "tray-show";
+const TRAY_QUIT_ID: &str = "tray-quit";
+
+fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+    }
+}
+
+fn tray_icon_image(app: &tauri::App) -> tauri::Result<tauri::image::Image<'static>> {
+    if let Some(icon) = app.default_window_icon() {
+        return Ok(icon.clone().to_owned());
+    }
+
+    tauri::image::Image::from_bytes(include_bytes!("../icons/icon.png")).map(|icon| icon.to_owned())
+}
+
+fn configure_system_tray(app: &mut tauri::App) -> tauri::Result<()> {
+    let show = MenuItem::with_id(app, TRAY_SHOW_ID, "Show DataPad++", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, TRAY_QUIT_ID, "Quit DataPad++", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&show, &quit])?;
+    let icon = tray_icon_image(app)?;
+
+    TrayIconBuilder::with_id("main")
+        .tooltip("DataPad++")
+        .icon(icon)
+        .menu(&menu)
+        .show_menu_on_left_click(false)
+        .on_menu_event(|app_handle, event| match event.id().as_ref() {
+            TRAY_SHOW_ID => show_main_window(app_handle),
+            TRAY_QUIT_ID => app_handle.exit(0),
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            if matches!(
+                event,
+                TrayIconEvent::Click {
+                    button: MouseButton::Left,
+                    ..
+                } | TrayIconEvent::DoubleClick {
+                    button: MouseButton::Left,
+                    ..
+                }
+            ) {
+                show_main_window(tray.app_handle());
+            }
+        })
+        .build(app)?;
+
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -16,6 +74,7 @@ pub fn run() {
             app.manage(std::sync::Mutex::new(app::runtime::ManagedAppState::load(
                 app.handle().clone(),
             )));
+            configure_system_tray(app)?;
             Ok(())
         })
         .plugin(tauri_plugin_dialog::init())
@@ -68,5 +127,5 @@ pub fn run() {
             commands::workspace::upsert_saved_work_item
         ])
         .run(tauri::generate_context!())
-        .expect("error while running Datanaut");
+        .expect("error while running DataPad++");
 }

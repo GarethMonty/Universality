@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { useState } from 'react'
-import type { QueryBuilderState, QueryTabState } from '@datanaut/shared-types'
+import type { QueryBuilderState, QueryTabState } from '@datapadplusplus/shared-types'
 import { describe, expect, it, vi } from 'vitest'
 import { FIELD_DRAG_MIME, FIELD_DRAG_PAYLOAD_MIME } from '../results/field-drag'
 import { ResultPayloadView } from '../results/ResultPayloadView'

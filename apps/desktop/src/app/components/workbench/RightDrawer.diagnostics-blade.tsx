@@ -3,7 +3,7 @@ import type {
   DiagnosticsReport,
   ExportBundle,
   WorkspaceSnapshot,
-} from '@datanaut/shared-types'
+} from '@datapadplusplus/shared-types'
 import {
   RefreshIcon,
   SettingsIcon,

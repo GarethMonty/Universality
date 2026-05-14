@@ -81,7 +81,7 @@ impl DatastoreAdapter for CassandraAdapter {
             ok: false,
             supported: false,
             message: format!(
-                "Cassandra query {} cannot be cancelled by Datanaut after dispatch in the current CQL adapter.",
+                "Cassandra query {} cannot be cancelled by DataPad++ after dispatch in the current CQL adapter.",
                 request.execution_id
             ),
         })

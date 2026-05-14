@@ -204,7 +204,7 @@ pub(super) fn bigquery_project_id(connection: &ResolvedConnectionProfile) -> Str
             let host = connection.host.trim();
             (!host.is_empty() && host != "127.0.0.1" && host != "localhost").then_some(host)
         })
-        .unwrap_or("datanaut-project")
+        .unwrap_or("datapadplusplus-project")
         .to_string()
 }
 
@@ -213,7 +213,7 @@ pub(super) fn bigquery_dataset_id(connection: &ResolvedConnectionProfile) -> Str
         .database
         .as_deref()
         .filter(|value| !value.trim().is_empty())
-        .unwrap_or("datanaut")
+        .unwrap_or("datapadplusplus")
         .to_string()
 }
 

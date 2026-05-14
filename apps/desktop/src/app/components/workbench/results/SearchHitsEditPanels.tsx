@@ -23,8 +23,8 @@ export function SearchDocumentEditorPanel({
         <strong>{mode === 'index' ? 'Index search document' : 'Update search document source'}</strong>
         <span>
           {mode === 'index'
-            ? 'Provide a JSON object. Datanaut sends it as the full document source.'
-            : 'Edit top-level JSON fields. Datanaut sends a partial document update.'}
+            ? 'Provide a JSON object. DataPad++ sends it as the full document source.'
+            : 'Edit top-level JSON fields. DataPad++ sends a partial document update.'}
         </span>
       </div>
       <textarea

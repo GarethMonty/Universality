@@ -228,7 +228,7 @@ describe('App', () => {
     const drawer = await openConnectionDraft()
     chooseDatabaseType(drawer, 'MongoDB')
     fireEvent.change(within(drawer).getByLabelText('Password / Secret'), {
-      target: { value: 'datanaut' },
+      target: { value: 'datapadplusplus' },
     })
     const testConnectionSpy = vi.spyOn(desktopClient, 'testConnection').mockRejectedValueOnce(
       new Error('connection refused'),
@@ -242,11 +242,11 @@ describe('App', () => {
     expect(within(drawer).getByText(/connection refused/i)).toBeInTheDocument()
     expect(
       within(drawer).getByText(
-        'Datanaut Docker fixtures expose MongoDB on localhost:27018.',
+        'DataPad++ Docker fixtures expose MongoDB on localhost:27018.',
       ),
     ).toBeInTheDocument()
     expect(testConnectionSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ secret: 'datanaut' }),
+      expect.objectContaining({ secret: 'datapadplusplus' }),
     )
     expect(
       within(screen.getByLabelText('connections sidebar')).queryByText('MongoDB connection'),
@@ -728,7 +728,7 @@ describe('App', () => {
       expect(within(drawer).getByRole('dialog', { name: 'Create SQLite database' })).toBeInTheDocument()
     })
 
-    expect(within(drawer).getByLabelText('Folder')).toHaveValue('C:\\Users\\gmont\\Datanaut')
+    expect(within(drawer).getByLabelText('Folder')).toHaveValue('C:\\Users\\gmont\\DataPad++')
     fireEvent.change(within(drawer).getByLabelText('Database name'), {
       target: { value: 'starter-catalog' },
     })
@@ -739,7 +739,7 @@ describe('App', () => {
         expect.objectContaining({
           engine: 'sqlite',
           mode: 'starter',
-          path: 'C:\\Users\\gmont\\Datanaut\\starter-catalog.sqlite',
+          path: 'C:\\Users\\gmont\\DataPad++\\starter-catalog.sqlite',
         }),
       )
     })
@@ -1462,7 +1462,7 @@ describe('App', () => {
 
   it('copies, exports, and restores executed result history', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
-    const createObjectUrl = vi.fn(() => 'blob:datanaut-result')
+    const createObjectUrl = vi.fn(() => 'blob:datapadplusplus-result')
     const revokeObjectUrl = vi.fn()
     const anchorClick = vi
       .spyOn(HTMLAnchorElement.prototype, 'click')
@@ -1497,7 +1497,7 @@ describe('App', () => {
       expect(createObjectUrl).toHaveBeenCalled()
     })
     expect(anchorClick).toHaveBeenCalled()
-    expect(revokeObjectUrl).toHaveBeenCalledWith('blob:datanaut-result')
+    expect(revokeObjectUrl).toHaveBeenCalledWith('blob:datapadplusplus-result')
     expect(screen.getByText(/\d{2}:\d{2}:\d{2}\.\d{3}/)).toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText('Query editor'), {

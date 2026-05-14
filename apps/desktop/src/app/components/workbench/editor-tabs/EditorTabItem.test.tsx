@@ -4,7 +4,7 @@ import type {
   ConnectionProfile,
   EnvironmentProfile,
   QueryTabState,
-} from '@datanaut/shared-types'
+} from '@datapadplusplus/shared-types'
 import { EditorTabItem } from './EditorTabItem'
 
 describe('EditorTabItem', () => {

@@ -1,8 +1,8 @@
-import type { BootstrapPayload, ConnectionProfile, EnvironmentProfile, ExecutionCapabilities, QueryTabState, UpdateUiStateRequest, WorkspaceSnapshot } from '@datanaut/shared-types'
+import type { BootstrapPayload, ConnectionProfile, EnvironmentProfile, ExecutionCapabilities, QueryTabState, UpdateUiStateRequest, WorkspaceSnapshot } from '@datapadplusplus/shared-types'
 import { createBlankBootstrapPayload, createBrowserPreviewHealth, createDiagnosticsReport } from '../../app/data/workspace-factory'
 import { defaultRowLimitForConnection, editorLanguageForConnection, migrateWorkspaceSnapshot, resolveEnvironment } from '../../app/state/helpers'
 
-const STORAGE_KEY = 'datanaut.workspace.v2'
+const STORAGE_KEY = 'datapadplusplus.workspace.v2'
 
 export function loadBrowserSnapshot(): WorkspaceSnapshot {
   const stored =

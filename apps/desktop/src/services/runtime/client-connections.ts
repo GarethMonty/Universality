@@ -1,4 +1,4 @@
-import type { BootstrapPayload, ConnectionProfile, ConnectionTestRequest, ConnectionTestResult, EnvironmentProfile, SecretRef } from '@datanaut/shared-types'
+import type { BootstrapPayload, ConnectionProfile, ConnectionTestRequest, ConnectionTestResult, EnvironmentProfile, SecretRef } from '@datapadplusplus/shared-types'
 import { resolveEnvironment } from '../../app/state/helpers'
 import { deleteConnection, setActiveConnection, upsertConnection, upsertEnvironment } from './browser-connections'
 import { buildBrowserPayload, loadBrowserSnapshot, saveBrowserSnapshot } from './browser-store'

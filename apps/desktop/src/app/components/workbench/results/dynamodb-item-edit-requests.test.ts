@@ -1,4 +1,4 @@
-import type { ConnectionProfile } from '@datanaut/shared-types'
+import type { ConnectionProfile } from '@datapadplusplus/shared-types'
 import { describe, expect, it } from 'vitest'
 import {
   buildDynamoDbItemCellEditRequest,
@@ -183,7 +183,7 @@ function dynamoConnection(): ConnectionProfile {
       secretRef: {
         id: 'secret-dynamodb',
         provider: 'manual',
-        service: 'Datanaut',
+        service: 'DataPad++',
         account: 'conn-dynamodb',
         label: 'DynamoDB credential',
       },

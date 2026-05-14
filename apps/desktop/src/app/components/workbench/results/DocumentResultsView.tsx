@@ -6,7 +6,7 @@ import type {
   DataEditExecutionRequest,
   DataEditExecutionResponse,
   DataEditKind,
-} from '@datanaut/shared-types'
+} from '@datapadplusplus/shared-types'
 import { ClockIcon } from '../icons'
 import { DocumentContextMenu } from './document-context-menu'
 import type { DocumentEditContext } from './document-edit-context'

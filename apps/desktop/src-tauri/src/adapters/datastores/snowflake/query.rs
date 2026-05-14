@@ -153,7 +153,7 @@ pub(crate) fn preview_snowflake_response(account: &str, query: &str, row_limit: 
     json!({
         "code": "090001",
         "message": "dry-run-request-built",
-        "statementHandle": "datanaut-preview",
+        "statementHandle": "datapadplusplus-preview",
         "account": account,
         "resultSetMetaData": {
             "rowType": [

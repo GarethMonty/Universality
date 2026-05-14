@@ -4,7 +4,7 @@ import type {
   ConnectionProfile,
   DataEditExecutionRequest,
   DataEditExecutionResponse,
-} from '@datanaut/shared-types'
+} from '@datapadplusplus/shared-types'
 import { computeRenderedColumnWidths } from './data-grid-layout'
 import { DataGridContextMenu } from './DataGridContextMenu'
 import { DataGridDeleteConfirmation } from './DataGridDeleteConfirmation'
@@ -255,7 +255,7 @@ export function DataGridView({
     })
 
     if (!request?.confirmationText) {
-      setCopyMessage('Delete unavailable; Datanaut could not identify a complete primary key.')
+      setCopyMessage('Delete unavailable; DataPad++ could not identify a complete primary key.')
       return
     }
 

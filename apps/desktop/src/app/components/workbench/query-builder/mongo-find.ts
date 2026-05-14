@@ -5,7 +5,7 @@ import type {
   MongoFindBuilderState,
   MongoFindFilterRow,
   QueryBuilderState,
-} from '@datanaut/shared-types'
+} from '@datapadplusplus/shared-types'
 import { normalizeFilterGroups } from './mongo-find-defaults'
 export { defaultFilterGroup, normalizeFilterGroups } from './mongo-find-defaults'
 export { parseMongoFindQueryText } from './mongo-find-parser'

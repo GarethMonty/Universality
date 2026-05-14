@@ -5,7 +5,7 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Datanaut: Tauri Debug (LLDB)",
+      "name": "DataPad++: Tauri Debug (LLDB)",
       "type": "lldb",
       "request": "launch",
       "cwd": "${workspaceFolder}/apps/desktop",
@@ -17,14 +17,14 @@
           "--no-default-features"
         ],
         "filter": {
-          "name": "datanaut-desktop",
+          "name": "datapadplusplus-desktop",
           "kind": "bin"
         }
       },
-      "preLaunchTask": "datanaut:ui:dev"
+      "preLaunchTask": "datapadplusplus:ui:dev"
     },
     {
-      "name": "Datanaut: Tauri Debug + Core Fixtures (LLDB)",
+      "name": "DataPad++: Tauri Debug + Core Fixtures (LLDB)",
       "type": "lldb",
       "request": "launch",
       "cwd": "${workspaceFolder}/apps/desktop",
@@ -36,48 +36,21 @@
           "--no-default-features"
         ],
         "filter": {
-          "name": "datanaut-desktop",
-          "kind": "bin"
-        }
-      },
-      "env": {
-        "DATANAUT_FIXTURE_RUN": "1",
-        "DATANAUT_WORKSPACE_DIR": "${workspaceFolder}/.datanaut/fixture-workspaces/core",
-        "DATANAUT_SECRET_STORE": "file",
-        "DATANAUT_SECRET_FILE": "${workspaceFolder}/.datanaut/fixture-workspaces/core/secrets.json",
-        "DATANAUT_SQLITE_FIXTURE": "${workspaceFolder}/tests/fixtures/sqlite/datanaut.sqlite3"
-      },
-      "preLaunchTask": "datanaut:ui:fixtures:core"
-    },
-    {
-      "name": "Datanaut: Tauri Debug + Fixture Profile (LLDB)",
-      "type": "lldb",
-      "request": "launch",
-      "cwd": "${workspaceFolder}/apps/desktop",
-      "cargo": {
-        "args": [
-          "build",
-          "--manifest-path",
-          "${workspaceFolder}/apps/desktop/src-tauri/Cargo.toml",
-          "--no-default-features"
-        ],
-        "filter": {
-          "name": "datanaut-desktop",
+          "name": "datapadplusplus-desktop",
           "kind": "bin"
         }
       },
       "env": {
-        "DATANAUT_FIXTURE_RUN": "1",
-        "DATANAUT_FIXTURE_PROFILE": "${input:datanautFixtureProfile}",
-        "DATANAUT_WORKSPACE_DIR": "${workspaceFolder}/.datanaut/fixture-workspaces/profile-${input:datanautFixtureProfile}",
-        "DATANAUT_SECRET_STORE": "file",
-        "DATANAUT_SECRET_FILE": "${workspaceFolder}/.datanaut/fixture-workspaces/profile-${input:datanautFixtureProfile}/secrets.json",
-        "DATANAUT_SQLITE_FIXTURE": "${workspaceFolder}/tests/fixtures/sqlite/datanaut.sqlite3"
+        "DATAPADPLUSPLUS_FIXTURE_RUN": "1",
+        "DATAPADPLUSPLUS_WORKSPACE_DIR": "${workspaceFolder}/.datapadplusplus/fixture-workspaces/core",
+        "DATAPADPLUSPLUS_SECRET_STORE": "file",
+        "DATAPADPLUSPLUS_SECRET_FILE": "${workspaceFolder}/.datapadplusplus/fixture-workspaces/core/secrets.json",
+        "DATAPADPLUSPLUS_SQLITE_FIXTURE": "${workspaceFolder}/tests/fixtures/sqlite/datapadplusplus.sqlite3"
       },
-      "preLaunchTask": "datanaut:ui:fixtures:profile"
+      "preLaunchTask": "datapadplusplus:ui:fixtures:core"
     },
     {
-      "name": "Datanaut: Tauri Debug + All Fixtures (LLDB)",
+      "name": "DataPad++: Tauri Debug + Fixture Profile (LLDB)",
       "type": "lldb",
       "request": "launch",
       "cwd": "${workspaceFolder}/apps/desktop",
@@ -89,130 +62,157 @@
           "--no-default-features"
         ],
         "filter": {
-          "name": "datanaut-desktop",
+          "name": "datapadplusplus-desktop",
           "kind": "bin"
         }
       },
       "env": {
-        "DATANAUT_FIXTURE_RUN": "1",
-        "DATANAUT_FIXTURE_PROFILE": "all",
-        "DATANAUT_WORKSPACE_DIR": "${workspaceFolder}/.datanaut/fixture-workspaces/all",
-        "DATANAUT_SECRET_STORE": "file",
-        "DATANAUT_SECRET_FILE": "${workspaceFolder}/.datanaut/fixture-workspaces/all/secrets.json",
-        "DATANAUT_SQLITE_FIXTURE": "${workspaceFolder}/tests/fixtures/sqlite/datanaut.sqlite3"
+        "DATAPADPLUSPLUS_FIXTURE_RUN": "1",
+        "DATAPADPLUSPLUS_FIXTURE_PROFILE": "${input:datapadplusplusFixtureProfile}",
+        "DATAPADPLUSPLUS_WORKSPACE_DIR": "${workspaceFolder}/.datapadplusplus/fixture-workspaces/profile-${input:datapadplusplusFixtureProfile}",
+        "DATAPADPLUSPLUS_SECRET_STORE": "file",
+        "DATAPADPLUSPLUS_SECRET_FILE": "${workspaceFolder}/.datapadplusplus/fixture-workspaces/profile-${input:datapadplusplusFixtureProfile}/secrets.json",
+        "DATAPADPLUSPLUS_SQLITE_FIXTURE": "${workspaceFolder}/tests/fixtures/sqlite/datapadplusplus.sqlite3"
       },
-      "preLaunchTask": "datanaut:ui:fixtures:all"
+      "preLaunchTask": "datapadplusplus:ui:fixtures:profile"
     },
     {
-      "name": "Datanaut: Tauri Debug (Windows)",
+      "name": "DataPad++: Tauri Debug + All Fixtures (LLDB)",
+      "type": "lldb",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/apps/desktop",
+      "cargo": {
+        "args": [
+          "build",
+          "--manifest-path",
+          "${workspaceFolder}/apps/desktop/src-tauri/Cargo.toml",
+          "--no-default-features"
+        ],
+        "filter": {
+          "name": "datapadplusplus-desktop",
+          "kind": "bin"
+        }
+      },
+      "env": {
+        "DATAPADPLUSPLUS_FIXTURE_RUN": "1",
+        "DATAPADPLUSPLUS_FIXTURE_PROFILE": "all",
+        "DATAPADPLUSPLUS_WORKSPACE_DIR": "${workspaceFolder}/.datapadplusplus/fixture-workspaces/all",
+        "DATAPADPLUSPLUS_SECRET_STORE": "file",
+        "DATAPADPLUSPLUS_SECRET_FILE": "${workspaceFolder}/.datapadplusplus/fixture-workspaces/all/secrets.json",
+        "DATAPADPLUSPLUS_SQLITE_FIXTURE": "${workspaceFolder}/tests/fixtures/sqlite/datapadplusplus.sqlite3"
+      },
+      "preLaunchTask": "datapadplusplus:ui:fixtures:all"
+    },
+    {
+      "name": "DataPad++: Tauri Debug (Windows)",
       "type": "cppvsdbg",
       "request": "launch",
-      "program": "${workspaceFolder}/apps/desktop/src-tauri/target/debug/datanaut-desktop.exe",
+      "program": "${workspaceFolder}/apps/desktop/src-tauri/target/debug/datapadplusplus-desktop.exe",
       "cwd": "${workspaceFolder}/apps/desktop",
-      "preLaunchTask": "datanaut:dev"
+      "preLaunchTask": "datapadplusplus:dev"
     },
     {
-      "name": "Datanaut: Tauri Debug + Core Fixtures (Windows)",
+      "name": "DataPad++: Tauri Debug + Core Fixtures (Windows)",
       "type": "cppvsdbg",
       "request": "launch",
-      "program": "${workspaceFolder}/apps/desktop/src-tauri/target/debug/datanaut-desktop.exe",
+      "program": "${workspaceFolder}/apps/desktop/src-tauri/target/debug/datapadplusplus-desktop.exe",
       "cwd": "${workspaceFolder}/apps/desktop",
       "environment": [
         {
-          "name": "DATANAUT_FIXTURE_RUN",
+          "name": "DATAPADPLUSPLUS_FIXTURE_RUN",
           "value": "1"
         },
         {
-          "name": "DATANAUT_WORKSPACE_DIR",
-          "value": "${workspaceFolder}/.datanaut/fixture-workspaces/core"
+          "name": "DATAPADPLUSPLUS_WORKSPACE_DIR",
+          "value": "${workspaceFolder}/.datapadplusplus/fixture-workspaces/core"
         },
         {
-          "name": "DATANAUT_SECRET_STORE",
+          "name": "DATAPADPLUSPLUS_SECRET_STORE",
           "value": "file"
         },
         {
-          "name": "DATANAUT_SECRET_FILE",
-          "value": "${workspaceFolder}/.datanaut/fixture-workspaces/core/secrets.json"
+          "name": "DATAPADPLUSPLUS_SECRET_FILE",
+          "value": "${workspaceFolder}/.datapadplusplus/fixture-workspaces/core/secrets.json"
         },
         {
-          "name": "DATANAUT_SQLITE_FIXTURE",
-          "value": "${workspaceFolder}/tests/fixtures/sqlite/datanaut.sqlite3"
+          "name": "DATAPADPLUSPLUS_SQLITE_FIXTURE",
+          "value": "${workspaceFolder}/tests/fixtures/sqlite/datapadplusplus.sqlite3"
         }
       ],
-      "preLaunchTask": "datanaut:dev:fixtures:core"
+      "preLaunchTask": "datapadplusplus:dev:fixtures:core"
     },
     {
-      "name": "Datanaut: Tauri Debug + Fixture Profile (Windows)",
+      "name": "DataPad++: Tauri Debug + Fixture Profile (Windows)",
       "type": "cppvsdbg",
       "request": "launch",
-      "program": "${workspaceFolder}/apps/desktop/src-tauri/target/debug/datanaut-desktop.exe",
+      "program": "${workspaceFolder}/apps/desktop/src-tauri/target/debug/datapadplusplus-desktop.exe",
       "cwd": "${workspaceFolder}/apps/desktop",
       "environment": [
         {
-          "name": "DATANAUT_FIXTURE_RUN",
+          "name": "DATAPADPLUSPLUS_FIXTURE_RUN",
           "value": "1"
         },
         {
-          "name": "DATANAUT_FIXTURE_PROFILE",
-          "value": "${input:datanautFixtureProfile}"
+          "name": "DATAPADPLUSPLUS_FIXTURE_PROFILE",
+          "value": "${input:datapadplusplusFixtureProfile}"
         },
         {
-          "name": "DATANAUT_WORKSPACE_DIR",
-          "value": "${workspaceFolder}/.datanaut/fixture-workspaces/profile-${input:datanautFixtureProfile}"
+          "name": "DATAPADPLUSPLUS_WORKSPACE_DIR",
+          "value": "${workspaceFolder}/.datapadplusplus/fixture-workspaces/profile-${input:datapadplusplusFixtureProfile}"
         },
         {
-          "name": "DATANAUT_SECRET_STORE",
+          "name": "DATAPADPLUSPLUS_SECRET_STORE",
           "value": "file"
         },
         {
-          "name": "DATANAUT_SECRET_FILE",
-          "value": "${workspaceFolder}/.datanaut/fixture-workspaces/profile-${input:datanautFixtureProfile}/secrets.json"
+          "name": "DATAPADPLUSPLUS_SECRET_FILE",
+          "value": "${workspaceFolder}/.datapadplusplus/fixture-workspaces/profile-${input:datapadplusplusFixtureProfile}/secrets.json"
         },
         {
-          "name": "DATANAUT_SQLITE_FIXTURE",
-          "value": "${workspaceFolder}/tests/fixtures/sqlite/datanaut.sqlite3"
+          "name": "DATAPADPLUSPLUS_SQLITE_FIXTURE",
+          "value": "${workspaceFolder}/tests/fixtures/sqlite/datapadplusplus.sqlite3"
         }
       ],
-      "preLaunchTask": "datanaut:dev:fixtures:profile"
+      "preLaunchTask": "datapadplusplus:dev:fixtures:profile"
     },
     {
-      "name": "Datanaut: Tauri Debug + All Fixtures (Windows)",
+      "name": "DataPad++: Tauri Debug + All Fixtures (Windows)",
       "type": "cppvsdbg",
       "request": "launch",
-      "program": "${workspaceFolder}/apps/desktop/src-tauri/target/debug/datanaut-desktop.exe",
+      "program": "${workspaceFolder}/apps/desktop/src-tauri/target/debug/datapadplusplus-desktop.exe",
       "cwd": "${workspaceFolder}/apps/desktop",
       "environment": [
         {
-          "name": "DATANAUT_FIXTURE_RUN",
+          "name": "DATAPADPLUSPLUS_FIXTURE_RUN",
           "value": "1"
         },
         {
-          "name": "DATANAUT_FIXTURE_PROFILE",
+          "name": "DATAPADPLUSPLUS_FIXTURE_PROFILE",
           "value": "all"
         },
         {
-          "name": "DATANAUT_WORKSPACE_DIR",
-          "value": "${workspaceFolder}/.datanaut/fixture-workspaces/all"
+          "name": "DATAPADPLUSPLUS_WORKSPACE_DIR",
+          "value": "${workspaceFolder}/.datapadplusplus/fixture-workspaces/all"
         },
         {
-          "name": "DATANAUT_SECRET_STORE",
+          "name": "DATAPADPLUSPLUS_SECRET_STORE",
           "value": "file"
         },
         {
-          "name": "DATANAUT_SECRET_FILE",
-          "value": "${workspaceFolder}/.datanaut/fixture-workspaces/all/secrets.json"
+          "name": "DATAPADPLUSPLUS_SECRET_FILE",
+          "value": "${workspaceFolder}/.datapadplusplus/fixture-workspaces/all/secrets.json"
         },
         {
-          "name": "DATANAUT_SQLITE_FIXTURE",
-          "value": "${workspaceFolder}/tests/fixtures/sqlite/datanaut.sqlite3"
+          "name": "DATAPADPLUSPLUS_SQLITE_FIXTURE",
+          "value": "${workspaceFolder}/tests/fixtures/sqlite/datapadplusplus.sqlite3"
         }
       ],
-      "preLaunchTask": "datanaut:dev:fixtures:all"
+      "preLaunchTask": "datapadplusplus:dev:fixtures:all"
     }
   ],
   "inputs": [
     {
-      "id": "datanautFixtureProfile",
+      "id": "datapadplusplusFixtureProfile",
       "type": "pickString",
       "description": "Fixture profile to start before debugging",
       "options": [

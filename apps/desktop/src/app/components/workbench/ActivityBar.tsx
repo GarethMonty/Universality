@@ -1,5 +1,5 @@
 import type { ComponentType, SVGProps } from 'react'
-import type { UiActivity, WorkspaceSnapshot } from '@datanaut/shared-types'
+import type { UiActivity, WorkspaceSnapshot } from '@datapadplusplus/shared-types'
 import {
   ConnectionsIcon,
   EnvironmentsIcon,
@@ -10,6 +10,7 @@ import {
   SettingsIcon,
   ThemeIcon,
 } from './icons'
+import { AppLogo } from './AppLogo'
 
 interface ActivityBarProps {
   activeActivity: UiActivity
@@ -79,6 +80,10 @@ export function ActivityBar({
 
   return (
     <aside className="activity-bar" aria-label="Activity bar">
+      <div className="activity-brand" title="DataPad++">
+        <AppLogo kind="mark" />
+      </div>
+
       <div className="activity-stack">
         {activityItems
           .filter((item) => commandPaletteEnabled || item.id !== 'search')

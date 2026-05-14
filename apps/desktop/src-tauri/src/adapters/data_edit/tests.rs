@@ -23,7 +23,7 @@ fn sql_update_without_primary_key_warns_and_keeps_preview_predicate() {
             table: Some("accounts".into()),
             ..Default::default()
         },
-        vec![change("name", json!("Datanaut Labs"))],
+        vec![change("name", json!("DataPad++ Labs"))],
     );
 
     let plan = default_data_edit_plan(&connection, &experience, &request);
@@ -50,7 +50,7 @@ fn sql_dialects_quote_identifiers_and_parameters_for_preview_requests() {
             primary_key: Some(HashMap::from([("account_id".into(), json!(42))])),
             ..Default::default()
         },
-        vec![change("display_name", json!("Datanaut Labs"))],
+        vec![change("display_name", json!("DataPad++ Labs"))],
     );
 
     let sqlserver = default_data_edit_plan(
@@ -297,7 +297,7 @@ fn connection(engine: &str, family: &str, read_only: bool) -> ResolvedConnection
         family: family.into(),
         host: "127.0.0.1".into(),
         port: None,
-        database: Some("datanaut".into()),
+        database: Some("datapadplusplus".into()),
         username: None,
         password: None,
         connection_string: None,

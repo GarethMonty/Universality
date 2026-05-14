@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-22.04
     env:
       # CI intentionally avoids Docker, cloud credentials, and live datastore fixtures.
-      DATANAUT_FIXTURE_RUN: '0'
+      DATAPADPLUSPLUS_FIXTURE_RUN: '0'
       RUST_BACKTRACE: '1'
 
     steps:

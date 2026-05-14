@@ -4,7 +4,7 @@ import type {
   EnvironmentProfile,
   ExplorerInspectResponse,
   QueryTabState,
-} from '@datanaut/shared-types'
+} from '@datapadplusplus/shared-types'
 
 interface DetailsViewProps {
   activeConnection: ConnectionProfile

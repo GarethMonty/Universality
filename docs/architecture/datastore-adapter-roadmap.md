@@ -1,12 +1,32 @@
-# Datanaut Datastore Adapter Roadmap
+# DataPad++ Datastore Adapter Roadmap
 
-This document is the durable implementation memory for Datanaut's datastore workbench. It captures the product plan, adapter architecture, feature backlog, safety model, and testing expectations so the roadmap does not live only in chat history.
+This document is the durable implementation memory for DataPad++'s datastore workbench. It captures the product plan, adapter architecture, feature backlog, safety model, and testing expectations so the roadmap does not live only in chat history.
 
 ## North Star
 
-Datanaut should provide a capability-driven workbench for many datastore families without pretending every engine behaves like SQL. Each adapter should expose what the engine can safely support: connection validation, metadata exploration, query execution, normalized result rendering, permissions, diagnostics, operation planning, and guarded admin/destructive workflows.
+DataPad++ should provide a capability-driven workbench for many datastore families without pretending every engine behaves like SQL. Each adapter should expose what the engine can safely support: connection validation, metadata exploration, query execution, normalized result rendering, permissions, diagnostics, operation planning, and guarded admin/destructive workflows.
 
 The product should prefer real engine protocols and SDKs over ORMs. ORMs can become an optional future context import feature, but they must not be a primary connection mechanism.
+
+## Current Implementation Status
+
+The repository now includes the DataPad++ rename, the current desktop workbench, scoped query tabs, datastore icons, visual builders, richer results, Docker fixtures, release automation, and dependency-free CI checks.
+
+Current live or partially live product surfaces include:
+
+- explicit connection creation and save behavior
+- connection context menus for New Query, Explore, Edit Connection, duplicate, and delete-style workflows
+- explorer and object-tree surfaces that vary by datastore family
+- query builders for MongoDB find, SQL SELECT, DynamoDB key condition, Cassandra partition-key CQL, and search Query DSL
+- builder/raw toolbar layout modes for builder-capable query tabs
+- rich table and document result renderers, document-only paging, non-document virtualization, result runtime footer, query history, messages, and details
+- drag-and-drop document fields into filters, projection, and sort builder sections
+- safe edit planning/execution for supported natural data edits
+- guarded operation plans for admin/destructive/costly actions
+- Docker fixture profiles with deterministic seed data
+- release workflow automation that bumps versions, tags `app-vX.Y.Z`, and creates draft Tauri releases
+
+Naming note: `DATAPADPLUSPLUS_*` is the current environment-variable prefix. Legacy `DATANAUT_*` and `UNIVERSALITY_*` fallbacks are kept only for compatibility.
 
 ## Adapter Completion Bar
 
@@ -19,9 +39,9 @@ For this phase, "full implementation" means read/diagnostic-complete:
 - Permission inspection with effective roles/grants/IAM signals where available.
 - Diagnostics for plans, profiles, metrics, query history, warnings, and cost/scan signals.
 - Import/export and backup/restore operation planning.
-- Guarded operation plans for writes, admin work, destructive DDL/DML, profiling that executes queries, and cloud-cost operations.
+- Guarded operation plans for admin work, destructive DDL/DML, profiling that executes queries, backup/restore, import/export, and cloud-cost operations.
 
-Destructive/admin mutation execution remains preview-only until a later pass explicitly enables execution with confirmation and permission checks.
+Natural data edits can be live when they are identity-safe and adapter-supported, such as SQL row edits with primary keys, MongoDB document field edits with document ids, Redis/Valkey key/TTL edits, DynamoDB item edits with complete keys, and Cassandra row edits with complete primary-key conditions. Destructive/admin mutation execution remains preview-only until a later pass explicitly enables execution with confirmation and permission checks.
 
 ## Families
 
@@ -144,7 +164,7 @@ Adapters should expose a typed operation layer rather than one-off UI buttons.
 
 ## Guardrails
 
-Datanaut should be conservative by default:
+DataPad++ should be conservative by default:
 
 - Read-only profiles block writes before execution.
 - Production/safe-mode profiles require explicit confirmation for DDL, DML, admin, backup/restore, import/export, and profiling that executes queries.
@@ -358,14 +378,18 @@ Guardrail tests must prove:
 
 ## Current Milestone State
 
-At the time this document was written:
+At the current milestone:
 
 - CockroachDB is registered as a first-class MVP SQL engine.
 - The adapter trait already exposes operation manifests, operation planning, permissions, diagnostics, result paging, cancellation, metadata explorer, and execution.
+- The shared model includes datastore experience manifests, scoped query targets, query-builder states, safe edit contracts, operation plans, permission inspection, and normalized result payloads.
+- MongoDB, SQL SELECT, DynamoDB, Cassandra, and search query builders have UI surfaces and raw-query synchronization.
+- The results workbench has split renderer components for table, document, JSON/tree, key-value, search, raw, messages, details, and history-style workflows.
+- Natural data edits are being added through safe edit contracts; admin/destructive operations remain guarded preview plans.
 - PostgreSQL, CockroachDB, SQL Server, MySQL, MariaDB, SQLite, MongoDB, Redis, TimescaleDB, ClickHouse, Valkey, Memcached, ArangoDB, BigQuery, Cassandra, Cosmos DB, DuckDB, DynamoDB, Elasticsearch/OpenSearch, InfluxDB, JanusGraph, LiteDB, Neo4j, Neptune, OpenTSDB, Oracle, Prometheus, and Snowflake have concrete adapter structs.
 - TimescaleDB, ClickHouse, Valkey, Memcached, Cassandra, LiteDB, Oracle, and cloud/managed adapters remain beta/read-diagnostic oriented where appropriate.
 - Snowflake and BigQuery now use concrete cloud-contract request builders rather than the generic beta adapter.
 - Cassandra now has a concrete CQL contract adapter with partition-key guardrails while native binary protocol execution remains a future driver pass.
 - LiteDB now has a concrete .NET sidecar bridge contract adapter while live sidecar dispatch remains a future bridge pass.
 - Oracle now has a concrete SQL/PLSQL contract adapter with Oracle client/runtime prerequisite warnings while native OCI/thin execution remains a future driver pass.
-- The largest immediate architecture risk has shifted from `apps/desktop/src-tauri/src/adapters/mod.rs` to the remaining large frontend workbench files and the need for continued drift tests between Rust manifests and the TypeScript roadmap.
+- The largest immediate architecture risk has shifted from raw adapter sprawl to continued frontend/runtime hardening, quality budgets, and drift tests between Rust manifests, TypeScript contracts, fixtures, and docs.

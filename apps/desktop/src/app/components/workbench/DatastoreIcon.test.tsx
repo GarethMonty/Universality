@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import { DATASTORE_ENGINES } from '@datanaut/shared-types'
+import { DATASTORE_ENGINES } from '@datapadplusplus/shared-types'
 import { DatastoreIcon } from './DatastoreIcon'
 
 describe('DatastoreIcon', () => {

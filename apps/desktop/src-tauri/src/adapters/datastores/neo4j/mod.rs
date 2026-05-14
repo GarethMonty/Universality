@@ -81,7 +81,7 @@ impl DatastoreAdapter for Neo4jAdapter {
             ok: false,
             supported: false,
             message: format!(
-                "Neo4j HTTP transaction execution {} cannot be cancelled by Datanaut after dispatch.",
+                "Neo4j HTTP transaction execution {} cannot be cancelled by DataPad++ after dispatch.",
                 request.execution_id
             ),
         })

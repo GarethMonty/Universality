@@ -4,7 +4,7 @@ import type {
   SqlBuilderValueType,
   SqlSelectBuilderState,
   SqlSelectFilterOperator,
-} from '@datanaut/shared-types'
+} from '@datapadplusplus/shared-types'
 
 const SQL_OPERATORS: Record<Exclude<SqlSelectFilterOperator, 'is-null' | 'is-not-null'>, string> = {
   eq: '=',

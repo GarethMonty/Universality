@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { ConnectionGroupMode } from '@datanaut/shared-types'
+import type { ConnectionGroupMode } from '@datapadplusplus/shared-types'
 import {
   ChevronDownIcon,
   ConnectionsIcon,

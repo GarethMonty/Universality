@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { ConnectionProfile } from '@datanaut/shared-types'
+import type { ConnectionProfile } from '@datapadplusplus/shared-types'
 import { DatastoreIcon } from './DatastoreIcon'
 import { ChevronDownIcon } from './icons'
 import { engineOption, ENGINE_GROUPS } from './RightDrawer.helpers'

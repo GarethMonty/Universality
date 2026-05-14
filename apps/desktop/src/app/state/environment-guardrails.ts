@@ -6,7 +6,7 @@ import type {
   GuardrailDecision,
   ResolvedEnvironment,
   WorkspaceSnapshot,
-} from '@datanaut/shared-types'
+} from '@datapadplusplus/shared-types'
 
 export function resolveEnvironment(
   environments: EnvironmentProfile[],

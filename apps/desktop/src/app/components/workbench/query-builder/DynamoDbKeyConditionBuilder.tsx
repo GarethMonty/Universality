@@ -5,7 +5,7 @@ import type {
   DynamoDbKeyConditionBuilderState,
   QueryBuilderState,
   QueryTabState,
-} from '@datanaut/shared-types'
+} from '@datapadplusplus/shared-types'
 import { BuilderSection } from './BuilderSection'
 import {
   buildDynamoDbKeyConditionQueryText,

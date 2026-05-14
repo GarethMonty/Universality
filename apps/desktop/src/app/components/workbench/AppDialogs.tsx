@@ -1,4 +1,4 @@
-import type { ConnectionProfile, QueryTabState } from '@datanaut/shared-types'
+import type { ConnectionProfile, QueryTabState } from '@datapadplusplus/shared-types'
 
 export function CloseSavedTabDialog({
   tab,

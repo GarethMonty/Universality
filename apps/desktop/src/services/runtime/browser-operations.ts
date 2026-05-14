@@ -1,4 +1,4 @@
-import type { OperationExecutionRequest, OperationExecutionResponse, OperationPlanRequest, OperationPlanResponse, WorkspaceSnapshot } from '@datanaut/shared-types'
+import type { OperationExecutionRequest, OperationExecutionResponse, OperationPlanRequest, OperationPlanResponse, WorkspaceSnapshot } from '@datapadplusplus/shared-types'
 import { defaultQueryTextForConnection, languageForConnection } from '../../app/state/helpers'
 import { buildOperationManifestsForConnection } from './browser-operation-manifests'
 import { collectDiagnosticsLocally, inspectPermissionsLocally } from './browser-operation-inspection'

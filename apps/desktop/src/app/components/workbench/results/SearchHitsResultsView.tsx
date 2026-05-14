@@ -4,7 +4,7 @@ import type {
   DataEditExecutionRequest,
   DataEditExecutionResponse,
   ResultPayload,
-} from '@datanaut/shared-types'
+} from '@datapadplusplus/shared-types'
 import type { DocumentEditContext } from './document-edit-context'
 import { JsonTreeView } from './JsonTreeView'
 import { SearchHitsContextMenu } from './SearchHitsContextMenu'
@@ -121,7 +121,7 @@ export function SearchHitsResultsView({
     setPendingUpdate(undefined)
 
     if (!request) {
-      setStatusMessage('Update unavailable; Datanaut could not identify the search index and document id.')
+      setStatusMessage('Update unavailable; DataPad++ could not identify the search index and document id.')
       return
     }
 
@@ -163,7 +163,7 @@ export function SearchHitsResultsView({
     setPendingIndex(undefined)
 
     if (!request || !index) {
-      setStatusMessage('Index unavailable; Datanaut needs an index and document id.')
+      setStatusMessage('Index unavailable; DataPad++ needs an index and document id.')
       return
     }
 
@@ -194,7 +194,7 @@ export function SearchHitsResultsView({
     setPendingDelete(undefined)
 
     if (!request) {
-      setStatusMessage('Delete unavailable; Datanaut could not identify the search index and document id.')
+      setStatusMessage('Delete unavailable; DataPad++ could not identify the search index and document id.')
       return
     }
 

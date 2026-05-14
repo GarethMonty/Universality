@@ -1,4 +1,4 @@
-import type { EnvironmentProfile } from '@datanaut/shared-types'
+import type { EnvironmentProfile } from '@datapadplusplus/shared-types'
 
 export function resolveEnvironmentPreview(
   environments: EnvironmentProfile[],

@@ -4,8 +4,8 @@ import type {
   PermissionInspectionRequest,
   PermissionInspectionResponse,
   WorkspaceSnapshot,
-} from '@datanaut/shared-types'
-import { datastoreBacklogByEngine } from '@datanaut/shared-types'
+} from '@datapadplusplus/shared-types'
+import { datastoreBacklogByEngine } from '@datapadplusplus/shared-types'
 import { buildOperationManifestsForConnection } from './browser-operation-manifests'
 import { findConnection } from './browser-store'
 

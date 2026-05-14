@@ -3,7 +3,7 @@ import type {
   DataEditExecutionRequest,
   DataEditExecutionResponse,
   ResultPayload,
-} from '@datanaut/shared-types'
+} from '@datapadplusplus/shared-types'
 import type { ReactNode } from 'react'
 import { DataGridView } from './DataGridView'
 import type { DocumentEditContext } from './document-edit-context'

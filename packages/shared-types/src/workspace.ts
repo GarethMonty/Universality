@@ -54,12 +54,20 @@ export type QueryExecutionState =
 
 export type SavedWorkItemKind =
   | 'query'
+  | 'script'
   | 'template'
   | 'snippet'
   | 'snapshot'
   | 'investigation-pack'
   | 'bookmark'
   | 'note'
+
+export type LibraryItemKind = SavedWorkItemKind
+export type LibraryNodeKind = 'folder' | LibraryItemKind
+
+export type QuerySaveTarget =
+  | { kind: 'library'; libraryItemId: string }
+  | { kind: 'local-file'; path: string }
 
 export interface QueryTabDefinition {
   id: string
@@ -69,6 +77,7 @@ export interface QueryTabDefinition {
   family: DatastoreFamily
   language: QueryLanguage
   pinned?: boolean
+  saveTarget?: QuerySaveTarget
   savedQueryId?: string
 }
 
@@ -550,6 +559,59 @@ export interface SavedWorkItem {
   snapshotResultId?: string
 }
 
+export interface LibraryNode {
+  id: string
+  kind: LibraryNodeKind
+  parentId?: string
+  name: string
+  summary?: string
+  tags: string[]
+  favorite?: boolean
+  createdAt: string
+  updatedAt: string
+  connectionId?: string
+  environmentId?: string
+  language?: QueryLanguage
+  queryText?: string
+  scriptText?: string
+  snapshotResultId?: string
+}
+
+export interface LibraryCreateFolderRequest {
+  parentId?: string
+  name: string
+  environmentId?: string
+}
+
+export interface LibraryRenameNodeRequest {
+  nodeId: string
+  name: string
+}
+
+export interface LibraryDeleteNodeRequest {
+  nodeId: string
+}
+
+export interface LibraryMoveNodeRequest {
+  nodeId: string
+  parentId?: string
+}
+
+export interface SaveQueryTabToLibraryRequest {
+  tabId: string
+  itemId?: string
+  folderId?: string
+  name: string
+  kind?: LibraryItemKind
+  environmentId?: string
+  tags?: string[]
+}
+
+export interface SaveQueryTabToLocalFileRequest {
+  tabId: string
+  path?: string
+}
+
 export interface ExplorerNode {
   id: string
   family: DatastoreFamily | 'shared'
@@ -614,9 +676,12 @@ export interface DiagnosticsReport {
     environments: number
     tabs: number
     savedWork: number
+    library: number
   }
   warnings: string[]
 }
 
 export type SavedArtifact = SavedWorkItem
 export type SavedArtifactKind = SavedWorkItemKind
+export type LibraryArtifact = LibraryNode
+export type LibraryArtifactKind = LibraryNodeKind

@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import type { ConnectionProfile, ExecutionResultEnvelope } from '@datanaut/shared-types'
+import type { ConnectionProfile, ExecutionResultEnvelope } from '@datapadplusplus/shared-types'
 import { describe, expect, it, vi } from 'vitest'
 import { ResultsView } from './ResultsView'
 

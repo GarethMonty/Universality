@@ -81,7 +81,7 @@ impl DatastoreAdapter for OpenTsdbAdapter {
             ok: false,
             supported: false,
             message: format!(
-                "OpenTSDB HTTP API does not support cancelling query execution {} from Datanaut.",
+                "OpenTSDB HTTP API does not support cancelling query execution {} from DataPad++.",
                 request.execution_id
             ),
         })

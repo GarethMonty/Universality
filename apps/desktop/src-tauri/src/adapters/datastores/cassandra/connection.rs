@@ -28,7 +28,7 @@ pub(super) fn cassandra_keyspace(connection: &ResolvedConnectionProfile) -> Stri
         .database
         .as_deref()
         .filter(|value| !value.trim().is_empty())
-        .unwrap_or("datanaut")
+        .unwrap_or("datapadplusplus")
         .to_string()
 }
 
@@ -63,6 +63,6 @@ mod tests {
         };
 
         assert_eq!(cassandra_contact_point(&connection), "node1:9042");
-        assert_eq!(cassandra_keyspace(&connection), "datanaut");
+        assert_eq!(cassandra_keyspace(&connection), "datapadplusplus");
     }
 }

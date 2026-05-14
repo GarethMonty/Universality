@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { ExplorerNode } from '@datanaut/shared-types'
+import type { ExplorerNode } from '@datapadplusplus/shared-types'
 import { createSeedSnapshot } from '../../../test/fixtures/seed-workspace'
 import {
   buildConnectionObjectTree,

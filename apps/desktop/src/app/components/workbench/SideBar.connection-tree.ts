@@ -1,4 +1,4 @@
-import type { ConnectionProfile, ScopedQueryTarget } from '@datanaut/shared-types'
+import type { ConnectionProfile, ScopedQueryTarget } from '@datapadplusplus/shared-types'
 
 export interface ConnectionTreeNode {
   id: string

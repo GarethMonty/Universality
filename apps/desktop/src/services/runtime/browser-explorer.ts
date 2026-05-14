@@ -1,4 +1,4 @@
-import type { ConnectionProfile, ExplorerInspectRequest, ExplorerInspectResponse, ExplorerNode, WorkspaceSnapshot } from '@datanaut/shared-types'
+import type { ConnectionProfile, ExplorerInspectRequest, ExplorerInspectResponse, ExplorerNode, WorkspaceSnapshot } from '@datapadplusplus/shared-types'
 import { findConnection } from './browser-store'
 
 export function createExplorerNodes(

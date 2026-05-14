@@ -1,2 +1,2 @@
-pub const PRODUCT_NAME: &str = "Datanaut";
+pub const PRODUCT_NAME: &str = "DataPad++";
 pub mod runtime;

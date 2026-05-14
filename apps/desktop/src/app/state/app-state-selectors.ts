@@ -3,7 +3,7 @@ import type {
   EnvironmentProfile,
   SavedWorkItem,
   WorkspaceSnapshot,
-} from '@datanaut/shared-types'
+} from '@datapadplusplus/shared-types'
 import { createId } from './helpers'
 
 export function toUserMessage(error: unknown, fallback: string) {

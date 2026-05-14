@@ -3,8 +3,8 @@ import type {
   ConnectionProfile,
   EnvironmentProfile,
   SecretRef,
-} from '@datanaut/shared-types'
-import { datastoreBacklogByEngine } from '@datanaut/shared-types'
+} from '@datapadplusplus/shared-types'
+import { datastoreBacklogByEngine } from '@datapadplusplus/shared-types'
 import { createId } from './helpers'
 
 export function ensureWorkspaceUnlocked(payload: BootstrapPayload | undefined) {
@@ -17,7 +17,7 @@ export function secretRefForConnection(profile: ConnectionProfile): SecretRef {
   return {
     id: `secret-${profile.id}`,
     provider: 'os-keyring',
-    service: 'Datanaut',
+    service: 'DataPad++',
     account: profile.id,
     label: `${profile.name} password`,
   }

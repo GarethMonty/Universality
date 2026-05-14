@@ -3,7 +3,7 @@ import type {
   ExplorerResponse,
   ResultPageResponse,
   ResultPayload,
-} from '@datanaut/shared-types'
+} from '@datapadplusplus/shared-types'
 import { createId } from './helpers'
 import type { AppAction, WorkbenchMessage, WorkbenchMessageSeverity } from './app-state-types'
 

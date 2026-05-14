@@ -81,7 +81,7 @@ impl DatastoreAdapter for NeptuneAdapter {
             ok: false,
             supported: false,
             message: format!(
-                "Amazon Neptune query execution {} cannot be cancelled by Datanaut after dispatch.",
+                "Amazon Neptune query execution {} cannot be cancelled by DataPad++ after dispatch.",
                 request.execution_id
             ),
         })

@@ -2,7 +2,7 @@ import type {
   ConnectionProfile,
   DataEditExecutionRequest,
   DataEditKind,
-} from '@datanaut/shared-types'
+} from '@datapadplusplus/shared-types'
 import type { DocumentEditContext } from './document-edit-context'
 import { parseJsonValue } from './json-utils'
 

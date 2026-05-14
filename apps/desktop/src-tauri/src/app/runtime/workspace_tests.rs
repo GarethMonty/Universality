@@ -127,7 +127,7 @@ fn fixture_workspace_json_contains_secret_refs_but_never_raw_passwords() {
     let seed = fixture_workspace_seed_for_profile(Some("all"), "fixture.sqlite3");
     let serialized = serde_json::to_string(&seed.snapshot).expect("serialize fixture snapshot");
 
-    for raw_secret in ["Datanaut_pwd_123", "fixture-token"] {
+    for raw_secret in ["DataPadPlusPlus_pwd_123", "fixture-token"] {
         assert!(
             !serialized.contains(raw_secret),
             "workspace JSON leaked {raw_secret}"
@@ -141,19 +141,19 @@ fn fixture_workspace_json_contains_secret_refs_but_never_raw_passwords() {
 fn fixture_secrets_are_written_to_file_secret_store() {
     let _guard = ENV_LOCK.lock().expect("env test lock");
     let path = temp_secret_file_path();
-    std::env::set_var("DATANAUT_SECRET_STORE", "file");
-    std::env::set_var("DATANAUT_SECRET_FILE", &path);
+    std::env::set_var("DATAPADPLUSPLUS_SECRET_STORE", "file");
+    std::env::set_var("DATAPADPLUSPLUS_SECRET_FILE", &path);
 
     let seed = fixture_workspace_seed_for_profile(Some("cloud-contract"), "fixture.sqlite3");
     seed_fixture_secrets(&seed.secrets).expect("store fixture secrets");
     let secret_file = fs::read_to_string(&path).expect("read fixture secrets file");
 
-    assert!(secret_file.contains("DatanautFixture:fixture-sqlserver"));
-    assert!(secret_file.contains("Datanaut_pwd_123"));
+    assert!(secret_file.contains("DataPadPlusPlusFixture:fixture-sqlserver"));
+    assert!(secret_file.contains("DataPadPlusPlus_pwd_123"));
     assert!(secret_file.contains("fixture-token"));
 
-    std::env::remove_var("DATANAUT_SECRET_STORE");
-    std::env::remove_var("DATANAUT_SECRET_FILE");
+    std::env::remove_var("DATAPADPLUSPLUS_SECRET_STORE");
+    std::env::remove_var("DATAPADPLUSPLUS_SECRET_FILE");
     let _ = fs::remove_file(path);
 }
 
@@ -207,7 +207,7 @@ fn tabs_for_reorder_tests() -> Vec<QueryTabState> {
 
 fn temp_secret_file_path() -> PathBuf {
     std::env::temp_dir().join(format!(
-        "datanaut-fixture-secrets-{}.json",
+        "datapadplusplus-fixture-secrets-{}.json",
         generate_id("test")
     ))
 }

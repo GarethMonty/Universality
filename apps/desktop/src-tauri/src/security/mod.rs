@@ -69,8 +69,10 @@ impl SecretStore for FileSecretStore {
             return Ok(secret);
         }
 
-        let legacy_path = legacy_file_secret_path();
-        if legacy_path != path {
+        for legacy_path in legacy_file_secret_paths() {
+            if legacy_path == path {
+                continue;
+            }
             let legacy_secrets = read_file_secrets(&legacy_path)?;
             if let Some(secret) = legacy_secrets.get(&file_secret_key(secret_ref)).cloned() {
                 return Ok(secret);
@@ -82,9 +84,13 @@ impl SecretStore for FileSecretStore {
 }
 
 pub fn using_file_secret_store() -> bool {
-    env_value("DATANAUT_SECRET_STORE", "UNIVERSALITY_SECRET_STORE")
-        .map(|value| value.eq_ignore_ascii_case("file"))
-        .unwrap_or(false)
+    env_value(&[
+        "DATAPADPLUSPLUS_SECRET_STORE",
+        "DATANAUT_SECRET_STORE",
+        "UNIVERSALITY_SECRET_STORE",
+    ])
+    .map(|value| value.eq_ignore_ascii_case("file"))
+    .unwrap_or(false)
 }
 
 pub fn store_secret_value(secret_ref: &SecretRef, secret: &str) -> Result<(), CommandError> {
@@ -104,29 +110,53 @@ pub fn resolve_secret_value(secret_ref: &SecretRef) -> Result<String, CommandErr
 }
 
 fn file_secret_path() -> PathBuf {
-    if let Some(path) = env_value("DATANAUT_SECRET_FILE", "UNIVERSALITY_SECRET_FILE") {
+    if let Some(path) = env_value(&[
+        "DATAPADPLUSPLUS_SECRET_FILE",
+        "DATANAUT_SECRET_FILE",
+        "UNIVERSALITY_SECRET_FILE",
+    ]) {
         return PathBuf::from(path);
     }
 
-    if let Some(workspace_dir) = env_value("DATANAUT_WORKSPACE_DIR", "UNIVERSALITY_WORKSPACE_DIR") {
-        return PathBuf::from(workspace_dir).join("secrets.json");
-    }
-
-    std::env::temp_dir().join("datanaut").join("secrets.json")
-}
-
-fn legacy_file_secret_path() -> PathBuf {
-    if let Ok(path) = std::env::var("UNIVERSALITY_SECRET_FILE") {
-        return PathBuf::from(path);
-    }
-
-    if let Ok(workspace_dir) = std::env::var("UNIVERSALITY_WORKSPACE_DIR") {
+    if let Some(workspace_dir) = env_value(&[
+        "DATAPADPLUSPLUS_WORKSPACE_DIR",
+        "DATANAUT_WORKSPACE_DIR",
+        "UNIVERSALITY_WORKSPACE_DIR",
+    ]) {
         return PathBuf::from(workspace_dir).join("secrets.json");
     }
 
     std::env::temp_dir()
-        .join("universality")
+        .join("datapadplusplus")
         .join("secrets.json")
+}
+
+fn legacy_file_secret_paths() -> Vec<PathBuf> {
+    let mut paths = Vec::new();
+
+    if let Ok(path) = std::env::var("DATANAUT_SECRET_FILE") {
+        paths.push(PathBuf::from(path));
+    }
+
+    if let Ok(path) = std::env::var("UNIVERSALITY_SECRET_FILE") {
+        paths.push(PathBuf::from(path));
+    }
+
+    if let Ok(workspace_dir) = std::env::var("DATANAUT_WORKSPACE_DIR") {
+        paths.push(PathBuf::from(workspace_dir).join("secrets.json"));
+    }
+
+    if let Ok(workspace_dir) = std::env::var("UNIVERSALITY_WORKSPACE_DIR") {
+        paths.push(PathBuf::from(workspace_dir).join("secrets.json"));
+    }
+
+    paths.push(std::env::temp_dir().join("datanaut").join("secrets.json"));
+    paths.push(
+        std::env::temp_dir()
+            .join("universality")
+            .join("secrets.json"),
+    );
+    paths
 }
 
 fn read_file_secrets(path: &PathBuf) -> Result<HashMap<String, String>, CommandError> {
@@ -142,15 +172,12 @@ fn file_secret_key(secret_ref: &SecretRef) -> String {
     format!("{}:{}", secret_ref.service, secret_ref.account)
 }
 
-fn env_value(primary: &str, legacy: &str) -> Option<String> {
-    std::env::var(primary)
-        .ok()
-        .filter(|value| !value.trim().is_empty())
-        .or_else(|| {
-            std::env::var(legacy)
-                .ok()
-                .filter(|value| !value.trim().is_empty())
-        })
+fn env_value(keys: &[&str]) -> Option<String> {
+    keys.iter().find_map(|key| {
+        std::env::var(key)
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+    })
 }
 
 pub fn evaluate_guardrails(

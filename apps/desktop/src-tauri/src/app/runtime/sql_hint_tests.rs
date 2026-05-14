@@ -71,7 +71,8 @@ fn relation_missing_hint_mentions_default_database_for_postgres() {
 
 #[test]
 fn relation_missing_hint_supports_sqlserver_invalid_object_name() {
-    let connection = test_resolved_connection("conn-sqlserver", "sqlserver", Some("datanaut"));
+    let connection =
+        test_resolved_connection("conn-sqlserver", "sqlserver", Some("datapadplusplus"));
 
     let base_error = CommandError::new(
         "sql-execution-error",
@@ -115,7 +116,7 @@ fn test_resolved_connection(
         host: "localhost".into(),
         port: Some(5432),
         database: database.map(String::from),
-        username: Some("datanaut".into()),
+        username: Some("datapadplusplus".into()),
         password: Some("pw".into()),
         connection_string: None,
         read_only: false,

@@ -5,7 +5,7 @@ import type {
   EnvironmentProfile,
   ExplorerNode,
   ScopedQueryTarget,
-} from '@datanaut/shared-types'
+} from '@datapadplusplus/shared-types'
 import type { ConnectionTreeNode } from './SideBar.connection-tree'
 
 export { buildConnectionObjectTree } from './SideBar.connection-tree'

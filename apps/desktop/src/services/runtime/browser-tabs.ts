@@ -1,4 +1,4 @@
-import type { ConnectionProfile, CreateScopedQueryTabRequest, QueryTabReorderRequest, QueryTabState, WorkspaceSnapshot } from '@datanaut/shared-types'
+import type { ConnectionProfile, CreateScopedQueryTabRequest, QueryTabReorderRequest, QueryTabState, WorkspaceSnapshot } from '@datapadplusplus/shared-types'
 import { createId, defaultQueryTextForConnection, editorLabelForConnection, languageForConnection } from '../../app/state/helpers'
 import { cloneSnapshot, findTab } from './browser-store'
 

@@ -10,6 +10,7 @@ import type {
   DiagnosticsReport,
   ExplorerNode,
   QueryTabState,
+  LibraryNode,
   SavedWorkItem,
 } from './workspace'
 
@@ -25,7 +26,7 @@ export type UiActivity =
   | 'connections'
   | 'environments'
   | 'explorer'
-  | 'saved-work'
+  | 'library'
   | 'search'
   | 'settings'
 
@@ -33,7 +34,7 @@ export type SidebarPane =
   | 'connections'
   | 'environments'
   | 'explorer'
-  | 'saved-work'
+  | 'library'
   | 'search'
 
 export type BottomPanelTab = 'results' | 'messages' | 'history' | 'details'
@@ -72,6 +73,8 @@ export interface WorkspaceSnapshot {
   environments: EnvironmentProfile[]
   tabs: QueryTabState[]
   closedTabs: ClosedQueryTabSnapshot[]
+  libraryNodes: LibraryNode[]
+  /** @deprecated Legacy flat Saved Work data migrated into libraryNodes. */
   savedWork: SavedWorkItem[]
   explorerNodes: ExplorerNode[]
   adapterManifests: AdapterManifest[]
@@ -90,7 +93,7 @@ export interface BootstrapPayload {
 }
 
 export interface ExportBundle {
-  format: 'datanaut-bundle'
+  format: 'datapadplusplus-bundle'
   version: number
   encryptedPayload: string
 }

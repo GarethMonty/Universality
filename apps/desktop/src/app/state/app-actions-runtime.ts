@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from 'react'
-import type { ExecutionRequest, ResultPageRequest } from '@datanaut/shared-types'
+import type { ExecutionRequest, ResultPageRequest } from '@datapadplusplus/shared-types'
 import { desktopClient } from '../../services/runtime/client'
 import { ensureWorkspaceUnlocked } from './app-state-factories'
 import { buildConnectionTestFailure } from './connection-test-results'

@@ -11,11 +11,11 @@ import type {
   ResolvedEnvironment,
   SavedWorkItem,
   WorkspaceSnapshot,
-} from '@datanaut/shared-types'
-import { DATANAUT_ADAPTER_MANIFESTS } from '@datanaut/shared-types'
+} from '@datapadplusplus/shared-types'
+import { DATAPADPLUSPLUS_ADAPTER_MANIFESTS } from '@datapadplusplus/shared-types'
 import { buildDiagnosticsReport, resolveEnvironment } from '../../app/state/helpers'
 
-const adapterManifests = DATANAUT_ADAPTER_MANIFESTS
+const adapterManifests = DATAPADPLUSPLUS_ADAPTER_MANIFESTS
 
 const timestamp = '2026-04-23T18:30:00.000Z'
 
@@ -48,7 +48,7 @@ const connections: ConnectionProfile[] = [
       secretRef: {
         id: 'secret-postgres-prod',
         provider: 'os-keyring',
-        service: 'Datanaut',
+        service: 'DataPad++',
         account: 'analytics-prod',
         label: 'Analytics prod credential',
       },
@@ -76,7 +76,7 @@ const connections: ConnectionProfile[] = [
       secretRef: {
         id: 'secret-orders-uat',
         provider: 'os-keyring',
-        service: 'Datanaut',
+        service: 'DataPad++',
         account: 'orders-uat',
         label: 'Orders UAT credential',
       },
@@ -104,7 +104,7 @@ const connections: ConnectionProfile[] = [
       secretRef: {
         id: 'secret-mongo-dev',
         provider: 'os-keyring',
-        service: 'Datanaut',
+        service: 'DataPad++',
         account: 'catalog-dev',
         label: 'Catalog dev credential',
       },
@@ -132,7 +132,7 @@ const connections: ConnectionProfile[] = [
       secretRef: {
         id: 'secret-mysql-dev',
         provider: 'os-keyring',
-        service: 'Datanaut',
+        service: 'DataPad++',
         account: 'commerce-dev',
         label: 'Commerce dev credential',
       },
@@ -175,7 +175,7 @@ const connections: ConnectionProfile[] = [
       secretRef: {
         id: 'secret-redis-prod',
         provider: 'os-keyring',
-        service: 'Datanaut',
+        service: 'DataPad++',
         account: 'redis-prod',
         label: 'Redis prod credential',
       },
@@ -193,12 +193,12 @@ const environments: EnvironmentProfile[] = [
     risk: 'low',
     variables: {
       DB_HOST: 'analytics-dev.internal',
-      DB_NAME: 'datanaut_dev',
+      DB_NAME: 'datapadplusplus_dev',
       USERNAME: 'developer',
       MONGO_HOST: 'catalog-dev.internal',
       MYSQL_HOST: 'commerce-dev.internal',
       SQLITE_PATH:
-        'C:\\Users\\gmont\\source\\repos\\Datanaut\\tests\\fixtures\\sqlite\\datanaut.db',
+        'C:\\Users\\gmont\\source\\repos\\DataPad++\\tests\\fixtures\\sqlite\\datapadplusplus.db',
     },
     sensitiveKeys: [],
     requiresConfirmation: false,
@@ -232,7 +232,7 @@ const environments: EnvironmentProfile[] = [
     variables: {
       DB_HOST: 'analytics-prod.internal',
       REDIS_HOST: 'session-prod.internal',
-      PASSWORD_REF: 'keyring://datanaut/prod',
+      PASSWORD_REF: 'keyring://datapadplusplus/prod',
     },
     sensitiveKeys: ['PASSWORD_REF'],
     requiresConfirmation: true,

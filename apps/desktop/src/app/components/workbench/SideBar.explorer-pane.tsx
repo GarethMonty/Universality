@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react'
-import type { ConnectionProfile, ExplorerNode, ScopedQueryTarget } from '@datanaut/shared-types'
+import type { ConnectionProfile, ExplorerNode, ScopedQueryTarget } from '@datapadplusplus/shared-types'
 import {
   ChevronDownIcon,
   ChevronRightIcon,

@@ -3,7 +3,7 @@ import type {
   ConnectionProfile,
   DataEditExecutionRequest,
   DataEditExecutionResponse,
-} from '@datanaut/shared-types'
+} from '@datapadplusplus/shared-types'
 import type { DocumentEditContext } from './document-edit-context'
 import {
   buildDataGridCellEditRequest,
@@ -168,7 +168,7 @@ export function useDataGridEditing({
       })
 
       if (!request || !onExecuteDataEdit) {
-        setStatusMessage('Insert unavailable; Datanaut needs a table target and at least one value.')
+        setStatusMessage('Insert unavailable; DataPad++ needs a table target and at least one value.')
         return false
       }
 
@@ -219,7 +219,7 @@ export function useDataGridEditing({
       })
 
       if (!request || !onExecuteDataEdit) {
-        setStatusMessage('Delete unavailable; Datanaut could not identify a complete primary key.')
+        setStatusMessage('Delete unavailable; DataPad++ could not identify a complete primary key.')
         return false
       }
 

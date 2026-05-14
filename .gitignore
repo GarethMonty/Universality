@@ -6,6 +6,7 @@ Thumbs.db
 
 # Local workspace/debug data
 .vscode/ui-dev.log
+.datapadplusplus/
 .datanaut/
 *.log
 *.trace
@@ -29,6 +30,7 @@ apps/desktop/src-tauri/target-*/
 apps/desktop/src-tauri/gen/
 
 packages/*/dist/
+tests/fixtures/sqlite/datapadplusplus.sqlite3
 tests/fixtures/sqlite/datanaut.sqlite3
 tests/fixtures/.generated.env
 *.sqlite-wal

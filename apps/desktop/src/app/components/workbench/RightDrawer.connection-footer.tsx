@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react'
 import type {
   ConnectionProfile,
   ConnectionTestResult,
-} from '@datanaut/shared-types'
+} from '@datapadplusplus/shared-types'
 
 interface ConnectionFooterProps {
   connectionTest?: ConnectionTestResult

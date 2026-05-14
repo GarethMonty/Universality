@@ -32,7 +32,7 @@ import type {
   UpdateQueryBuilderStateRequest,
   UpdateUiStateRequest,
   WorkspaceSnapshot,
-} from '@datanaut/shared-types'
+} from '@datapadplusplus/shared-types'
 
 export type LoadStatus = 'booting' | 'ready' | 'error'
 export type RemoteStatus = 'idle' | 'loading' | 'ready'

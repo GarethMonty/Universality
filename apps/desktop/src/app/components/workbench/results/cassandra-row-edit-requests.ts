@@ -1,7 +1,7 @@
 import type {
   ConnectionProfile,
   DataEditExecutionRequest,
-} from '@datanaut/shared-types'
+} from '@datapadplusplus/shared-types'
 import type { DocumentEditContext } from './document-edit-context'
 import { valueTypeName } from './document-edit-requests'
 import { coerceSqlCellValue } from './table-edit-requests'

@@ -1,17 +1,21 @@
-# Datanaut Release Checklist
+# DataPad++ Release Checklist
 
-Datanaut desktop releases are created from GitHub Actions with a version input. The workflow updates every release version file, commits that release bump, creates or reuses `app-vX.Y.Z` at the release commit, builds platform bundles, and uploads artifacts to a draft GitHub Release.
+DataPad++ desktop releases are created from GitHub Actions with a version input. The workflow updates every release version file, commits that release bump, creates or reuses `app-vX.Y.Z` at the release commit, builds platform bundles, and uploads artifacts to a draft GitHub Release.
 
 ## Before Running Release
 
 - Choose the next semantic version, for example `0.1.1` or `0.2.0-beta.1`.
 - Optionally preview the version bump locally with `npm run release:bump -- <version>` on a throwaway branch.
 - Run `npm run release:test`.
+- Run `npm run ci:workflow:test` if the release workflow changed.
 - Run `npm run check:all`.
 - Confirm CI is green on the branch you will release from.
 - Confirm there is no existing published release for `app-v<version>`.
+- Confirm the repository remote points at `https://github.com/FullMontyDevelopment/DataPadPlusPlus.git` when releasing from the official repository.
 
-## Required GitHub Secrets
+## Production Signing Secrets
+
+The release workflow can create unsigned draft artifacts for internal smoke testing. Public production releases should configure signing and notarization first.
 
 Updater artifact signing:
 
@@ -35,10 +39,12 @@ Windows Authenticode signing is not configured yet. Before a public stable Windo
 2. Run the workflow manually with the exact semantic version, for example `0.1.0` or `0.2.0-beta.1`.
 3. Wait for the workflow to commit `chore: release v<version>` and create `app-v<version>`.
 4. Wait for all platform builds to finish.
-5. Open the draft GitHub Release named `Datanaut v<version>`.
+5. Open the draft GitHub Release named `DataPad++ v<version>`.
 6. Confirm release assets exist for Windows, Linux, macOS Intel, and macOS Apple Silicon where each platform build succeeded.
 7. Download representative installers and smoke-test launch.
 8. Publish the draft release only after smoke tests pass.
+
+The release workflow owns version-file updates. Do not pre-edit every version file just to make a release unless you are intentionally preparing or repairing release metadata.
 
 ## Smoke Tests
 
@@ -56,4 +62,5 @@ Windows Authenticode signing is not configured yet. Before a public stable Windo
 - The release workflow may commit version bumps, but the tag must point at source files with the release version.
 - Add in-app updater configuration and updater UI in a later pass.
 - Add Windows code signing before broad public distribution.
-- Treat missing signing/notarization secrets as a release blocker for production channels, even if unsigned local testing artifacts can still be useful.
+- Treat missing signing/notarization secrets as a release blocker for production channels, even if unsigned draft testing artifacts can still be useful.
+- Keep CI dependency-free by default. Docker fixtures, live cloud checks, and desktop WebDriver smoke tests are local/manual validation unless a separate opt-in workflow is added.

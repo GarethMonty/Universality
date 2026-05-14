@@ -133,11 +133,11 @@ export function readReleaseVersions(repoRoot = process.cwd()) {
     },
     {
       name: 'desktop Cargo.lock',
-      path: 'apps/desktop/src-tauri/Cargo.lock#datanaut-desktop',
+      path: 'apps/desktop/src-tauri/Cargo.lock#datapadplusplus-desktop',
       version: readCargoLockPackageVersion(
         repoRoot,
         'apps/desktop/src-tauri/Cargo.lock',
-        'datanaut-desktop'
+        'datapadplusplus-desktop'
       )
     },
     {

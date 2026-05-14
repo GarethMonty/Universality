@@ -1,4 +1,4 @@
-import type { ResultPageRequest, ResultPageResponse, StructureRequest, StructureResponse, WorkspaceSnapshot } from '@datanaut/shared-types'
+import type { ResultPageRequest, ResultPageResponse, StructureRequest, StructureResponse, WorkspaceSnapshot } from '@datapadplusplus/shared-types'
 import { findConnection } from './browser-store'
 
 export function createStructureResponseLocally(

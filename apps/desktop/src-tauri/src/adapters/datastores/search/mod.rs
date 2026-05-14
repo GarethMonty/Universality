@@ -204,7 +204,7 @@ fn search_cancel_result(
         ok: false,
         supported: false,
         message: format!(
-            "{} HTTP searches do not support cancelling execution {} from Datanaut in this milestone.",
+            "{} HTTP searches do not support cancelling execution {} from DataPad++ in this milestone.",
             engine.label, request.execution_id
         ),
     }

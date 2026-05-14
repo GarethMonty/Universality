@@ -1,4 +1,4 @@
-import type { MongoFindFilterGroup } from '@datanaut/shared-types'
+import type { MongoFindFilterGroup } from '@datapadplusplus/shared-types'
 
 export const DEFAULT_FILTER_GROUP_ID = 'filter-group-default'
 

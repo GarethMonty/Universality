@@ -3,7 +3,7 @@ import type {
   DataEditChange,
   DataEditExecutionRequest,
   DataEditKind,
-} from '@datanaut/shared-types'
+} from '@datapadplusplus/shared-types'
 import type { DocumentEditContext } from './document-edit-context'
 import type { DocumentGridRow } from './document-grid-model'
 

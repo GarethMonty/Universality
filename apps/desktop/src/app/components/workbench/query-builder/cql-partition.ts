@@ -4,7 +4,7 @@ import type {
   CqlConditionRow,
   CqlPartitionBuilderState,
   QueryBuilderState,
-} from '@datanaut/shared-types'
+} from '@datapadplusplus/shared-types'
 
 const OPERATORS: Record<CqlConditionOperator, string> = {
   eq: '=',

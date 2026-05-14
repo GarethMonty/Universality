@@ -6,9 +6,23 @@ This report captures the current architecture risks found while hardening the da
 
 ## Executive Summary
 
-Datanaut is moving quickly from a small Tauri workbench into a broad datastore product. The main architectural risk is concentration: large files now carry too many responsibilities, especially the Rust adapter module and the React workbench shell. This makes new engines easy to add in the short term, but expensive to validate and risky to refactor later.
+DataPad++ is moving quickly from a small Tauri workbench into a broad datastore product. The main architectural risk is concentration: large files now carry too many responsibilities, especially the Rust adapter module and the React workbench shell. This makes new engines easy to add in the short term, but expensive to validate and risky to refactor later.
 
 The most urgent backend issue was a duplicate TimescaleDB implementation: an inherent `impl TimescaleAdapter` coexisted with the trait implementation, which allowed manifest calls and runtime adapter behavior to disagree. That has been removed, and the contract tests now check beta preview-only behavior for risky operations.
+
+## 2026-05-14 Status Update
+
+Since the original investigation, the product has been renamed to DataPad++, the public docs were refreshed, and the feature surface has grown materially:
+
+- connection creation is draft-first and explicit save is required
+- query tabs are opened explicitly from context menus or tab actions
+- connection selection no longer implies query creation or connection editing
+- visual query builders exist for MongoDB, SQL SELECT, DynamoDB, Cassandra, and search Query DSL surfaces
+- result views now include richer table/document renderers, document-only paging, non-document virtualization, query history, runtime footer, and safe inline edit surfaces where adapters support them
+- Docker fixtures now use DataPad++ naming, generated port fallbacks, profile-based services, and deterministic seed data
+- release automation can bump checked-in version files, create `app-vX.Y.Z`, and publish draft Tauri artifacts
+
+The architectural recommendation remains the same: split by durable product and datastore boundaries when it improves ownership, but avoid making files smaller purely for line-count compliance.
 
 ## Current Hotspots
 

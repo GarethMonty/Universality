@@ -81,7 +81,7 @@ impl DatastoreAdapter for BigQueryAdapter {
             ok: false,
             supported: false,
             message: format!(
-                "BigQuery job/query request {} cannot be cancelled by Datanaut after dispatch.",
+                "BigQuery job/query request {} cannot be cancelled by DataPad++ after dispatch.",
                 request.execution_id
             ),
         })

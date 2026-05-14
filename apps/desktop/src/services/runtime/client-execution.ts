@@ -1,4 +1,4 @@
-import type { ExecutionRequest, ExecutionResponse, LocalDatabaseCreateRequest, LocalDatabaseCreateResult, LocalDatabasePickRequest, LocalDatabasePickResult, ResultPageRequest, ResultPageResponse } from '@datanaut/shared-types'
+import type { ExecutionRequest, ExecutionResponse, LocalDatabaseCreateRequest, LocalDatabaseCreateResult, LocalDatabasePickRequest, LocalDatabasePickResult, ResultPageRequest, ResultPageResponse } from '@datapadplusplus/shared-types'
 import { applyExecutionRequestLocally } from './browser-execution'
 import { fetchResultPageLocally } from './browser-structure'
 import { findConnection, findTab, loadBrowserSnapshot, saveBrowserSnapshot } from './browser-store'
@@ -65,13 +65,13 @@ export const clientExecution = {
     const filename =
       request.purpose === 'create'
         ? undefined
-        : `datanaut-preview-existing.${extension}`
+        : `datapadplusplus-preview-existing.${extension}`
 
     return {
       canceled: false,
       path: filename
-        ? `C:\\Users\\gmont\\Datanaut\\${filename}`
-        : 'C:\\Users\\gmont\\Datanaut',
+        ? `C:\\Users\\gmont\\DataPad++\\${filename}`
+        : 'C:\\Users\\gmont\\DataPad++',
     }
   },
 

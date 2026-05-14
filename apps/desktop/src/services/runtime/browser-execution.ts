@@ -1,4 +1,4 @@
-import type { ExecutionRequest, ExecutionResponse, WorkspaceSnapshot } from '@datanaut/shared-types'
+import type { ExecutionRequest, ExecutionResponse, WorkspaceSnapshot } from '@datapadplusplus/shared-types'
 import { createId, evaluateGuardrails, resolveEnvironment, simulateExecution } from '../../app/state/helpers'
 import { cloneSnapshot, confirmationGuardrailId, findConnection, findEnvironment, findTab } from './browser-store'
 

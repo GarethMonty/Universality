@@ -9,7 +9,7 @@ import type {
   OperationManifestResponse,
   OperationPlanRequest,
   OperationPlanResponse,
-} from '@datanaut/shared-types'
+} from '@datapadplusplus/shared-types'
 import { SettingsIcon } from './icons'
 import { DrawerHeader } from './RightDrawer.primitives'
 

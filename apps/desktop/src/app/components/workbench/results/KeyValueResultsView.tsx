@@ -3,7 +3,7 @@ import type {
   ConnectionProfile,
   DataEditExecutionRequest,
   DataEditExecutionResponse,
-} from '@datanaut/shared-types'
+} from '@datapadplusplus/shared-types'
 import type { DocumentEditContext } from './document-edit-context'
 import {
   KeyValueAddPanel,

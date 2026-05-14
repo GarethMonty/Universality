@@ -5,7 +5,7 @@ import type {
   ConnectionProfile,
   EnvironmentProfile,
   ScopedQueryTarget,
-} from '@datanaut/shared-types'
+} from '@datapadplusplus/shared-types'
 import {
   ChevronDownIcon,
   ChevronRightIcon,

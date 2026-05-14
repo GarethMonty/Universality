@@ -184,9 +184,9 @@ jobs:
         with:
           projectPath: apps/desktop
           tagName: app-v${{ inputs.version }}
-          releaseName: Datanaut v${{ inputs.version }}
+          releaseName: DataPad++ v${{ inputs.version }}
           releaseBody: |
-            Desktop release artifacts for Datanaut.
+            Desktop release artifacts for DataPad++.
 
             This release is created as a draft for manual installer smoke testing before publication.
             Release checklist: docs/release-checklist.md

@@ -115,7 +115,7 @@ fn test_connection(id: &str, name: &str, engine: &str, family: &str) -> Connecti
         family: family.into(),
         host: "localhost".into(),
         port: Some(5432),
-        database: Some("datanaut".into()),
+        database: Some("datapadplusplus".into()),
         connection_string: None,
         connection_mode: Some("native".into()),
         environment_ids: vec!["env-dev".into()],

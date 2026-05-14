@@ -1,4 +1,4 @@
-import type { ClosedQueryTabSnapshot, SavedWorkItem } from '@datanaut/shared-types'
+import type { ClosedQueryTabSnapshot, SavedWorkItem } from '@datapadplusplus/shared-types'
 import {
   CloseIcon,
   DatabaseIcon,

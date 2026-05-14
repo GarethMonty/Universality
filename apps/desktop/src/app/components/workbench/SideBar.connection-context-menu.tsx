@@ -1,4 +1,4 @@
-import type { ConnectionProfile } from '@datanaut/shared-types'
+import type { ConnectionProfile } from '@datapadplusplus/shared-types'
 import {
   CopyIcon,
   ExplorerIcon,

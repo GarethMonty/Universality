@@ -1,5 +1,5 @@
-import type { ConnectionProfile, QueryTabState } from '@datanaut/shared-types'
-import { datastoreBacklogByEngine } from '@datanaut/shared-types'
+import type { ConnectionProfile, QueryTabState } from '@datapadplusplus/shared-types'
+import { datastoreBacklogByEngine } from '@datapadplusplus/shared-types'
 
 export function createId(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`

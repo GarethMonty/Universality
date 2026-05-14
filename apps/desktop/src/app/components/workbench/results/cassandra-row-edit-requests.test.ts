@@ -1,4 +1,4 @@
-import type { ConnectionProfile } from '@datanaut/shared-types'
+import type { ConnectionProfile } from '@datapadplusplus/shared-types'
 import { describe, expect, it } from 'vitest'
 import {
   buildCassandraRowCellEditRequest,
@@ -148,7 +148,7 @@ function cassandraConnection(): ConnectionProfile {
       secretRef: {
         id: 'secret-cassandra',
         provider: 'manual',
-        service: 'Datanaut',
+        service: 'DataPad++',
         account: 'conn-cassandra',
         label: 'Cassandra credential',
       },

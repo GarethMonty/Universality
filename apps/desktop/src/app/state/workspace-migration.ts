@@ -1,5 +1,5 @@
-import type { UiState, WorkspaceSnapshot } from '@datanaut/shared-types'
-import { DATANAUT_ADAPTER_MANIFESTS } from '@datanaut/shared-types'
+import type { UiState, WorkspaceSnapshot } from '@datapadplusplus/shared-types'
+import { DATAPADPLUSPLUS_ADAPTER_MANIFESTS } from '@datapadplusplus/shared-types'
 
 const MIN_BOTTOM_PANEL_HEIGHT = 120
 const DEFAULT_BOTTOM_PANEL_HEIGHT = 260
@@ -172,7 +172,7 @@ export function normalizeUiState(snapshot: WorkspaceSnapshot): UiState {
 export function migrateWorkspaceSnapshot(snapshot: WorkspaceSnapshot): WorkspaceSnapshot {
   const next = JSON.parse(JSON.stringify(snapshot)) as WorkspaceSnapshot
   next.closedTabs ??= []
-  next.adapterManifests = DATANAUT_ADAPTER_MANIFESTS
+  next.adapterManifests = DATAPADPLUSPLUS_ADAPTER_MANIFESTS
   stripDemoRecords(next)
   next.schemaVersion = WORKSPACE_SCHEMA_VERSION
   next.ui = normalizeUiState(next)

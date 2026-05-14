@@ -9,7 +9,7 @@ import {
   useRef,
 } from 'react'
 import type { ReactNode } from 'react'
-import type { BootstrapPayload } from '@datanaut/shared-types'
+import type { BootstrapPayload } from '@datapadplusplus/shared-types'
 import { desktopClient } from '../../services/runtime/client'
 import { useAppActions } from './app-actions'
 import { initialState, reducer } from './app-state-reducer'

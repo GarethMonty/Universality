@@ -11,34 +11,34 @@ import { bumpReleaseVersion } from './bump-release-version.mjs'
 import { validateReleaseWorkflow } from './validate-release-workflow.mjs'
 
 function makeRepo(version = '1.2.3') {
-  const root = mkdtempSync(join(tmpdir(), 'datanaut-release-'))
+  const root = mkdtempSync(join(tmpdir(), 'datapadplusplus-release-'))
   mkdirSync(join(root, 'apps', 'desktop', 'src-tauri'), { recursive: true })
   mkdirSync(join(root, 'packages', 'shared-types'), { recursive: true })
 
   writeFileSync(
     join(root, 'package.json'),
-    JSON.stringify({ name: 'datanaut', version }, null, 2)
+    JSON.stringify({ name: 'datapadplusplus', version }, null, 2)
   )
   writeFileSync(
     join(root, 'apps', 'desktop', 'package.json'),
-    JSON.stringify({ name: '@datanaut/desktop', version }, null, 2)
+    JSON.stringify({ name: '@datapadplusplus/desktop', version }, null, 2)
   )
   writeFileSync(
     join(root, 'packages', 'shared-types', 'package.json'),
-    JSON.stringify({ name: '@datanaut/shared-types', version }, null, 2)
+    JSON.stringify({ name: '@datapadplusplus/shared-types', version }, null, 2)
   )
   writeFileSync(
     join(root, 'package-lock.json'),
     JSON.stringify(
       {
-        name: 'datanaut',
+        name: 'datapadplusplus',
         version,
         lockfileVersion: 3,
         requires: true,
         packages: {
-          '': { name: 'datanaut', version, workspaces: ['apps/*', 'packages/*'] },
-          'apps/desktop': { name: '@datanaut/desktop', version },
-          'packages/shared-types': { name: '@datanaut/shared-types', version }
+          '': { name: 'datapadplusplus', version, workspaces: ['apps/*', 'packages/*'] },
+          'apps/desktop': { name: '@datapadplusplus/desktop', version },
+          'packages/shared-types': { name: '@datapadplusplus/shared-types', version }
         }
       },
       null,
@@ -47,15 +47,15 @@ function makeRepo(version = '1.2.3') {
   )
   writeFileSync(
     join(root, 'apps', 'desktop', 'src-tauri', 'Cargo.toml'),
-    `[package]\nname = "datanaut-desktop"\nversion = "${version}"\nedition = "2021"\n`
+    `[package]\nname = "datapadplusplus-desktop"\nversion = "${version}"\nedition = "2021"\n`
   )
   writeFileSync(
     join(root, 'apps', 'desktop', 'src-tauri', 'Cargo.lock'),
-    `[[package]]\nname = "datanaut-desktop"\nversion = "${version}"\ndependencies = []\n`
+    `[[package]]\nname = "datapadplusplus-desktop"\nversion = "${version}"\ndependencies = []\n`
   )
   writeFileSync(
     join(root, 'apps', 'desktop', 'src-tauri', 'tauri.conf.json'),
-    JSON.stringify({ productName: 'Datanaut', version }, null, 2)
+    JSON.stringify({ productName: 'DataPad++', version }, null, 2)
   )
 
   return root

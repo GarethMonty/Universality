@@ -12,7 +12,7 @@ test('current CI workflow only runs dependency-free checks', () => {
 })
 
 test('CI workflow validator rejects fixture and E2E jobs', () => {
-  const root = mkdtempSync(join(tmpdir(), 'datanaut-ci-'))
+  const root = mkdtempSync(join(tmpdir(), 'datapadplusplus-ci-'))
   mkdirSync(join(root, '.github', 'workflows'), { recursive: true })
   writeFileSync(
     join(root, '.github', 'workflows', 'ci.yml'),
@@ -29,7 +29,7 @@ test('CI workflow validator rejects fixture and E2E jobs', () => {
       '    name: Unit and dependency-free integration tests',
       '    runs-on: ubuntu-22.04',
       '    env:',
-      "      DATANAUT_FIXTURE_RUN: '0'",
+      "      DATAPADPLUSPLUS_FIXTURE_RUN: '0'",
       '    steps:',
       '      - run: npm run ci:test',
       '      - run: docker compose up -d --wait',

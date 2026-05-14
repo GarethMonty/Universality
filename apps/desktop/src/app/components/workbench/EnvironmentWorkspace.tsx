@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { EnvironmentProfile } from '@datanaut/shared-types'
+import type { EnvironmentProfile } from '@datapadplusplus/shared-types'
 import { normalizeColor, resolveEnvironmentPreview } from './EnvironmentWorkspace.helpers'
 
 export function EnvironmentWorkspace({

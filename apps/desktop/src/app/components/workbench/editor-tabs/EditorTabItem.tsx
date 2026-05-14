@@ -8,7 +8,7 @@ import type {
   ConnectionProfile,
   EnvironmentProfile,
   QueryTabState,
-} from '@datanaut/shared-types'
+} from '@datapadplusplus/shared-types'
 import { CloseIcon } from '../icons'
 import { colorWithAlpha, normalizeTabDisplayTitle } from './tab-title'
 

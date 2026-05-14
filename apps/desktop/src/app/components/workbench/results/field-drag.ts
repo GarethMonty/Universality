@@ -1,7 +1,7 @@
 import type { DragEvent } from 'react'
 
-export const FIELD_DRAG_MIME = 'application/x-datanaut-field'
-export const FIELD_DRAG_PAYLOAD_MIME = 'application/x-datanaut-field-payload'
+export const FIELD_DRAG_MIME = 'application/x-datapadplusplus-field'
+export const FIELD_DRAG_PAYLOAD_MIME = 'application/x-datapadplusplus-field-payload'
 export interface FieldDragPayload {
   fieldPath: string
   value?: unknown

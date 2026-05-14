@@ -2,8 +2,8 @@ import { strict as assert } from 'node:assert'
 import { existsSync, readFileSync } from 'node:fs'
 
 const sqliteFixture =
-  process.env.DATANAUT_SQLITE_FIXTURE ??
-  'tests/fixtures/sqlite/datanaut.sqlite3'
+  process.env.DATAPADPLUSPLUS_SQLITE_FIXTURE ??
+  'tests/fixtures/sqlite/datapadplusplus.sqlite3'
 const generatedFixtureEnv = readGeneratedFixtureEnv()
 
 function readGeneratedFixtureEnv() {
@@ -27,7 +27,7 @@ function fixturePort(envKey, defaultPort) {
 }
 
 function fixtureProfileEnabled(profile) {
-  return (process.env.DATANAUT_FIXTURE_PROFILE ?? '')
+  return (process.env.DATAPADPLUSPLUS_FIXTURE_PROFILE ?? '')
     .split(',')
     .map((item) => item.trim())
     .some((item) => item === 'all' || item === profile)
@@ -38,30 +38,30 @@ const CORE_CONNECTIONS = [
     name: 'Fixture PostgreSQL',
     engine: 'postgresql',
     server: '127.0.0.1',
-    port: fixturePort('DATANAUT_POSTGRES_PORT', '54329'),
-    database: 'datanaut',
-    username: 'datanaut',
-    secret: 'datanaut',
+    port: fixturePort('DATAPADPLUSPLUS_POSTGRES_PORT', '54329'),
+    database: 'datapadplusplus',
+    username: 'datapadplusplus',
+    secret: 'datapadplusplus',
     expectedResult: 'row(s) returned from Fixture PostgreSQL',
   },
   {
     name: 'Fixture SQL Server',
     engine: 'sqlserver',
     server: '127.0.0.1',
-    port: fixturePort('DATANAUT_SQLSERVER_PORT', '14333'),
-    database: 'datanaut',
+    port: fixturePort('DATAPADPLUSPLUS_SQLSERVER_PORT', '14333'),
+    database: 'datapadplusplus',
     username: 'sa',
-    secret: 'Datanaut_pwd_123',
+    secret: 'DataPadPlusPlus_pwd_123',
     expectedResult: 'row(s) returned from Fixture SQL Server',
   },
   {
     name: 'Fixture MySQL',
     engine: 'mysql',
     server: '127.0.0.1',
-    port: fixturePort('DATANAUT_MYSQL_PORT', '33060'),
+    port: fixturePort('DATAPADPLUSPLUS_MYSQL_PORT', '33060'),
     database: 'commerce',
-    username: 'datanaut',
-    secret: 'datanaut',
+    username: 'datapadplusplus',
+    secret: 'datapadplusplus',
     expectedResult: 'row(s) returned from Fixture MySQL',
   },
   {
@@ -77,17 +77,17 @@ const CORE_CONNECTIONS = [
     name: 'Fixture MongoDB',
     engine: 'mongodb',
     server: '127.0.0.1',
-    port: fixturePort('DATANAUT_MONGODB_PORT', '27018'),
+    port: fixturePort('DATAPADPLUSPLUS_MONGODB_PORT', '27018'),
     database: 'catalog',
-    username: 'datanaut',
-    secret: 'datanaut',
+    username: 'datapadplusplus',
+    secret: 'datapadplusplus',
     expectedResult: 'document(s) returned from Fixture MongoDB',
   },
   {
     name: 'Fixture Redis',
     engine: 'redis',
     server: '127.0.0.1',
-    port: fixturePort('DATANAUT_REDIS_PORT', '6380'),
+    port: fixturePort('DATAPADPLUSPLUS_REDIS_PORT', '6380'),
     database: '',
     username: '',
     secret: '',
@@ -101,7 +101,7 @@ const PROFILE_CONNECTIONS = [
     name: 'Fixture Valkey',
     engine: 'valkey',
     server: '127.0.0.1',
-    port: fixturePort('DATANAUT_VALKEY_PORT', '6381'),
+    port: fixturePort('DATAPADPLUSPLUS_VALKEY_PORT', '6381'),
     database: '0',
     username: '',
     secret: '',
@@ -112,7 +112,7 @@ const PROFILE_CONNECTIONS = [
     name: 'Fixture Memcached',
     engine: 'memcached',
     server: '127.0.0.1',
-    port: fixturePort('DATANAUT_MEMCACHED_PORT', '11212'),
+    port: fixturePort('DATAPADPLUSPLUS_MEMCACHED_PORT', '11212'),
     database: '',
     username: '',
     secret: '',
@@ -123,10 +123,10 @@ const PROFILE_CONNECTIONS = [
     name: 'Fixture MariaDB',
     engine: 'mariadb',
     server: '127.0.0.1',
-    port: fixturePort('DATANAUT_MARIADB_PORT', '33061'),
+    port: fixturePort('DATAPADPLUSPLUS_MARIADB_PORT', '33061'),
     database: 'commerce',
-    username: 'datanaut',
-    secret: 'datanaut',
+    username: 'datapadplusplus',
+    secret: 'datapadplusplus',
     expectedResult: 'row(s) returned from Fixture MariaDB',
   },
   {
@@ -134,8 +134,8 @@ const PROFILE_CONNECTIONS = [
     name: 'Fixture CockroachDB',
     engine: 'cockroachdb',
     server: '127.0.0.1',
-    port: fixturePort('DATANAUT_COCKROACH_PORT', '26257'),
-    database: 'datanaut',
+    port: fixturePort('DATAPADPLUSPLUS_COCKROACH_PORT', '26257'),
+    database: 'datapadplusplus',
     username: 'root',
     secret: '',
     expectedResult: 'row(s) returned from Fixture CockroachDB',
@@ -145,10 +145,10 @@ const PROFILE_CONNECTIONS = [
     name: 'Fixture TimescaleDB',
     engine: 'timescaledb',
     server: '127.0.0.1',
-    port: fixturePort('DATANAUT_TIMESCALE_PORT', '54330'),
+    port: fixturePort('DATAPADPLUSPLUS_TIMESCALE_PORT', '54330'),
     database: 'metrics',
-    username: 'datanaut',
-    secret: 'datanaut',
+    username: 'datapadplusplus',
+    secret: 'datapadplusplus',
     expectedResult: 'row(s) returned from Fixture TimescaleDB',
   },
   {
@@ -156,10 +156,10 @@ const PROFILE_CONNECTIONS = [
     name: 'Fixture ClickHouse',
     engine: 'clickhouse',
     server: '127.0.0.1',
-    port: fixturePort('DATANAUT_CLICKHOUSE_HTTP_PORT', '8124'),
+    port: fixturePort('DATAPADPLUSPLUS_CLICKHOUSE_HTTP_PORT', '8124'),
     database: 'analytics',
-    username: 'datanaut',
-    secret: 'datanaut',
+    username: 'datapadplusplus',
+    secret: 'datapadplusplus',
     expectedResult: 'ClickHouse query returned',
   },
   {
@@ -167,7 +167,7 @@ const PROFILE_CONNECTIONS = [
     name: 'Fixture Prometheus',
     engine: 'prometheus',
     server: '127.0.0.1',
-    port: fixturePort('DATANAUT_PROMETHEUS_PORT', '9091'),
+    port: fixturePort('DATAPADPLUSPLUS_PROMETHEUS_PORT', '9091'),
     database: '',
     username: '',
     secret: '',
@@ -178,7 +178,7 @@ const PROFILE_CONNECTIONS = [
     name: 'Fixture OpenSearch',
     engine: 'opensearch',
     server: '127.0.0.1',
-    port: fixturePort('DATANAUT_OPENSEARCH_PORT', '9201'),
+    port: fixturePort('DATAPADPLUSPLUS_OPENSEARCH_PORT', '9201'),
     database: '',
     username: '',
     secret: '',
@@ -189,7 +189,7 @@ const PROFILE_CONNECTIONS = [
     name: 'Fixture Elasticsearch',
     engine: 'elasticsearch',
     server: '127.0.0.1',
-    port: fixturePort('DATANAUT_ELASTICSEARCH_PORT', '9202'),
+    port: fixturePort('DATAPADPLUSPLUS_ELASTICSEARCH_PORT', '9202'),
     database: '',
     username: '',
     secret: '',
@@ -200,10 +200,10 @@ const PROFILE_CONNECTIONS = [
     name: 'Fixture Neo4j',
     engine: 'neo4j',
     server: '127.0.0.1',
-    port: fixturePort('DATANAUT_NEO4J_HTTP_PORT', '7475'),
+    port: fixturePort('DATAPADPLUSPLUS_NEO4J_HTTP_PORT', '7475'),
     database: 'neo4j',
     username: 'neo4j',
-    secret: 'datanaut',
+    secret: 'datapadplusplus',
     expectedResult: 'Neo4j Cypher returned',
   },
 ]
@@ -421,7 +421,7 @@ async function exportWorkspace() {
   return browser.execute(() => document.querySelector('.drawer-code code')?.textContent ?? '')
 }
 
-describe('Datanaut Tauri desktop fixtures', () => {
+describe('DataPad++ Tauri desktop fixtures', () => {
   it('starts with a fixture-seeded workspace instead of demo seed data', async () => {
     for (const connection of CORE_CONNECTIONS) {
       await waitForText(connection.name)
@@ -448,7 +448,7 @@ describe('Datanaut Tauri desktop fixtures', () => {
     await waitForText('Saved Queries')
 
     const encryptedPayload = await exportWorkspace()
-    assert.equal(encryptedPayload.includes('Datanaut_pwd_123'), false)
+    assert.equal(encryptedPayload.includes('DataPadPlusPlus_pwd_123'), false)
     assert.equal(encryptedPayload.includes('fixture-token'), false)
     assert.equal(encryptedPayload.includes('"secret"'), false)
   })

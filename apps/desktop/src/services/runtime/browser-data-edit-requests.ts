@@ -1,4 +1,4 @@
-import type { ConnectionProfile, DataEditPlanRequest } from '@datanaut/shared-types'
+import type { ConnectionProfile, DataEditPlanRequest } from '@datapadplusplus/shared-types'
 
 export function browserDataEditWarnings(
   connection: ConnectionProfile,

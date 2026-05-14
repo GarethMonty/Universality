@@ -1,7 +1,7 @@
 import type {
   ConnectionProfile,
   ConnectionTestResult,
-} from '@datanaut/shared-types'
+} from '@datapadplusplus/shared-types'
 import { toUserMessage } from './app-state-selectors'
 
 interface FixtureEndpointHint {
@@ -16,30 +16,30 @@ const FIXTURE_ENDPOINTS: Partial<Record<ConnectionProfile['engine'], FixtureEndp
   postgresql: {
     label: 'PostgreSQL',
     port: 54329,
-    database: 'datanaut',
-    username: 'datanaut',
-    password: 'datanaut',
+    database: 'datapadplusplus',
+    username: 'datapadplusplus',
+    password: 'datapadplusplus',
   },
   mysql: {
     label: 'MySQL',
     port: 33060,
     database: 'commerce',
-    username: 'datanaut',
-    password: 'datanaut',
+    username: 'datapadplusplus',
+    password: 'datapadplusplus',
   },
   sqlserver: {
     label: 'SQL Server',
     port: 14333,
-    database: 'datanaut',
+    database: 'datapadplusplus',
     username: 'sa',
-    password: 'Datanaut_pwd_123',
+    password: 'DataPadPlusPlus_pwd_123',
   },
   mongodb: {
     label: 'MongoDB',
     port: 27018,
     database: 'catalog',
-    username: 'datanaut',
-    password: 'datanaut',
+    username: 'datapadplusplus',
+    password: 'datapadplusplus',
   },
   redis: {
     label: 'Redis',
@@ -80,7 +80,7 @@ export function fixtureWarningsForConnection(
 
   if (profile.port !== endpoint.port) {
     warnings.push(
-      `Datanaut Docker fixtures expose ${endpoint.label} on localhost:${endpoint.port}.`,
+      `DataPad++ Docker fixtures expose ${endpoint.label} on localhost:${endpoint.port}.`,
     )
   }
 

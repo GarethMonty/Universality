@@ -5,7 +5,7 @@ import type {
   SearchDslFilterRow,
   SearchDslQueryMode,
   SearchDslValueType,
-} from '@datanaut/shared-types'
+} from '@datapadplusplus/shared-types'
 
 export function createDefaultSearchDslBuilderState(
   index = 'products',

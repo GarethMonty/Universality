@@ -1,4 +1,4 @@
-import type { ConnectionProfile } from '@datanaut/shared-types'
+import type { ConnectionProfile } from '@datapadplusplus/shared-types'
 import { describe, expect, it } from 'vitest'
 import {
   buildKeyValueEditRequest,
@@ -23,7 +23,7 @@ const connection: ConnectionProfile = {
     secretRef: {
       id: 'secret-redis',
       provider: 'manual',
-      service: 'Datanaut',
+      service: 'DataPad++',
       account: 'conn-redis',
       label: 'Redis credential',
     },

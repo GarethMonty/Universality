@@ -1,5 +1,5 @@
-import type { ConnectionProfile, OperationManifestResponse } from '@datanaut/shared-types'
-import { datastoreBacklogByEngine } from '@datanaut/shared-types'
+import type { ConnectionProfile, OperationManifestResponse } from '@datapadplusplus/shared-types'
+import { datastoreBacklogByEngine } from '@datapadplusplus/shared-types'
 
 export function buildOperationManifestsForConnection(
   connection: ConnectionProfile,

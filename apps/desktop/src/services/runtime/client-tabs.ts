@@ -1,4 +1,4 @@
-import type { BootstrapPayload, CreateScopedQueryTabRequest, QueryTabReorderRequest, UpdateQueryBuilderStateRequest } from '@datanaut/shared-types'
+import type { BootstrapPayload, CreateScopedQueryTabRequest, QueryTabReorderRequest, UpdateQueryBuilderStateRequest } from '@datapadplusplus/shared-types'
 import { closeQueryTab, createQueryTabForConnection, createScopedQueryTabInSnapshot, renameQueryTab, reopenClosedQueryTab, reorderQueryTabsInSnapshot, upsertTab } from './browser-tabs'
 import { buildBrowserPayload, cloneSnapshot, findConnection, findTab, loadBrowserSnapshot, saveBrowserSnapshot } from './browser-store'
 import { isTauriRuntime, invokeDesktop } from './desktop-bridge'

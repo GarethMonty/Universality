@@ -8,7 +8,7 @@ import type {
   LocalDatabaseManifest,
   LocalDatabasePickRequest,
   LocalDatabasePickResult,
-} from '@datanaut/shared-types'
+} from '@datapadplusplus/shared-types'
 import { ConnectionsIcon } from './icons'
 import { ConnectionFooter } from './RightDrawer.connection-footer'
 import { ConnectionForm } from './RightDrawer.connection-form'
@@ -259,7 +259,7 @@ export function ConnectionBlade({
 
 function defaultLocalDatabaseName(manifest?: LocalDatabaseManifest) {
   const extension = manifest?.defaultExtension ?? 'db'
-  return `datanaut.${extension}`
+  return `datapadplusplus.${extension}`
 }
 
 function composeLocalDatabasePath(

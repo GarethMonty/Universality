@@ -5,8 +5,8 @@ import type {
   DataEditPlanRequest,
   DataEditPlanResponse,
   DatastoreExperienceManifest,
-} from '@datanaut/shared-types'
-import { DATANAUT_ADAPTER_MANIFESTS, datastoreBacklogByEngine } from '@datanaut/shared-types'
+} from '@datapadplusplus/shared-types'
+import { DATAPADPLUSPLUS_ADAPTER_MANIFESTS, datastoreBacklogByEngine } from '@datapadplusplus/shared-types'
 import { languageForConnection } from '../../app/state/helpers'
 import {
   browserDataEditPermission,
@@ -15,7 +15,7 @@ import {
 } from './browser-data-edit-requests'
 
 export function buildDatastoreExperiences(): DatastoreExperienceManifest[] {
-  return DATANAUT_ADAPTER_MANIFESTS.map((manifest) => {
+  return DATAPADPLUSPLUS_ADAPTER_MANIFESTS.map((manifest) => {
     const backlog = datastoreBacklogByEngine(manifest.engine)
     const family = manifest.family
 

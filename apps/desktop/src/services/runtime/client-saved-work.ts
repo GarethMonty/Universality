@@ -1,4 +1,4 @@
-import type { BootstrapPayload, SavedWorkItem } from '@datanaut/shared-types'
+import type { BootstrapPayload, SavedWorkItem } from '@datapadplusplus/shared-types'
 import { deleteSavedWork, openSavedWork, saveQueryTab, upsertSavedWork } from './browser-saved-work'
 import { buildBrowserPayload, loadBrowserSnapshot, saveBrowserSnapshot } from './browser-store'
 import { isTauriRuntime, invokeDesktop } from './desktop-bridge'

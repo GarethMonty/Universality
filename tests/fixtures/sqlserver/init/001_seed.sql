@@ -1,10 +1,10 @@
-if db_id('datanaut') is null
+if db_id('datapadplusplus') is null
 begin
-  create database datanaut;
+  create database datapadplusplus;
 end
 go
 
-use datanaut;
+use datapadplusplus;
 go
 
 if object_id('dbo.orders', 'U') is null

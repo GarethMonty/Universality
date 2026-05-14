@@ -1,4 +1,4 @@
-import type { MongoFindBuilderState } from '@datanaut/shared-types'
+import type { MongoFindBuilderState } from '@datapadplusplus/shared-types'
 import { BuilderSection } from './BuilderSection'
 import type { MongoFindSectionProps } from './MongoBuilderSection.types'
 import { rowId } from './MongoBuilderSection.types'

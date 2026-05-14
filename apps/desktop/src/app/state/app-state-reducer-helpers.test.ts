@@ -3,7 +3,7 @@ import type {
   ExplorerResponse,
   ResultPageResponse,
   ResultPayload,
-} from '@datanaut/shared-types'
+} from '@datapadplusplus/shared-types'
 import { describe, expect, it } from 'vitest'
 import { createSeedBootstrapPayload } from '../../test/fixtures/seed-workspace'
 import {

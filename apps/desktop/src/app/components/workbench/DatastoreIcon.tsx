@@ -1,6 +1,6 @@
 import type { CSSProperties, ReactNode } from 'react'
-import type { DatastoreEngine } from '@datanaut/shared-types'
-import { datastoreBacklogByEngine } from '@datanaut/shared-types'
+import type { DatastoreEngine } from '@datapadplusplus/shared-types'
+import { datastoreBacklogByEngine } from '@datapadplusplus/shared-types'
 import {
   siApachecassandra,
   siArangodb,

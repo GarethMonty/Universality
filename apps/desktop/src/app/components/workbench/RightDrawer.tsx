@@ -21,7 +21,7 @@ import type {
   OperationPlanResponse,
   RightDrawerView,
   WorkspaceSnapshot,
-} from '@datanaut/shared-types'
+} from '@datapadplusplus/shared-types'
 import { ConnectionsIcon, SettingsIcon } from './icons'
 import { ConnectionBlade } from './RightDrawer.connection-blade'
 import { DiagnosticsBlade } from './RightDrawer.diagnostics-blade'

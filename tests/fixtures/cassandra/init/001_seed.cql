@@ -1,7 +1,7 @@
-create keyspace if not exists datanaut
+create keyspace if not exists datapadplusplus
 with replication = {'class': 'SimpleStrategy', 'replication_factor': 1};
 
-use datanaut;
+use datapadplusplus;
 
 create table if not exists orders_by_account (
   account_id int,

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { CSSProperties } from 'react'
-import type { ConnectionProfile, ScopedQueryTarget } from '@datanaut/shared-types'
+import type { ConnectionProfile, ScopedQueryTarget } from '@datapadplusplus/shared-types'
 import { ChevronDownIcon, ChevronRightIcon } from './icons'
 import {
   buildConnectionObjectTree,

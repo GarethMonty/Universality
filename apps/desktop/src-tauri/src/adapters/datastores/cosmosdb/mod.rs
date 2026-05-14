@@ -81,7 +81,7 @@ impl DatastoreAdapter for CosmosDbAdapter {
             ok: false,
             supported: false,
             message: format!(
-                "Cosmos DB SQL API request {} cannot be cancelled by Datanaut after dispatch.",
+                "Cosmos DB SQL API request {} cannot be cancelled by DataPad++ after dispatch.",
                 request.execution_id
             ),
         })

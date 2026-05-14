@@ -2,7 +2,7 @@ use std::collections::{BTreeSet, HashMap};
 use std::env;
 use std::fs;
 
-use datanaut_desktop_lib::{
+use datapadplusplus_desktop_lib::{
     adapters,
     domain::{
         error::CommandError,
@@ -16,11 +16,11 @@ use serde_json::json;
 use sqlx::Executor;
 
 fn fixtures_enabled() -> bool {
-    env::var("DATANAUT_FIXTURE_RUN").unwrap_or_default() == "1"
+    env::var("DATAPADPLUSPLUS_FIXTURE_RUN").unwrap_or_default() == "1"
 }
 
 fn fixture_profile_enabled(profile: &str) -> bool {
-    let value = env::var("DATANAUT_FIXTURE_PROFILE").unwrap_or_default();
+    let value = env::var("DATAPADPLUSPLUS_FIXTURE_PROFILE").unwrap_or_default();
     value
         .split(',')
         .map(str::trim)
@@ -98,9 +98,9 @@ fn resolved_connection(engine: &str, family: &str) -> ResolvedConnectionProfile 
         family: family.into(),
         host: "127.0.0.1".into(),
         port: None,
-        database: Some("datanaut".into()),
-        username: Some("datanaut".into()),
-        password: Some("datanaut".into()),
+        database: Some("datapadplusplus".into()),
+        username: Some("datapadplusplus".into()),
+        password: Some("datapadplusplus".into()),
         connection_string: None,
         read_only: true,
     }
@@ -387,7 +387,7 @@ async fn data_edit_plans_are_guarded_and_engine_specific() -> Result<(), Command
 
     let execution = adapters::execute_data_edit(
         &connection,
-        &datanaut_desktop_lib::domain::models::DataEditExecutionRequest {
+        &datapadplusplus_desktop_lib::domain::models::DataEditExecutionRequest {
             connection_id: request.connection_id,
             environment_id: request.environment_id,
             edit_kind: request.edit_kind,
@@ -422,7 +422,7 @@ async fn sql_data_edit_plan_requires_primary_key_for_updates() -> Result<(), Com
         },
         changes: vec![DataEditChange {
             field: Some("name".into()),
-            value: Some(json!("Datanaut Labs")),
+            value: Some(json!("DataPad++ Labs")),
             value_type: Some("string".into()),
             ..Default::default()
         }],
@@ -708,15 +708,18 @@ async fn postgres_adapter_fixture_roundtrip() -> Result<(), CommandError> {
         name: "Fixture Postgres".into(),
         engine: "postgresql".into(),
         family: "sql".into(),
-        host: env_or("DATANAUT_POSTGRES_HOST", "127.0.0.1"),
+        host: env_or("DATAPADPLUSPLUS_POSTGRES_HOST", "127.0.0.1"),
         port: Some(
-            env_or("DATANAUT_POSTGRES_PORT", "54329")
+            env_or("DATAPADPLUSPLUS_POSTGRES_PORT", "54329")
                 .parse()
                 .unwrap_or(54329),
         ),
-        database: Some(env_or("DATANAUT_POSTGRES_DB", "datanaut")),
-        username: Some(env_or("DATANAUT_POSTGRES_USER", "datanaut")),
-        password: Some(env_or("DATANAUT_POSTGRES_PASSWORD", "datanaut")),
+        database: Some(env_or("DATAPADPLUSPLUS_POSTGRES_DB", "datapadplusplus")),
+        username: Some(env_or("DATAPADPLUSPLUS_POSTGRES_USER", "datapadplusplus")),
+        password: Some(env_or(
+            "DATAPADPLUSPLUS_POSTGRES_PASSWORD",
+            "datapadplusplus",
+        )),
         connection_string: None,
         read_only: false,
     };
@@ -836,15 +839,18 @@ async fn sqlserver_adapter_fixture_roundtrip() -> Result<(), CommandError> {
         name: "Fixture SQL Server".into(),
         engine: "sqlserver".into(),
         family: "sql".into(),
-        host: env_or("DATANAUT_SQLSERVER_HOST", "127.0.0.1"),
+        host: env_or("DATAPADPLUSPLUS_SQLSERVER_HOST", "127.0.0.1"),
         port: Some(
-            env_or("DATANAUT_SQLSERVER_PORT", "14333")
+            env_or("DATAPADPLUSPLUS_SQLSERVER_PORT", "14333")
                 .parse()
                 .unwrap_or(14333),
         ),
-        database: Some(env_or("DATANAUT_SQLSERVER_DB", "datanaut")),
-        username: Some(env_or("DATANAUT_SQLSERVER_USER", "sa")),
-        password: Some(env_or("DATANAUT_SQLSERVER_PASSWORD", "Datanaut_pwd_123")),
+        database: Some(env_or("DATAPADPLUSPLUS_SQLSERVER_DB", "datapadplusplus")),
+        username: Some(env_or("DATAPADPLUSPLUS_SQLSERVER_USER", "sa")),
+        password: Some(env_or(
+            "DATAPADPLUSPLUS_SQLSERVER_PASSWORD",
+            "DataPadPlusPlus_pwd_123",
+        )),
         connection_string: None,
         read_only: false,
     };
@@ -912,15 +918,15 @@ async fn mysql_adapter_fixture_roundtrip() -> Result<(), CommandError> {
         name: "Fixture MySQL".into(),
         engine: "mysql".into(),
         family: "sql".into(),
-        host: env_or("DATANAUT_MYSQL_HOST", "127.0.0.1"),
+        host: env_or("DATAPADPLUSPLUS_MYSQL_HOST", "127.0.0.1"),
         port: Some(
-            env_or("DATANAUT_MYSQL_PORT", "33060")
+            env_or("DATAPADPLUSPLUS_MYSQL_PORT", "33060")
                 .parse()
                 .unwrap_or(33060),
         ),
-        database: Some(env_or("DATANAUT_MYSQL_DB", "commerce")),
-        username: Some(env_or("DATANAUT_MYSQL_USER", "datanaut")),
-        password: Some(env_or("DATANAUT_MYSQL_PASSWORD", "datanaut")),
+        database: Some(env_or("DATAPADPLUSPLUS_MYSQL_DB", "commerce")),
+        username: Some(env_or("DATAPADPLUSPLUS_MYSQL_USER", "datapadplusplus")),
+        password: Some(env_or("DATAPADPLUSPLUS_MYSQL_PASSWORD", "datapadplusplus")),
         connection_string: None,
         read_only: false,
     };
@@ -998,7 +1004,7 @@ async fn mysql_adapter_fixture_roundtrip() -> Result<(), CommandError> {
 
 #[tokio::test]
 async fn sqlite_adapter_fixture_roundtrip() -> Result<(), CommandError> {
-    let sqlite_url = "sqlite://file:datanaut-fixture?mode=memory&cache=shared".to_string();
+    let sqlite_url = "sqlite://file:datapadplusplus-fixture?mode=memory&cache=shared".to_string();
     let pool = sqlx::sqlite::SqlitePoolOptions::new()
         .max_connections(1)
         .connect(&sqlite_url)
@@ -1021,9 +1027,9 @@ async fn sqlite_adapter_fixture_roundtrip() -> Result<(), CommandError> {
         name: "Fixture SQLite".into(),
         engine: "sqlite".into(),
         family: "sql".into(),
-        host: "file:datanaut-fixture".into(),
+        host: "file:datapadplusplus-fixture".into(),
         port: None,
-        database: Some("file:datanaut-fixture".into()),
+        database: Some("file:datapadplusplus-fixture".into()),
         username: None,
         password: None,
         connection_string: Some(sqlite_url),
@@ -1120,7 +1126,7 @@ async fn sqlite_adapter_fixture_roundtrip() -> Result<(), CommandError> {
             },
             changes: vec![DataEditChange {
                 field: Some("name".into()),
-                value: Some(json!("Datanaut Labs")),
+                value: Some(json!("DataPad++ Labs")),
                 value_type: Some("string".into()),
                 ..Default::default()
             }],
@@ -1130,7 +1136,7 @@ async fn sqlite_adapter_fixture_roundtrip() -> Result<(), CommandError> {
     .await?;
     assert!(insert.executed);
     let organization_count: i64 =
-        sqlx::query_scalar("select count(*) from organizations where name = 'Datanaut Labs';")
+        sqlx::query_scalar("select count(*) from organizations where name = 'DataPad++ Labs';")
             .fetch_one(&pool)
             .await?;
     assert_eq!(organization_count, 1);
@@ -1196,15 +1202,18 @@ async fn mongodb_adapter_fixture_roundtrip() -> Result<(), CommandError> {
         name: "Fixture MongoDB".into(),
         engine: "mongodb".into(),
         family: "document".into(),
-        host: env_or("DATANAUT_MONGODB_HOST", "127.0.0.1"),
+        host: env_or("DATAPADPLUSPLUS_MONGODB_HOST", "127.0.0.1"),
         port: Some(
-            env_or("DATANAUT_MONGODB_PORT", "27018")
+            env_or("DATAPADPLUSPLUS_MONGODB_PORT", "27018")
                 .parse()
                 .unwrap_or(27018),
         ),
-        database: Some(env_or("DATANAUT_MONGODB_DB", "catalog")),
-        username: Some(env_or("DATANAUT_MONGODB_USER", "datanaut")),
-        password: Some(env_or("DATANAUT_MONGODB_PASSWORD", "datanaut")),
+        database: Some(env_or("DATAPADPLUSPLUS_MONGODB_DB", "catalog")),
+        username: Some(env_or("DATAPADPLUSPLUS_MONGODB_USER", "datapadplusplus")),
+        password: Some(env_or(
+            "DATAPADPLUSPLUS_MONGODB_PASSWORD",
+            "datapadplusplus",
+        )),
         connection_string: None,
         read_only: false,
     };
@@ -1282,7 +1291,7 @@ async fn mongodb_adapter_fixture_roundtrip() -> Result<(), CommandError> {
                 ..Default::default()
             },
             changes: vec![DataEditChange {
-                path: Some(vec!["datanautLiveEdit".into()]),
+                path: Some(vec!["datapadplusplusLiveEdit".into()]),
                 value: Some(json!("ok")),
                 value_type: Some("string".into()),
                 ..Default::default()
@@ -1328,7 +1337,7 @@ async fn mongodb_adapter_fixture_roundtrip() -> Result<(), CommandError> {
     assert_eq!(
         edited_documents
             .first()
-            .and_then(|document| document.get("datanautLiveEdit"))
+            .and_then(|document| document.get("datapadplusplusLiveEdit"))
             .and_then(|value| value.as_str()),
         Some("ok")
     );
@@ -1346,7 +1355,7 @@ async fn mongodb_adapter_fixture_roundtrip() -> Result<(), CommandError> {
                 ..Default::default()
             },
             changes: vec![DataEditChange {
-                path: Some(vec!["datanautLiveEdit".into()]),
+                path: Some(vec!["datapadplusplusLiveEdit".into()]),
                 ..Default::default()
             }],
             confirmation_text: None,
@@ -1368,9 +1377,9 @@ async fn redis_adapter_fixture_roundtrip() -> Result<(), CommandError> {
         name: "Fixture Redis".into(),
         engine: "redis".into(),
         family: "keyvalue".into(),
-        host: env_or("DATANAUT_REDIS_HOST", "127.0.0.1"),
+        host: env_or("DATAPADPLUSPLUS_REDIS_HOST", "127.0.0.1"),
         port: Some(
-            env_or("DATANAUT_REDIS_PORT", "6380")
+            env_or("DATAPADPLUSPLUS_REDIS_PORT", "6380")
                 .parse()
                 .unwrap_or(6380),
         ),
@@ -1427,7 +1436,7 @@ async fn redis_adapter_fixture_roundtrip() -> Result<(), CommandError> {
             edit_kind: "set-key-value".into(),
             target: DataEditTarget {
                 object_kind: "key".into(),
-                key: Some("datanaut:live-edit".into()),
+                key: Some("datapadplusplus:live-edit".into()),
                 ..Default::default()
             },
             changes: vec![DataEditChange {
@@ -1450,7 +1459,7 @@ async fn redis_adapter_fixture_roundtrip() -> Result<(), CommandError> {
             edit_kind: "set-ttl".into(),
             target: DataEditTarget {
                 object_kind: "key".into(),
-                key: Some("datanaut:live-edit".into()),
+                key: Some("datapadplusplus:live-edit".into()),
                 ..Default::default()
             },
             changes: vec![DataEditChange {
@@ -1472,7 +1481,7 @@ async fn redis_adapter_fixture_roundtrip() -> Result<(), CommandError> {
             edit_kind: "delete-key".into(),
             target: DataEditTarget {
                 object_kind: "key".into(),
-                key: Some("datanaut:live-edit".into()),
+                key: Some("datapadplusplus:live-edit".into()),
                 ..Default::default()
             },
             changes: vec![],
@@ -1494,7 +1503,7 @@ async fn redis_adapter_fixture_roundtrip() -> Result<(), CommandError> {
             edit_kind: "delete-key".into(),
             target: DataEditTarget {
                 object_kind: "key".into(),
-                key: Some("datanaut:live-edit".into()),
+                key: Some("datapadplusplus:live-edit".into()),
                 ..Default::default()
             },
             changes: vec![],
@@ -1591,8 +1600,8 @@ async fn sqlplus_profile_fixture_roundtrips() -> Result<(), CommandError> {
         host: "127.0.0.1".into(),
         port: Some(33061),
         database: Some("commerce".into()),
-        username: Some("datanaut".into()),
-        password: Some("datanaut".into()),
+        username: Some("datapadplusplus".into()),
+        password: Some("datapadplusplus".into()),
         connection_string: None,
         read_only: false,
     };
@@ -1642,8 +1651,8 @@ async fn sqlplus_profile_fixture_roundtrips() -> Result<(), CommandError> {
         host: "127.0.0.1".into(),
         port: Some(54330),
         database: Some("metrics".into()),
-        username: Some("datanaut".into()),
-        password: Some("datanaut".into()),
+        username: Some("datapadplusplus".into()),
+        password: Some("datapadplusplus".into()),
         connection_string: None,
         read_only: false,
     };
@@ -1670,10 +1679,10 @@ async fn sqlplus_profile_fixture_roundtrips() -> Result<(), CommandError> {
         family: "sql".into(),
         host: "127.0.0.1".into(),
         port: Some(26257),
-        database: Some("datanaut".into()),
+        database: Some("datapadplusplus".into()),
         username: Some("root".into()),
         password: Some(String::new()),
-        connection_string: Some("postgres://root@127.0.0.1:26257/datanaut".into()),
+        connection_string: Some("postgres://root@127.0.0.1:26257/datapadplusplus".into()),
         read_only: false,
     };
     let cockroach_result = adapters::execute(
@@ -1707,8 +1716,8 @@ async fn analytics_profile_fixture_roundtrips() -> Result<(), CommandError> {
         host: "127.0.0.1".into(),
         port: Some(8124),
         database: Some("analytics".into()),
-        username: Some("datanaut".into()),
-        password: Some("datanaut".into()),
+        username: Some("datapadplusplus".into()),
+        password: Some("datapadplusplus".into()),
         connection_string: None,
         read_only: false,
     };
@@ -1831,7 +1840,7 @@ async fn graph_profile_fixture_roundtrips() -> Result<(), CommandError> {
         port: Some(7475),
         database: Some("neo4j".into()),
         username: Some("neo4j".into()),
-        password: Some("datanaut".into()),
+        password: Some("datapadplusplus".into()),
         connection_string: None,
         read_only: false,
     };
@@ -1856,9 +1865,9 @@ async fn graph_profile_fixture_roundtrips() -> Result<(), CommandError> {
         family: "graph".into(),
         host: "127.0.0.1".into(),
         port: Some(8529),
-        database: Some("datanaut".into()),
+        database: Some("datapadplusplus".into()),
         username: Some("root".into()),
-        password: Some("datanaut".into()),
+        password: Some("datapadplusplus".into()),
         connection_string: None,
         read_only: false,
     };
@@ -1952,7 +1961,7 @@ async fn cloud_contract_profile_fixture_roundtrips() -> Result<(), CommandError>
         host: "127.0.0.1".into(),
         port: Some(19050),
         database: Some("analytics".into()),
-        username: Some("datanaut-project".into()),
+        username: Some("datapadplusplus-project".into()),
         password: Some("fixture-token".into()),
         connection_string: Some("http://127.0.0.1:19050".into()),
         read_only: false,
@@ -1976,7 +1985,7 @@ async fn cloud_contract_profile_fixture_roundtrips() -> Result<(), CommandError>
         family: "warehouse".into(),
         host: "127.0.0.1".into(),
         port: Some(19060),
-        database: Some("DATANAUT".into()),
+        database: Some("DATAPADPLUSPLUS".into()),
         username: Some("PUBLIC".into()),
         password: Some("fixture-token".into()),
         connection_string: Some("http://127.0.0.1:19060".into()),
@@ -1998,7 +2007,7 @@ async fn cloud_contract_profile_fixture_roundtrips() -> Result<(), CommandError>
         family: "document".into(),
         host: "127.0.0.1".into(),
         port: Some(19070),
-        database: Some("datanaut".into()),
+        database: Some("datapadplusplus".into()),
         username: None,
         password: Some("fixture-token".into()),
         connection_string: Some("http://127.0.0.1:19070".into()),
@@ -2010,7 +2019,7 @@ async fn cloud_contract_profile_fixture_roundtrips() -> Result<(), CommandError>
             &cosmosdb.id,
             "env-dev",
             "sql",
-            r#"{ "operation": "QueryDocuments", "database": "datanaut", "container": "orders", "query": "SELECT * FROM c" }"#,
+            r#"{ "operation": "QueryDocuments", "database": "datapadplusplus", "container": "orders", "query": "SELECT * FROM c" }"#,
         ),
         Vec::new(),
     )

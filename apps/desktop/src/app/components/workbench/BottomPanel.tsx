@@ -13,7 +13,7 @@ import type {
   ExplorerInspectResponse,
   QueryTabState,
   ResultPayload,
-} from '@datanaut/shared-types'
+} from '@datapadplusplus/shared-types'
 import type { WorkbenchMessage } from '../../state/app-state'
 import { DetailsView } from './bottom-panel/DetailsView'
 import { HistoryView } from './bottom-panel/HistoryView'

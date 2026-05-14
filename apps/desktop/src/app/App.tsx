@@ -8,7 +8,7 @@ import type {
   QueryTabState,
   ScopedQueryTarget,
   WorkspaceSnapshot,
-} from '@datanaut/shared-types'
+} from '@datapadplusplus/shared-types'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { ActivityBar } from './components/workbench/ActivityBar'
 import { CloseSavedTabDialog, DeleteConnectionDialog } from './components/workbench/AppDialogs'
@@ -92,7 +92,7 @@ function DesktopWorkspace() {
     workbenchMessages,
     actions,
   } = useAppState()
-  const [exportPassphrase, setExportPassphrase] = useState('datanaut-desktop')
+  const [exportPassphrase, setExportPassphrase] = useState('datapadplusplus-desktop')
   const [importPayload, setImportPayload] = useState('')
   const [commandQuery, setCommandQuery] = useState('')
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
@@ -401,7 +401,7 @@ function DesktopWorkspace() {
   if (status === 'booting' || !payload || !snapshot) {
     return (
       <BootSurface
-        title="Loading Datanaut workspace..."
+        title="Loading DataPad++ workspace..."
         copy="Connections, environments, tabs, and workbench layout are being restored."
       />
     )

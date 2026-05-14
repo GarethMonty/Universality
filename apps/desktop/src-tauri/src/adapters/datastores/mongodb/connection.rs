@@ -72,7 +72,7 @@ mod tests {
 
         assert_eq!(
             mongodb_uri(&connection),
-            "mongodb://datanaut:datanaut@localhost:27018/catalog?authSource=admin"
+            "mongodb://datapadplusplus:datapadplusplus@localhost:27018/catalog?authSource=admin"
         );
     }
 
@@ -94,7 +94,7 @@ mod tests {
 
         assert_eq!(
             mongodb_uri(&connection),
-            "mongodb://datanaut:datanaut@localhost:27018/admin"
+            "mongodb://datapadplusplus:datapadplusplus@localhost:27018/admin"
         );
     }
 
@@ -107,8 +107,8 @@ mod tests {
             host: "localhost".into(),
             port: Some(27018),
             database: database.map(str::to_string),
-            username: Some("datanaut".into()),
-            password: Some("datanaut".into()),
+            username: Some("datapadplusplus".into()),
+            password: Some("datapadplusplus".into()),
             connection_string: None,
             read_only: false,
         }

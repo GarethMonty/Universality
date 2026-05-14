@@ -1,4 +1,4 @@
-import type { BootstrapPayload, DiagnosticsReport, ExportBundle, UpdateUiStateRequest, WorkspaceSnapshot } from '@datanaut/shared-types'
+import type { BootstrapPayload, DiagnosticsReport, ExportBundle, UpdateUiStateRequest, WorkspaceSnapshot } from '@datapadplusplus/shared-types'
 import { createBrowserPreviewHealth } from '../../app/data/workspace-factory'
 import { buildDiagnosticsReport, migrateWorkspaceSnapshot } from '../../app/state/helpers'
 import { decodeBase64, encodeBase64, buildBrowserPayload, cloneSnapshot, hashPassphrase, loadBrowserSnapshot, saveBrowserSnapshot, updateUiStateLocally } from './browser-store'
@@ -53,7 +53,7 @@ export const clientWorkspace = {
     }
 
     return {
-      format: 'datanaut-bundle',
+      format: 'datapadplusplus-bundle',
       version: 3,
       encryptedPayload: encodeBase64(
         JSON.stringify({
