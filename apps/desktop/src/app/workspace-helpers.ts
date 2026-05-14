@@ -7,9 +7,28 @@ import type {
   WorkspaceSnapshot,
 } from '@datanaut/shared-types'
 import {
+  createDefaultCqlPartitionBuilderState,
+  isCqlPartitionBuilderState,
+  parseCqlPartitionQueryText,
+} from './components/workbench/query-builder/cql-partition'
+import {
+  createDefaultDynamoDbKeyConditionBuilderState,
+  isDynamoDbKeyConditionBuilderState,
+  parseDynamoDbKeyConditionQueryText,
+} from './components/workbench/query-builder/dynamodb-key-condition'
+import {
   createDefaultMongoFindBuilderState,
   isMongoFindBuilderState,
 } from './components/workbench/query-builder/mongo-find'
+import {
+  isSqlSelectBuilderState,
+  parseSqlSelectQueryText,
+} from './components/workbench/query-builder/sql-select'
+import {
+  createDefaultSearchDslBuilderState,
+  isSearchDslBuilderState,
+  parseSearchDslQueryText,
+} from './components/workbench/query-builder/search-dsl'
 import {
   defaultRowLimitForConnection,
   editorLanguageForConnection,
@@ -28,31 +47,116 @@ export function builderStateForTab(
   connection: ConnectionProfile,
   draftStates: Record<string, QueryBuilderState>,
 ): QueryBuilderState | undefined {
-  if (connection.engine !== 'mongodb') {
-    return undefined
-  }
-
   const draftState = draftStates[tab.id]
 
-  if (isMongoFindBuilderState(draftState)) {
-    return draftState
+  if (connection.engine === 'mongodb') {
+    if (isMongoFindBuilderState(draftState)) {
+      return draftState
+    }
+
+    if (isMongoFindBuilderState(tab.builderState)) {
+      return tab.builderState
+    }
+
+    return createDefaultMongoFindBuilderState(
+      mongoCollectionFromQueryText(tab.queryText),
+      mongoLimitFromQueryText(tab.queryText),
+    )
   }
 
-  if (isMongoFindBuilderState(tab.builderState)) {
-    return tab.builderState
+  if (isSqlBuilderConnection(connection)) {
+    if (isSqlSelectBuilderState(draftState)) {
+      return draftState
+    }
+
+    if (isSqlSelectBuilderState(tab.builderState)) {
+      return tab.builderState
+    }
+
+    return parseSqlSelectQueryText(tab.queryText, connection.engine)
   }
 
-  return createDefaultMongoFindBuilderState(
-    mongoCollectionFromQueryText(tab.queryText),
-    mongoLimitFromQueryText(tab.queryText),
-  )
+  if (connection.engine === 'dynamodb') {
+    if (isDynamoDbKeyConditionBuilderState(draftState)) {
+      return draftState
+    }
+
+    if (isDynamoDbKeyConditionBuilderState(tab.builderState)) {
+      return tab.builderState
+    }
+
+    return parseDynamoDbKeyConditionQueryText(tab.queryText)
+      ?? createDefaultDynamoDbKeyConditionBuilderState('', 20)
+  }
+
+  if (connection.engine === 'cassandra') {
+    if (isCqlPartitionBuilderState(draftState)) {
+      return draftState
+    }
+
+    if (isCqlPartitionBuilderState(tab.builderState)) {
+      return tab.builderState
+    }
+
+    return parseCqlPartitionQueryText(tab.queryText)
+      ?? createDefaultCqlPartitionBuilderState('', connection.database ?? 'app', 20)
+  }
+
+  if (connection.engine === 'elasticsearch' || connection.engine === 'opensearch') {
+    if (isSearchDslBuilderState(draftState)) {
+      return draftState
+    }
+
+    if (isSearchDslBuilderState(tab.builderState)) {
+      return tab.builderState
+    }
+
+    return parseSearchDslQueryText(tab.queryText) ?? createDefaultSearchDslBuilderState('products', 20)
+  }
+
+  return undefined
 }
 
-export function mongoCollectionOptions(
+export function queryBuilderObjectOptions(
   connection: ConnectionProfile | undefined,
   explorerItems: Array<{ kind: string; label: string }>,
 ) {
   if (connection?.engine !== 'mongodb') {
+    if (connection?.engine === 'dynamodb') {
+      return Array.from(new Set([
+        ...explorerItems
+          .filter((node) => node.kind === 'table')
+          .map((node) => node.label),
+        'Orders',
+      ]))
+    }
+
+    if (connection && isSqlBuilderConnection(connection)) {
+      return explorerItems
+        .filter((node) => ['table', 'view'].includes(node.kind))
+        .map((node) => node.label)
+    }
+
+    if (connection?.engine === 'cassandra') {
+      return Array.from(new Set([
+        ...explorerItems
+          .filter((node) => node.kind === 'table')
+          .map((node) => node.label),
+        'events_by_customer',
+        'orders_by_day',
+      ]))
+    }
+
+    if (connection?.engine === 'elasticsearch' || connection?.engine === 'opensearch') {
+      return Array.from(new Set([
+        ...explorerItems
+          .filter((node) => ['index', 'data-stream'].includes(node.kind))
+          .map((node) => node.label),
+        'products',
+        'events-*',
+      ]))
+    }
+
     return []
   }
 
@@ -61,6 +165,12 @@ export function mongoCollectionOptions(
     .map((node) => node.label)
 
   return Array.from(new Set([...explorerCollections, 'products', 'inventory', 'orders']))
+}
+
+export function isSqlBuilderConnection(connection: ConnectionProfile) {
+  return ['postgresql', 'cockroachdb', 'sqlserver', 'mysql', 'mariadb', 'sqlite'].includes(
+    connection.engine,
+  )
 }
 
 export function defaultCapabilities(): ExecutionCapabilities {

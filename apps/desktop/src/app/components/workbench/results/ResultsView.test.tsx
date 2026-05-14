@@ -11,7 +11,7 @@ describe('ResultsView', () => {
     }))
     const result = resultEnvelope(documents)
 
-    render(
+    const { container } = render(
       <ResultsView
         capabilities={{
           canCancel: false,
@@ -29,7 +29,12 @@ describe('ResultsView', () => {
       />,
     )
 
+    const footer = container.querySelector('.document-data-grid-footer')
+
+    expect(footer).not.toBeNull()
+    expect(container.querySelector('.panel-page-row')).toBeNull()
     expect(screen.getByLabelText('Page size')).toHaveValue('20')
+    expect(screen.getByRole('button', { name: 'Expand All' })).toBeInTheDocument()
     expect(screen.getByText('1-20 of 25')).toBeInTheDocument()
     expect(screen.getByText('document-1')).toBeInTheDocument()
     expect(screen.queryByText('document-21')).not.toBeInTheDocument()
@@ -88,6 +93,9 @@ describe('ResultsView', () => {
     )
 
     expect(screen.queryByLabelText('Page size')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'table' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'json' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'raw' })).toBeInTheDocument()
     expect(screen.queryByText('1-20 of 25')).not.toBeInTheDocument()
     expect(screen.getByText('account-1')).toBeInTheDocument()
     expect(screen.getByText('account-25')).toBeInTheDocument()

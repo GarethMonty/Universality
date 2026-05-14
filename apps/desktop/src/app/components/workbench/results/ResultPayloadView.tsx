@@ -4,12 +4,14 @@ import type {
   DataEditExecutionResponse,
   ResultPayload,
 } from '@datanaut/shared-types'
+import type { ReactNode } from 'react'
 import { DataGridView } from './DataGridView'
 import type { DocumentEditContext } from './document-edit-context'
 import { DocumentResultsView } from './DocumentResultsView'
 import { JsonTreeView } from './JsonTreeView'
+import { KeyValueResultsView } from './KeyValueResultsView'
 import { RawResultView } from './RawResultView'
-import { parseJsonValue } from './json-utils'
+import { SearchHitsResultsView } from './SearchHitsResultsView'
 
 export function ResultPayloadView({
   connection,
@@ -19,9 +21,11 @@ export function ResultPayloadView({
   resultDurationMs,
   resultSummary,
   editContext,
+  documentFooterControls,
   onExecuteDataEdit,
 }: {
   connection?: ConnectionProfile
+  documentFooterControls?: ReactNode
   editContext?: DocumentEditContext
   pageIndex?: number
   pageSize?: number
@@ -39,8 +43,11 @@ export function ResultPayloadView({
   if (payload.renderer === 'table') {
     return (
       <DataGridView
+        connection={connection}
+        editContext={editContext}
         columns={payload.columns}
         rows={sliceItems(payload.rows, pageIndex, pageSize)}
+        onExecuteDataEdit={onExecuteDataEdit}
       />
     )
   }
@@ -52,6 +59,7 @@ export function ResultPayloadView({
         connection={connection}
         editContext={editContext}
         documents={sliceItems(payload.documents, pageIndex, pageSize)}
+        footerControls={documentFooterControls}
         resultDurationMs={resultDurationMs}
         resultSummary={resultSummary}
         totalDocumentCount={payload.documents.length}
@@ -61,7 +69,15 @@ export function ResultPayloadView({
   }
 
   if (payload.renderer === 'keyvalue') {
-    return <KeyValueTreeList entries={sliceRecord(payload.entries, pageIndex, pageSize)} />
+    return (
+      <KeyValueResultsView
+        key={keyValuePayloadKey(payload.entries)}
+        connection={connection}
+        editContext={editContext}
+        entries={sliceRecord(payload.entries, pageIndex, pageSize)}
+        onExecuteDataEdit={onExecuteDataEdit}
+      />
+    )
   }
 
   if (payload.renderer === 'json') {
@@ -74,11 +90,15 @@ export function ResultPayloadView({
 
   if (payload.renderer === 'searchHits') {
     return (
-      <SearchHitsTree
+      <SearchHitsResultsView
+        key={searchHitsPayloadKey(payload.hits)}
+        connection={connection}
+        editContext={editContext}
         payload={{
           ...payload,
           hits: sliceItems(payload.hits, pageIndex, pageSize),
         }}
+        onExecuteDataEdit={onExecuteDataEdit}
       />
     )
   }
@@ -136,33 +156,19 @@ function documentPayloadKey(documents: Array<Record<string, unknown>>) {
     .join('|')
 }
 
-function KeyValueTreeList({ entries }: { entries: Record<string, string> }) {
-  return (
-    <div className="json-tree-list" aria-label="Key-value results">
-      {Object.entries(entries).map(([key, value]) => (
-        <JsonTreeView key={key} value={parseJsonValue(value)} label={key} />
-      ))}
-    </div>
-  )
+function keyValuePayloadKey(entries: Record<string, string>) {
+  return Object.entries(entries)
+    .map(([key, value]) => `${key}:${value}`)
+    .join('|')
 }
 
-function SearchHitsTree({ payload }: { payload: Extract<ResultPayload, { renderer: 'searchHits' }> }) {
-  const treeValue = {
-    total: payload.total,
-    hits: payload.hits.map((hit, index) => ({
-      id: hit.id ?? `hit-${index + 1}`,
-      score: hit.score,
-      source: hit.source,
-      highlights: hit.highlights,
-    })),
-    aggregations: payload.aggregations,
-  }
-
-  return (
-    <div className="json-tree-list">
-      <JsonTreeView value={treeValue} label="search hits" />
-    </div>
-  )
+function searchHitsPayloadKey(hits: Extract<ResultPayload, { renderer: 'searchHits' }>['hits']) {
+  return hits
+    .map((hit, index) => {
+      const rawHit = hit as typeof hit & { _id?: string; _source?: unknown }
+      return `${index}:${hit.id ?? rawHit._id ?? JSON.stringify(hit.source ?? rawHit._source)}`
+    })
+    .join('|')
 }
 
 function GraphTree({ payload }: { payload: Extract<ResultPayload, { renderer: 'graph' }> }) {

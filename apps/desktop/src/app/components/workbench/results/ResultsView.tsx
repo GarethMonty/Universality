@@ -71,6 +71,78 @@ export function ResultsView({
   const runtimeLabel = result && payload?.renderer !== 'document'
     ? formatDurationClock(result.durationMs)
     : ''
+  const documentFooterControls = payload && usesDocumentPaging ? (
+    <div className="document-results-footer-controls">
+      <div className="results-pagination-controls results-pagination-controls--compact">
+        <button
+          type="button"
+          className="drawer-button"
+          disabled={safePageIndex <= 0}
+          onClick={() =>
+            setPagination((current) => ({
+              ...current,
+              pageIndex: Math.max(0, safePageIndex - 1),
+              resultId,
+            }))
+          }
+        >
+          Previous
+        </button>
+        <span>
+          {firstVisibleItem}-{lastVisibleItem} of {itemCount}
+        </span>
+        <button
+          type="button"
+          className="drawer-button"
+          disabled={safePageIndex >= pageCount - 1}
+          onClick={() =>
+            setPagination((current) => ({
+              ...current,
+              pageIndex: Math.min(pageCount - 1, safePageIndex + 1),
+              resultId,
+            }))
+          }
+        >
+          Next
+        </button>
+        <label className="results-page-size">
+          <span>Page size</span>
+          <select
+            aria-label="Page size"
+            value={pageSize}
+            onChange={(event) =>
+              setPagination({
+                pageIndex: 0,
+                pageSize: Number(event.target.value),
+                resultId,
+              })
+            }
+          >
+            {RESULT_PAGE_SIZES.map((size) => (
+              <option key={size} value={size}>
+                {size}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      {result?.pageInfo?.hasMore ? (
+        <>
+          <span className="results-buffered-summary">
+            {result.pageInfo.bufferedRows} buffered
+          </span>
+          <button
+            type="button"
+            className="drawer-button"
+            title="Fetch the next bounded page of results and append it to the buffered view."
+            onClick={onLoadNextPage}
+          >
+            Load More
+          </button>
+        </>
+      ) : null}
+    </div>
+  ) : undefined
 
   const copyResult = async () => {
     if (!payload) {
@@ -148,76 +220,20 @@ export function ResultsView({
         pageIndex={safePageIndex}
         pageSize={usesDocumentPaging ? pageSize : undefined}
         payload={payload}
+        documentFooterControls={documentFooterControls}
         resultDurationMs={result?.durationMs}
         resultSummary={result?.summary}
         onExecuteDataEdit={onExecuteDataEdit}
       />
 
-      {payload ? (
+      {payload && !usesDocumentPaging && result?.pageInfo?.hasMore ? (
         <div className="panel-page-row">
-          {usesDocumentPaging ? (
-            <div className="results-pagination-controls">
-              <button
-                type="button"
-                className="drawer-button"
-                disabled={safePageIndex <= 0}
-                onClick={() =>
-                  setPagination((current) => ({
-                    ...current,
-                    pageIndex: Math.max(0, safePageIndex - 1),
-                    resultId,
-                  }))
-                }
-              >
-                Previous
-              </button>
-              <span>
-                {firstVisibleItem}-{lastVisibleItem} of {itemCount}
-              </span>
-              <button
-                type="button"
-                className="drawer-button"
-                disabled={safePageIndex >= pageCount - 1}
-                onClick={() =>
-                  setPagination((current) => ({
-                    ...current,
-                    pageIndex: Math.min(pageCount - 1, safePageIndex + 1),
-                    resultId,
-                  }))
-                }
-              >
-                Next
-              </button>
-              <label className="results-page-size">
-                <span>Page size</span>
-                <select
-                  value={pageSize}
-                  onChange={(event) =>
-                    setPagination({
-                      pageIndex: 0,
-                      pageSize: Number(event.target.value),
-                      resultId,
-                    })
-                  }
-                >
-                  {RESULT_PAGE_SIZES.map((size) => (
-                    <option key={size} value={size}>
-                      {size}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-          ) : null}
-          {result?.pageInfo?.hasMore ? (
-            <span>
-              Showing {result.pageInfo.bufferedRows} buffered item(s). Copy/export uses the buffered result only.
-            </span>
-          ) : null}
+          <span>
+            Showing {result.pageInfo.bufferedRows} buffered item(s). Copy/export uses the buffered result only.
+          </span>
           <button
             type="button"
             className="drawer-button"
-            hidden={!result?.pageInfo?.hasMore}
             title="Fetch the next bounded page of results and append it to the buffered view."
             onClick={onLoadNextPage}
           >

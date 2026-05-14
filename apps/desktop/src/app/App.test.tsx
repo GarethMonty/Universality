@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { desktopClient } from '../services/runtime/client'
 import { App } from './App'
+import { FIELD_DRAG_MIME, FIELD_DRAG_PAYLOAD_MIME } from './components/workbench/results/field-drag'
 
 vi.mock('@monaco-editor/react', () => ({
   default: ({
@@ -20,7 +21,7 @@ vi.mock('@monaco-editor/react', () => ({
   ),
 }))
 
-async function createFirstConnection() {
+async function openConnectionDraft() {
   await screen.findByLabelText('connections sidebar')
   fireEvent.click(screen.getByLabelText('New connection'))
 
@@ -30,11 +31,33 @@ async function createFirstConnection() {
     expect(within(drawer).getByLabelText('Name')).toHaveValue('PostgreSQL connection')
   })
 
-  await waitFor(() => {
-    expect(screen.getByRole('tab', { name: /Query 1/i })).toBeInTheDocument()
-  })
+  expect(screen.queryByRole('tab', { name: /Query 1/i })).not.toBeInTheDocument()
+  expect(
+    within(screen.getByLabelText('connections sidebar')).queryByText('PostgreSQL connection'),
+  ).not.toBeInTheDocument()
 
   return drawer
+}
+
+async function saveConnectionDraft(drawer: HTMLElement, options = { createQueryTab: true }) {
+  fireEvent.click(within(drawer).getByRole('button', { name: 'Save Connection' }))
+
+  await waitFor(() => {
+    expect(screen.queryByLabelText('connection drawer')).not.toBeInTheDocument()
+  })
+
+  if (options.createQueryTab) {
+    fireEvent.click(screen.getByRole('button', { name: 'Create query tab' }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: /Query 1/i })).toBeInTheDocument()
+    })
+  }
+}
+
+async function createFirstConnection() {
+  const drawer = await openConnectionDraft()
+  await saveConnectionDraft(drawer)
 }
 
 async function runPreviewQuery() {
@@ -64,6 +87,32 @@ function getEditorTabNames() {
     .map((tab) => tab.textContent ?? '')
 }
 
+function chooseDatabaseType(drawer: HTMLElement, datastoreLabel: string) {
+  fireEvent.click(within(drawer).getByLabelText('Database type'))
+  fireEvent.click(within(drawer).getByRole('option', { name: datastoreLabel }))
+}
+
+function createFieldDataTransfer(
+  field = '',
+  options: { includeCustomPayload?: boolean } = {},
+) {
+  const includeCustomPayload = options.includeCustomPayload ?? true
+  const data = new Map<string, string>([
+    [FIELD_DRAG_MIME, field],
+    ['text/plain', field],
+  ])
+
+  return {
+    effectAllowed: '',
+    dropEffect: 'copy',
+    getData: (type: string) =>
+      includeCustomPayload || type !== FIELD_DRAG_PAYLOAD_MIME
+        ? data.get(type) ?? ''
+        : '',
+    setData: (type: string, value: string) => data.set(type, value),
+  }
+}
+
 async function openExplorerFromConnection(connectionName = 'PostgreSQL connection') {
   fireEvent.contextMenu(getConnectionRow(connectionName))
   fireEvent.click(
@@ -74,21 +123,14 @@ async function openExplorerFromConnection(connectionName = 'PostgreSQL connectio
 }
 
 async function createCatalogMongoWithBuilderTab() {
-  const drawer = await createFirstConnection()
-  fireEvent.click(within(drawer).getByRole('button', { name: 'Save Connection' }))
-
-  await waitFor(() => {
-    expect(screen.queryByLabelText('connection drawer')).not.toBeInTheDocument()
-  })
+  await createFirstConnection()
 
   fireEvent.click(screen.getByRole('button', { name: 'New connection' }))
   const mongoDrawer = await screen.findByLabelText('connection drawer')
   fireEvent.change(within(mongoDrawer).getByLabelText('Name'), {
     target: { value: 'Catalog Mongo' },
   })
-  fireEvent.change(within(mongoDrawer).getByLabelText('Database type'), {
-    target: { value: 'mongodb' },
-  })
+  chooseDatabaseType(mongoDrawer, 'MongoDB')
   fireEvent.click(within(mongoDrawer).getByRole('button', { name: 'Save Connection' }))
 
   await waitFor(() => {
@@ -155,15 +197,66 @@ describe('App', () => {
     expect(screen.getByLabelText('Toggle results panel')).toBeInTheDocument()
   })
 
-  it('switches sidebar activities without losing the active editor tab', async () => {
+  it('keeps new connections as drafts until they are saved', async () => {
     render(<App />)
 
-    const drawer = await createFirstConnection()
-    fireEvent.click(within(drawer).getByRole('button', { name: 'Save Connection' }))
+    const drawer = await openConnectionDraft()
+
+    expect(within(drawer).getByLabelText('Name')).toHaveValue('PostgreSQL connection')
+    fireEvent.click(within(drawer).getByLabelText('Database type'))
+    const mongoOption = within(drawer).getByRole('option', { name: 'MongoDB' })
+    expect(mongoOption.querySelector('.datastore-icon')).not.toBeNull()
+    fireEvent.click(within(drawer).getByLabelText('Database type'))
+    expect(
+      within(screen.getByLabelText('connections sidebar')).queryByText('PostgreSQL connection'),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: /Query 1/i })).not.toBeInTheDocument()
+
+    fireEvent.click(within(drawer).getByLabelText('Close drawer'))
 
     await waitFor(() => {
       expect(screen.queryByLabelText('connection drawer')).not.toBeInTheDocument()
     })
+    expect(
+      within(screen.getByLabelText('connections sidebar')).queryByText('PostgreSQL connection'),
+    ).not.toBeInTheDocument()
+  })
+
+  it('shows connection test failures inside the unsaved connection drawer', async () => {
+    render(<App />)
+
+    const drawer = await openConnectionDraft()
+    chooseDatabaseType(drawer, 'MongoDB')
+    fireEvent.change(within(drawer).getByLabelText('Password / Secret'), {
+      target: { value: 'datanaut' },
+    })
+    const testConnectionSpy = vi.spyOn(desktopClient, 'testConnection').mockRejectedValueOnce(
+      new Error('connection refused'),
+    )
+
+    fireEvent.click(within(drawer).getByRole('button', { name: 'Test Connection' }))
+
+    await waitFor(() => {
+      expect(within(drawer).getByText('Connection issue')).toBeInTheDocument()
+    })
+    expect(within(drawer).getByText(/connection refused/i)).toBeInTheDocument()
+    expect(
+      within(drawer).getByText(
+        'Datanaut Docker fixtures expose MongoDB on localhost:27018.',
+      ),
+    ).toBeInTheDocument()
+    expect(testConnectionSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ secret: 'datanaut' }),
+    )
+    expect(
+      within(screen.getByLabelText('connections sidebar')).queryByText('MongoDB connection'),
+    ).not.toBeInTheDocument()
+  })
+
+  it('switches sidebar activities without losing the active editor tab', async () => {
+    render(<App />)
+
+    await createFirstConnection()
 
     await openExplorerFromConnection()
 
@@ -182,12 +275,7 @@ describe('App', () => {
   it('opens Explorer from a connection context menu', async () => {
     render(<App />)
 
-    const drawer = await createFirstConnection()
-    fireEvent.click(within(drawer).getByRole('button', { name: 'Save Connection' }))
-
-    await waitFor(() => {
-      expect(screen.queryByLabelText('connection drawer')).not.toBeInTheDocument()
-    })
+    await createFirstConnection()
 
     fireEvent.contextMenu(getConnectionRow('PostgreSQL connection'))
 
@@ -218,15 +306,45 @@ describe('App', () => {
     expect(screen.getAllByText('PostgreSQL connection').length).toBeGreaterThan(0)
   })
 
+  it('treats empty Explorer metadata as loaded instead of reloading forever', async () => {
+    const loadExplorerSpy = vi
+      .spyOn(desktopClient, 'loadExplorer')
+      .mockImplementation(async (request) => ({
+        connectionId: request.connectionId,
+        environmentId: request.environmentId,
+        scope: request.scope,
+        summary: 'Loaded 0 explorer node(s) for Empty SQLite.',
+        capabilities: {
+          canCancel: false,
+          canExplain: false,
+          supportsLiveMetadata: true,
+          editorLanguage: 'sql',
+          defaultRowLimit: 100,
+        },
+        nodes: [],
+      }))
+
+    render(<App />)
+
+    await createFirstConnection()
+    await openExplorerFromConnection()
+
+    const explorerSidebar = await screen.findByLabelText('explorer sidebar')
+    await waitFor(() => {
+      expect(
+        within(explorerSidebar).getByText('Loaded 0 explorer node(s) for Empty SQLite.'),
+      ).toBeInTheDocument()
+    })
+    await waitFor(() => {
+      expect(within(explorerSidebar).queryByText('Loading')).not.toBeInTheDocument()
+      expect(loadExplorerSpy).toHaveBeenCalledTimes(1)
+    })
+  })
+
   it('opens the connection drawer for editing from a connection context menu', async () => {
     render(<App />)
 
-    const drawer = await createFirstConnection()
-    fireEvent.click(within(drawer).getByRole('button', { name: 'Save Connection' }))
-
-    await waitFor(() => {
-      expect(screen.queryByLabelText('connection drawer')).not.toBeInTheDocument()
-    })
+    await createFirstConnection()
 
     fireEvent.contextMenu(getConnectionRow('PostgreSQL connection'))
 
@@ -252,11 +370,11 @@ describe('App', () => {
   it('creates a query from the connection context menu without opening connection details', async () => {
     render(<App />)
 
-    const drawer = await createFirstConnection()
-    fireEvent.click(within(drawer).getByRole('button', { name: 'Save Connection' }))
+    await createFirstConnection()
+    fireEvent.click(screen.getByRole('button', { name: 'Change connection' }))
 
     await waitFor(() => {
-      expect(screen.queryByLabelText('connection drawer')).not.toBeInTheDocument()
+      expect(screen.getByLabelText('connection drawer')).toBeInTheDocument()
     })
 
     fireEvent.contextMenu(getConnectionRow('PostgreSQL connection'))
@@ -270,13 +388,22 @@ describe('App', () => {
       expect(screen.getByRole('tab', { name: /Query 2/i })).toBeInTheDocument()
     })
     expect(screen.queryByLabelText('connection drawer')).not.toBeInTheDocument()
+    expect(
+      within(screen.getByLabelText('connections sidebar')).queryByText(
+        'Copy of PostgreSQL connection',
+      ),
+    ).not.toBeInTheDocument()
   })
 
   it('closes connection details when creating a query from the editor tab strip', async () => {
     render(<App />)
 
     await createFirstConnection()
-    expect(screen.getByLabelText('connection drawer')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Change connection' }))
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('connection drawer')).toBeInTheDocument()
+    })
 
     fireEvent.click(screen.getByRole('button', { name: 'Create query tab' }))
 
@@ -289,12 +416,7 @@ describe('App', () => {
   it('opens operations from the connection context menu and previews a live-safe operation', async () => {
     render(<App />)
 
-    const drawer = await createFirstConnection()
-    fireEvent.click(within(drawer).getByRole('button', { name: 'Save Connection' }))
-
-    await waitFor(() => {
-      expect(screen.queryByLabelText('connection drawer')).not.toBeInTheDocument()
-    })
+    await createFirstConnection()
 
     fireEvent.contextMenu(getConnectionRow('PostgreSQL connection'))
     fireEvent.click(
@@ -322,12 +444,7 @@ describe('App', () => {
   it('does not create a new query tab when selecting a connection that has no active tab', async () => {
     render(<App />)
 
-    const drawer = await createFirstConnection()
-    fireEvent.click(within(drawer).getByRole('button', { name: 'Save Connection' }))
-
-    await waitFor(() => {
-      expect(screen.queryByLabelText('connection drawer')).not.toBeInTheDocument()
-    })
+    await createFirstConnection()
 
     fireEvent.click(
       screen.getByRole('button', {
@@ -389,14 +506,13 @@ describe('App', () => {
     await createFirstConnection()
     const updateUiStateSpy = vi.spyOn(desktopClient, 'updateUiState')
     const sidebar = screen.getByLabelText('connections sidebar')
-    const header = within(sidebar).getByRole('heading', { name: 'Connections' }).parentElement
+    const searchInput = within(sidebar).getByPlaceholderText('Search connections')
+    const groupButton = within(sidebar).getByRole('button', { name: 'Group connections: None' })
 
-    expect(header).not.toBeNull()
+    expect(groupButton).toBeInTheDocument()
+    expect(groupButton.closest('.sidebar-search-row')).toBe(searchInput.closest('.sidebar-search-row'))
 
-    expect(within(sidebar).getByRole('button', { name: 'Group connections: None' })).toBeInTheDocument()
-    expect(within(header!).getByRole('button', { name: 'Group connections: None' })).toBeInTheDocument()
-
-    fireEvent.click(within(sidebar).getByRole('button', { name: 'Group connections: None' }))
+    fireEvent.click(groupButton)
     const groupByEnvironment = within(sidebar).getByRole('menuitemradio', {
       name: /Environment/,
     })
@@ -442,7 +558,7 @@ describe('App', () => {
     })
 
     expect(connectionsSection).toHaveAttribute('aria-expanded', 'true')
-    expect(within(sidebar).getByText('New PostgreSQL connection')).toBeInTheDocument()
+    expect(within(sidebar).getByText('PostgreSQL connection')).toBeInTheDocument()
 
     fireEvent.click(connectionsSection)
 
@@ -455,7 +571,7 @@ describe('App', () => {
     })
     await waitFor(() => {
       expect(
-        within(sidebar).queryByText('New PostgreSQL connection'),
+        within(sidebar).queryByText('PostgreSQL connection'),
       ).not.toBeInTheDocument()
     })
     expect(
@@ -466,15 +582,13 @@ describe('App', () => {
   it('renders datastore-specific object trees under connections', async () => {
     render(<App />)
 
-    const drawer = await createFirstConnection()
-    fireEvent.click(within(drawer).getByRole('button', { name: 'Save Connection' }))
-
-    await waitFor(() => {
-      expect(screen.queryByLabelText('connection drawer')).not.toBeInTheDocument()
-    })
+    await createFirstConnection()
 
     const sidebar = screen.getByLabelText('connections sidebar')
     fireEvent.click(within(sidebar).getByLabelText('Expand connection PostgreSQL connection'))
+    expect(
+      getConnectionRow('PostgreSQL connection').querySelector('.datastore-icon--brand'),
+    ).not.toBeNull()
 
     const sqlTree = within(sidebar).getByRole('tree', { name: 'PostgreSQL connection objects' })
     expect(sqlTree).toBeInTheDocument()
@@ -499,9 +613,7 @@ describe('App', () => {
     fireEvent.change(within(mongoDrawer).getByLabelText('Name'), {
       target: { value: 'Catalog Mongo' },
     })
-    fireEvent.change(within(mongoDrawer).getByLabelText('Database type'), {
-      target: { value: 'mongodb' },
-    })
+    chooseDatabaseType(mongoDrawer, 'MongoDB')
     fireEvent.click(within(mongoDrawer).getByRole('button', { name: 'Save Connection' }))
 
     await waitFor(() => {
@@ -533,11 +645,15 @@ describe('App', () => {
 
     const workspace = await screen.findByLabelText('Environment workspace')
     expect(within(workspace).getByRole('heading', { level: 1, name: 'Local' })).toBeInTheDocument()
+    expect(within(workspace).queryByRole('button', { name: 'New Environment' })).not.toBeInTheDocument()
+    expect(within(workspace).getByRole('button', { name: 'Clone' })).toBeInTheDocument()
+    expect(within(workspace).queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
 
     fireEvent.change(within(workspace).getByLabelText('Environment color'), {
       target: { value: '#ff8800' },
     })
     expect(within(workspace).getByLabelText('Environment color')).toHaveValue('#ff8800')
+    expect(within(workspace).getByRole('button', { name: 'Save' })).toBeInTheDocument()
 
     fireEvent.change(within(workspace).getByLabelText('New variable key'), {
       target: { value: 'API_TOKEN' },
@@ -555,23 +671,48 @@ describe('App', () => {
     })
     expect(within(workspace).getAllByText('********').length).toBeGreaterThan(0)
 
-    fireEvent.click(within(workspace).getByRole('button', { name: 'Save Environment' }))
+    fireEvent.click(within(workspace).getByRole('button', { name: 'Save' }))
 
     await waitFor(() => {
       expect(
-        within(workspace).getByLabelText('Environment variable value API_TOKEN'),
+        within(screen.getByLabelText('Environment workspace')).getByLabelText(
+          'Environment variable value API_TOKEN',
+        ),
       ).toHaveValue('token-value')
     })
+    await waitFor(() => {
+      expect(
+        within(screen.getByLabelText('Environment workspace')).queryByRole('button', {
+          name: 'Save',
+        }),
+      ).not.toBeInTheDocument()
+    })
+
+    fireEvent.click(
+      within(screen.getByLabelText('Environment workspace')).getByRole('button', {
+        name: 'Clone',
+      }),
+    )
+
+    await waitFor(() => {
+      expect(
+        within(screen.getByLabelText('Environment workspace')).getByRole('heading', {
+          level: 1,
+          name: 'Copy of Local',
+        }),
+      ).toBeInTheDocument()
+    })
+    expect(
+      within(screen.getByLabelText('environments sidebar')).getByText('Copy of Local'),
+    ).toBeInTheDocument()
   })
 
   it('shows SQLite local database actions and creates a starter database path', async () => {
     const createLocalDatabaseSpy = vi.spyOn(desktopClient, 'createLocalDatabase')
     render(<App />)
 
-    const drawer = await createFirstConnection()
-    fireEvent.change(within(drawer).getByLabelText('Database type'), {
-      target: { value: 'sqlite' },
-    })
+    const drawer = await openConnectionDraft()
+    chooseDatabaseType(drawer, 'SQLite')
 
     await waitFor(() => {
       expect(within(drawer).getByRole('button', { name: 'Open Existing' })).toBeInTheDocument()
@@ -586,6 +727,10 @@ describe('App', () => {
       expect(within(drawer).getByRole('dialog', { name: 'Create SQLite database' })).toBeInTheDocument()
     })
 
+    expect(within(drawer).getByLabelText('Folder')).toHaveValue('C:\\Users\\gmont\\Datanaut')
+    fireEvent.change(within(drawer).getByLabelText('Database name'), {
+      target: { value: 'starter-catalog' },
+    })
     fireEvent.click(within(drawer).getByRole('button', { name: 'Starter schema' }))
 
     await waitFor(() => {
@@ -593,13 +738,14 @@ describe('App', () => {
         expect.objectContaining({
           engine: 'sqlite',
           mode: 'starter',
+          path: 'C:\\Users\\gmont\\Datanaut\\starter-catalog.sqlite',
         }),
       )
     })
     await waitFor(() => {
       expect(
         (within(drawer).getByLabelText('Database file') as HTMLInputElement).value,
-      ).toContain('datanaut-preview-local.sqlite')
+      ).toContain('starter-catalog.sqlite')
     })
 
     fireEvent.click(within(drawer).getByRole('button', { name: 'Save Connection' }))
@@ -607,11 +753,33 @@ describe('App', () => {
     await waitFor(() => {
       expect(screen.queryByLabelText('connection drawer')).not.toBeInTheDocument()
     })
-    expect(
-      within(screen.getByLabelText('Editor toolbar')).queryByText(
-        /datanaut-preview-local\.sqlite/i,
-      ),
-    ).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Editor toolbar')).not.toBeInTheDocument()
+  })
+
+  it('offers local database creation for LiteDB and DuckDB manifests', async () => {
+    render(<App />)
+
+    const drawer = await openConnectionDraft()
+    chooseDatabaseType(drawer, 'LiteDB')
+
+    await waitFor(() => {
+      expect(within(drawer).getByRole('button', { name: 'Open Existing' })).toBeInTheDocument()
+    })
+    fireEvent.click(within(drawer).getByRole('button', { name: 'Create New' }))
+
+    await waitFor(() => {
+      expect(within(drawer).getByRole('dialog', { name: 'Create LiteDB database' })).toBeInTheDocument()
+    })
+    expect(within(drawer).getByRole('button', { name: 'Empty database' })).toBeInTheDocument()
+    expect(within(drawer).queryByRole('button', { name: 'Starter schema' })).not.toBeInTheDocument()
+
+    chooseDatabaseType(drawer, 'DuckDB')
+    fireEvent.click(within(drawer).getByRole('button', { name: 'Create New' }))
+
+    await waitFor(() => {
+      expect(within(drawer).getByRole('dialog', { name: 'Create DuckDB database' })).toBeInTheDocument()
+    })
+    expect(within(drawer).getByRole('button', { name: 'Starter schema' })).toBeInTheDocument()
   })
 
   it('persists keyboard resizing for sidebar, right drawer, and bottom panel', async () => {
@@ -623,6 +791,12 @@ describe('App', () => {
     fireEvent.keyDown(screen.getByRole('separator', { name: 'Resize sidebar' }), { key: 'ArrowRight' })
     await waitFor(() => {
       expect(workbench.style.getPropertyValue('--sidebar-width')).toBe('296px')
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Change connection' }))
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('connection drawer')).toBeInTheDocument()
     })
 
     fireEvent.keyDown(screen.getByRole('separator', { name: 'Resize right drawer' }), { key: 'ArrowLeft' })
@@ -643,12 +817,12 @@ describe('App', () => {
     const storeSecretSpy = vi.spyOn(desktopClient, 'storeSecret')
     render(<App />)
 
-    await createFirstConnection()
+    const drawer = await openConnectionDraft()
 
-    fireEvent.change(screen.getByLabelText('Password / Secret'), {
+    fireEvent.change(within(drawer).getByLabelText('Password / Secret'), {
       target: { value: 'local-secret' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Save Connection' }))
+    fireEvent.click(within(drawer).getByRole('button', { name: 'Save Connection' }))
 
     await waitFor(() => {
       expect(storeSecretSpy).toHaveBeenCalled()
@@ -657,14 +831,15 @@ describe('App', () => {
       expect(screen.queryByLabelText('connection drawer')).not.toBeInTheDocument()
     })
 
-    await waitFor(() => {
-      expect(
-        screen.getByRole('button', { name: 'Duplicate connection PostgreSQL connection' }),
-      ).toBeInTheDocument()
-    })
+    expect(
+      screen.queryByRole('button', { name: 'Duplicate connection PostgreSQL connection' }),
+    ).not.toBeInTheDocument()
 
+    fireEvent.contextMenu(getConnectionRow('PostgreSQL connection'))
     fireEvent.click(
-      screen.getByRole('button', { name: 'Duplicate connection PostgreSQL connection' }),
+      await screen.findByRole('menuitem', {
+        name: 'Duplicate connection PostgreSQL connection',
+      }),
     )
 
     await waitFor(() => {
@@ -987,6 +1162,9 @@ describe('App', () => {
     render(<App />)
 
     await createFirstConnection()
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Run query' })).toBeInTheDocument()
+    })
     fireEvent.click(screen.getByLabelText('Lock workspace'))
 
     await waitFor(() => {
@@ -1018,21 +1196,14 @@ describe('App', () => {
   it('shows builder controls for MongoDB scratch query tabs', async () => {
     render(<App />)
 
-    const drawer = await createFirstConnection()
-    fireEvent.click(within(drawer).getByRole('button', { name: 'Save Connection' }))
-
-    await waitFor(() => {
-      expect(screen.queryByLabelText('connection drawer')).not.toBeInTheDocument()
-    })
+    await createFirstConnection()
 
     fireEvent.click(screen.getByRole('button', { name: 'New connection' }))
     const mongoDrawer = await screen.findByLabelText('connection drawer')
     fireEvent.change(within(mongoDrawer).getByLabelText('Name'), {
       target: { value: 'Catalog Mongo' },
     })
-    fireEvent.change(within(mongoDrawer).getByLabelText('Database type'), {
-      target: { value: 'mongodb' },
-    })
+    chooseDatabaseType(mongoDrawer, 'MongoDB')
     fireEvent.click(within(mongoDrawer).getByRole('button', { name: 'Save Connection' }))
 
     await waitFor(() => {
@@ -1093,7 +1264,7 @@ describe('App', () => {
     await createCatalogMongoWithBuilderTab()
 
     const builder = screen.getByLabelText('MongoDB query builder')
-    const addFilterButton = within(builder).getByRole('button', { name: 'Add Filter' })
+    const addFilterButton = within(builder).getAllByRole('button', { name: 'Add Filter' })[0] as HTMLElement
 
     fireEvent.click(addFilterButton)
 
@@ -1136,13 +1307,49 @@ describe('App', () => {
     })
 
     const builder = screen.getByLabelText('MongoDB query builder')
-    fireEvent.click(within(builder).getByRole('button', { name: 'Add Filter' }))
+    fireEvent.click(within(builder).getAllByRole('button', { name: 'Add Filter' })[0] as HTMLElement)
     fireEvent.change(within(builder).getByLabelText('Filter field'), {
       target: { value: 'inventory.available' },
     })
 
     expect(screen.getByText('2 documents(s)')).toBeInTheDocument()
     expect(screen.getByRole('treegrid', { name: 'Document result table' })).toBeInTheDocument()
+  })
+
+  it('drops document result field values into the Mongo query builder', async () => {
+    render(<App />)
+
+    await createCatalogMongoWithBuilderTab()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Run query' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('2 documents(s)')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Expand itm-2048' }))
+
+    const source = screen.getByTitle('Drag sku with value luna-lamp to the query builder')
+    const dragDataTransfer = createFieldDataTransfer()
+    const dropDataTransfer = createFieldDataTransfer('sku', { includeCustomPayload: false })
+    const builder = screen.getByLabelText('MongoDB query builder')
+    const filtersSection = within(builder)
+      .getByRole('heading', { name: 'Filters' })
+      .closest('section') as HTMLElement
+
+    fireEvent.dragStart(source, { dataTransfer: dragDataTransfer })
+    fireEvent.dragOver(filtersSection, { dataTransfer: dropDataTransfer })
+    fireEvent.drop(filtersSection, { dataTransfer: dropDataTransfer })
+
+    expect(within(builder).getByLabelText('Filter field')).toHaveValue('sku')
+    expect(within(builder).getByLabelText('Value type')).toHaveValue('string')
+    expect(within(builder).getByLabelText('Filter value')).toHaveValue('luna-lamp')
+
+    await waitFor(() => {
+      const queryEditor = screen.getByLabelText('Query editor') as HTMLTextAreaElement
+      expect(queryEditor.value).toContain('"sku"')
+      expect(queryEditor.value).toContain('"luna-lamp"')
+    })
   })
 
   it('runs the raw editor text when query view is raw-only', async () => {
@@ -1319,12 +1526,7 @@ describe('App', () => {
 
     render(<App />)
 
-    const drawer = await createFirstConnection()
-    fireEvent.click(within(drawer).getByRole('button', { name: 'Save Connection' }))
-
-    await waitFor(() => {
-      expect(screen.queryByLabelText('connection drawer')).not.toBeInTheDocument()
-    })
+    await createFirstConnection()
 
     await openExplorerFromConnection()
 

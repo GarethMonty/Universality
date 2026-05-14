@@ -9,7 +9,7 @@ import type {
   EnvironmentProfile,
   QueryTabState,
 } from '@datanaut/shared-types'
-import { CloseIcon, DatabaseIcon } from '../icons'
+import { CloseIcon } from '../icons'
 import { colorWithAlpha, normalizeTabDisplayTitle } from './tab-title'
 
 export interface EditorTabDropTarget {
@@ -99,9 +99,6 @@ export function EditorTabItem({
       onDragEnd={onDragEnd}
       onKeyDown={(event) => onKeyDown(event, tab)}
     >
-      <span className="editor-tab-icon" aria-hidden="true">
-        {connection?.icon ?? <DatabaseIcon className="tab-inline-icon" />}
-      </span>
       {editing ? (
         <input
           aria-label={`Rename tab ${tab.title}`}

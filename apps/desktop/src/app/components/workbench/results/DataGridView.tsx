@@ -1,37 +1,88 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
+import type {
+  ConnectionProfile,
+  DataEditExecutionRequest,
+  DataEditExecutionResponse,
+} from '@datanaut/shared-types'
 import { computeRenderedColumnWidths } from './data-grid-layout'
+import { DataGridContextMenu } from './DataGridContextMenu'
+import { DataGridDeleteConfirmation } from './DataGridDeleteConfirmation'
+import { DataGridInsertRow } from './DataGridInsertRow'
+import { DataGridRows } from './DataGridRows'
 import {
   autoFitColumnWidth,
   buildVisibleGridRows,
+  DATA_GRID_HEADER_HEIGHT,
   DEFAULT_COLUMN_WIDTH,
   gridTextForMode,
   type GridSelection,
   type GridSort,
-  isSelected,
   ROW_NUMBER_WIDTH,
 } from './data-grid-model'
+import { DataGridToolbar } from './DataGridToolbar'
+import { useDataGridEditing } from './data-grid-editing'
+import type { DocumentEditContext } from './document-edit-context'
 import { writeFieldDragData } from './field-drag'
 import { copyText } from './payload-export'
+import { buildDataGridRowDeleteRequest } from './data-grid-edit-requests'
 
 interface DataGridViewProps {
+  connection?: ConnectionProfile
+  editContext?: DocumentEditContext
   columns: string[]
   rows: string[][]
+  onExecuteDataEdit?(request: DataEditExecutionRequest): Promise<DataEditExecutionResponse | undefined>
 }
 
-export function DataGridView({ columns, rows }: DataGridViewProps) {
+interface ContextMenuState { sourceIndex: number; x: number; y: number }
+interface PendingDeleteState { confirmation: string; expectedText: string; rowNumber: number; sourceIndex: number }
+
+export function DataGridView({
+  connection,
+  editContext,
+  columns,
+  rows,
+  onExecuteDataEdit,
+}: DataGridViewProps) {
+  const [draftRows, setDraftRows] = useState(rows)
   const [filter, setFilter] = useState('')
   const [sort, setSort] = useState<GridSort>()
   const [focusedCell, setFocusedCell] = useState<{ row: number; column: number }>()
   const [selection, setSelection] = useState<GridSelection>()
   const [columnWidths, setColumnWidths] = useState<Record<number, number>>({})
   const [copyMessage, setCopyMessage] = useState('')
+  const [contextMenu, setContextMenu] = useState<ContextMenuState>()
+  const [pendingDelete, setPendingDelete] = useState<PendingDeleteState>()
   const [viewportWidth, setViewportWidth] = useState(0)
   const parentRef = useRef<HTMLDivElement>(null)
   const dragStartRef = useRef<{ row: number; column: number } | null>(null)
   const resizeStartRef = useRef<{ column: number; x: number; width: number } | null>(null)
+  const {
+    beginEdit,
+    canDeleteRow,
+    canEditCell,
+    canInsertRow,
+    cancelEdit,
+    commitEdit,
+    deleteRow,
+    editingCell,
+    insertRow,
+    updateEditingValue,
+  } = useDataGridEditing({
+    columns,
+    connection,
+    editContext,
+    rows: draftRows,
+    setRows: setDraftRows,
+    setStatusMessage: setCopyMessage,
+    onExecuteDataEdit,
+  })
 
-  const visibleRows = useMemo(() => buildVisibleGridRows(rows, filter, sort), [filter, rows, sort])
+  const visibleRows = useMemo(
+    () => buildVisibleGridRows(draftRows, filter, sort),
+    [draftRows, filter, sort],
+  )
 
   // TanStack Virtual intentionally returns imperative helpers; keep this component un-memoized.
   // eslint-disable-next-line react-hooks/incompatible-library
@@ -61,6 +112,26 @@ export function DataGridView({ columns, rows }: DataGridViewProps) {
           index,
           start: index * 30,
         }))
+
+  useEffect(() => {
+    setDraftRows(rows)
+  }, [rows])
+
+  useEffect(() => {
+    if (!contextMenu) {
+      return
+    }
+
+    const close = () => setContextMenu(undefined)
+    window.addEventListener('pointerdown', close)
+    window.addEventListener('resize', close)
+    window.addEventListener('keydown', close)
+    return () => {
+      window.removeEventListener('pointerdown', close)
+      window.removeEventListener('resize', close)
+      window.removeEventListener('keydown', close)
+    }
+  }, [contextMenu])
 
   const toggleSort = (column: number) => {
     setSort((current) => {
@@ -164,48 +235,72 @@ export function DataGridView({ columns, rows }: DataGridViewProps) {
     setCopyMessage(`Copied ${mode === 'all' ? 'all buffered rows' : mode}.`)
   }
 
+  const copySourceRow = async (sourceIndex: number) => {
+    const row = draftRows[sourceIndex]
+
+    if (!row) {
+      return
+    }
+
+    await copyText(row.join('\t'))
+    setCopyMessage('Copied row.')
+  }
+
+  const promptDeleteRow = (sourceIndex: number) => {
+    const request = buildDataGridRowDeleteRequest({
+      columns,
+      connection,
+      editContext,
+      row: draftRows[sourceIndex] ?? [],
+    })
+
+    if (!request?.confirmationText) {
+      setCopyMessage('Delete unavailable; Datanaut could not identify a complete primary key.')
+      return
+    }
+
+    setPendingDelete({
+      confirmation: '',
+      expectedText: request.confirmationText,
+      rowNumber: sourceIndex + 1,
+      sourceIndex,
+    })
+  }
+
   return (
     <div className="data-grid-shell">
-      <div className="data-grid-toolbar">
-        <label className="data-grid-filter">
-          <span>Filter buffered rows</span>
-          <input
-            type="search"
-            value={filter}
-            placeholder="Find in results"
-            onChange={(event) => setFilter(event.target.value)}
-          />
-        </label>
-        <div className="data-grid-actions">
-          <button
-            type="button"
-            className="drawer-button"
-            disabled={!selection}
-            onClick={() => void copySelection('selection')}
-          >
-            Copy Selection
-          </button>
-          <button
-            type="button"
-            className="drawer-button"
-            disabled={!focusedCell}
-            onClick={() => void copySelection('row')}
-          >
-            Copy Row
-          </button>
-          <button
-            type="button"
-            className="drawer-button"
-            onClick={() => void copySelection('all')}
-          >
-            Copy All
-          </button>
-        </div>
-      </div>
+      <DataGridToolbar
+        canCopyRow={Boolean(focusedCell)}
+        canCopySelection={Boolean(selection)}
+        filter={filter}
+        onCopyAll={() => void copySelection('all')}
+        onCopyRow={() => void copySelection('row')}
+        onCopySelection={() => void copySelection('selection')}
+        onFilterChange={setFilter}
+      />
       <div className="data-grid-status">
-        {visibleRows.length} of {rows.length} buffered row(s)
+        {visibleRows.length} of {draftRows.length} buffered row(s)
         {copyMessage ? ` / ${copyMessage}` : ''}
       </div>
+      <DataGridInsertRow columns={columns} canInsert={canInsertRow()} onInsert={insertRow} />
+      {pendingDelete ? (
+        <DataGridDeleteConfirmation
+          expectedText={pendingDelete.expectedText}
+          rowNumber={pendingDelete.rowNumber}
+          value={pendingDelete.confirmation}
+          onCancel={() => setPendingDelete(undefined)}
+          onConfirm={() => {
+            const sourceIndex = pendingDelete.sourceIndex
+            setPendingDelete(undefined)
+            void deleteRow(sourceIndex)
+          }}
+          onValueChange={(confirmation) =>
+            setPendingDelete((current) =>
+              current ? { ...current, confirmation } : current,
+            )
+          }
+        />
+      ) : null}
       <div
         className="data-grid"
         ref={parentRef}
@@ -218,7 +313,10 @@ export function DataGridView({ columns, rows }: DataGridViewProps) {
       >
         <div
           className="data-grid-inner"
-          style={{ height: virtualizer.getTotalSize() + 32, width: renderedGridWidth }}
+          style={{
+            height: virtualizer.getTotalSize() + DATA_GRID_HEADER_HEIGHT,
+            width: renderedGridWidth,
+          }}
         >
           <div className="data-grid-row data-grid-row--header">
             <div className="data-grid-cell data-grid-cell--row-number">#</div>
@@ -255,44 +353,50 @@ export function DataGridView({ columns, rows }: DataGridViewProps) {
               </div>
             ))}
           </div>
-          {renderedRows.map((virtualRow) => {
-            const rowItem = visibleRows[virtualRow.index]
-            const row = rowItem?.row ?? []
-
-            return (
-              <div
-                key={virtualRow.key}
-                className="data-grid-row"
-                style={{ transform: `translateY(${virtualRow.start + 32}px)` }}
-              >
-                <div className="data-grid-cell data-grid-cell--row-number">
-                  {rowItem ? rowItem.sourceIndex + 1 : ''}
-                </div>
-                {columns.map((column, columnIndex) => {
-                  const cell = row[columnIndex] ?? ''
-                  const selected = isSelected(virtualRow.index, columnIndex, selection)
-                  const focused =
-                    focusedCell?.row === virtualRow.index && focusedCell.column === columnIndex
-
-                  return (
-                    <button
-                      key={`${virtualRow.key}-${column}`}
-                      type="button"
-                      className={`data-grid-cell data-grid-cell--value${selected ? ' is-selected' : ''}${focused ? ' is-focused' : ''}${cell === '' ? ' is-empty' : ''}`}
-                      style={{ width: renderedColumnWidths[columnIndex] ?? DEFAULT_COLUMN_WIDTH }}
-                      title={cell || 'NULL / empty'}
-                      onPointerDown={() => beginSelection(virtualRow.index, columnIndex)}
-                      onPointerEnter={() => updateSelection(virtualRow.index, columnIndex)}
-                    >
-                      {cell || <span className="data-grid-null">NULL</span>}
-                    </button>
-                  )
-                })}
-              </div>
-            )
-          })}
+          <DataGridRows
+            columns={columns}
+            editingCell={editingCell}
+            focusedCell={focusedCell}
+            renderedColumnWidths={renderedColumnWidths}
+            renderedRows={renderedRows}
+            selection={selection}
+            visibleRows={visibleRows}
+            canEditCell={canEditCell}
+            onBeginEdit={(sourceIndex, column, value) => {
+              const started = beginEdit(sourceIndex, column, value)
+              if (started) {
+                dragStartRef.current = null
+              }
+              return started
+            }}
+            onBeginSelection={beginSelection}
+            onCancelEdit={cancelEdit}
+            onCommitEdit={() => void commitEdit()}
+            onOpenRowMenu={(sourceIndex, visibleIndex, x, y) => {
+              setFocusedCell({ row: visibleIndex, column: 0 })
+              setSelection({
+                startRow: visibleIndex,
+                startColumn: 0,
+                endRow: visibleIndex,
+                endColumn: columns.length - 1,
+              })
+              setContextMenu({ sourceIndex, x, y })
+            }}
+            onUpdateEditingValue={updateEditingValue}
+            onUpdateSelection={updateSelection}
+          />
         </div>
       </div>
+      {contextMenu ? (
+        <DataGridContextMenu
+          canDelete={canDeleteRow(contextMenu.sourceIndex)}
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onClose={() => setContextMenu(undefined)}
+          onCopyRow={() => void copySourceRow(contextMenu.sourceIndex)}
+          onDeleteRow={() => promptDeleteRow(contextMenu.sourceIndex)}
+        />
+      ) : null}
     </div>
   )
 }

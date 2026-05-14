@@ -122,6 +122,18 @@ describe('datastore roadmap catalog', () => {
       family: 'document',
       defaultLanguage: 'json',
       maturity: 'beta',
+      localDatabase: {
+        defaultExtension: 'db',
+        canCreateEmpty: true,
+        canCreateStarter: false,
+      },
+    })
+    expect(datastoreBacklogByEngine('duckdb')).toMatchObject({
+      localDatabase: {
+        defaultExtension: 'duckdb',
+        canCreateEmpty: true,
+        canCreateStarter: true,
+      },
     })
 
     expect(datastoreBacklogByEngine('elasticsearch')?.capabilities).toContain(

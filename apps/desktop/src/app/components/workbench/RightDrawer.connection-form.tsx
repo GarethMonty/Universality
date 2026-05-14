@@ -2,14 +2,16 @@ import type {
   ConnectionProfile,
   EnvironmentProfile,
   LocalDatabaseCreateRequest,
+  LocalDatabaseManifest,
 } from '@datanaut/shared-types'
 import { FavoriteIcon, ReadOnlyIcon } from './icons'
 import {
   defaultPortForEngine,
   engineFamily,
+  engineLabel,
   engineOption,
-  ENGINE_GROUPS,
 } from './RightDrawer.helpers'
+import { DatastoreEngineSelect } from './RightDrawer.engine-select'
 import { FormField } from './RightDrawer.primitives'
 
 type UpdateConnectionDraft = (
@@ -22,13 +24,16 @@ interface ConnectionFormProps {
   databaseLabel: string
   environments: EnvironmentProfile[]
   isLocalDatabaseEngine: boolean
+  localDatabaseManifest?: LocalDatabaseManifest
+  localDatabaseName: string
   localDatabaseStatus: string
   namePlaceholder: string
-  pendingCreatePath: string
+  pendingCreateFolder: string
   secretDraft: string
   selectedEnvironmentId: string
   createLocalDatabase(mode: LocalDatabaseCreateRequest['mode']): Promise<void>
   onChooseNewLocalDatabasePath(): Promise<void>
+  onLocalDatabaseNameChange(value: string): void
   onOpenExistingLocalDatabase(): Promise<void>
   onSecretDraftChange(value: string): void
   onSetNameOverridden(value: boolean): void
@@ -40,78 +45,69 @@ export function ConnectionForm({
   databaseLabel,
   environments,
   isLocalDatabaseEngine,
+  localDatabaseManifest,
+  localDatabaseName,
   localDatabaseStatus,
   namePlaceholder,
-  pendingCreatePath,
+  pendingCreateFolder,
   secretDraft,
   selectedEnvironmentId,
   createLocalDatabase,
   onChooseNewLocalDatabasePath,
+  onLocalDatabaseNameChange,
   onOpenExistingLocalDatabase,
   onSecretDraftChange,
   onSetNameOverridden,
   onUpdateConnectionDraft,
 }: ConnectionFormProps) {
+  const updateEngine = (engine: ConnectionProfile['engine']) => {
+    const nextEngineOption = engineOption(engine)
+    const nextIsLocalDatabase = Boolean(nextEngineOption?.localDatabase)
+    onUpdateConnectionDraft({
+      engine,
+      family: engineFamily(engine),
+      connectionMode:
+        connectionDraft.engine === engine
+          ? connectionDraft.connectionMode
+          : nextEngineOption?.connectionMode,
+      host:
+        nextIsLocalDatabase
+          ? connectionDraft.database ?? connectionDraft.host
+          : connectionDraft.host || 'localhost',
+      port:
+        nextIsLocalDatabase
+          ? undefined
+          : connectionDraft.engine === engine
+            ? connectionDraft.port
+            : defaultPortForEngine(engine),
+      auth:
+        nextIsLocalDatabase
+          ? {
+              ...connectionDraft.auth,
+              username: undefined,
+              sslMode: undefined,
+            }
+          : connectionDraft.auth,
+    })
+  }
+
   return (
     <div className="drawer-form">
-      <FormField label="Database type">
-        <select
-          value={connectionDraft.engine}
-          onChange={(event) => {
-            const engine = event.target.value as ConnectionProfile['engine']
-            const nextEngineOption = engineOption(engine)
-            onUpdateConnectionDraft({
-              engine,
-              family: engineFamily(engine),
-              connectionMode:
-                connectionDraft.engine === engine
-                  ? connectionDraft.connectionMode
-                  : nextEngineOption?.connectionMode,
-              host:
-                engine === 'sqlite'
-                  ? connectionDraft.database ?? connectionDraft.host
-                  : connectionDraft.host || 'localhost',
-              port:
-                engine === 'sqlite'
-                  ? undefined
-                  : connectionDraft.engine === engine
-                    ? connectionDraft.port
-                    : defaultPortForEngine(engine),
-              auth:
-                engine === 'sqlite'
-                  ? {
-                      ...connectionDraft.auth,
-                      username: undefined,
-                      sslMode: undefined,
-                    }
-                  : connectionDraft.auth,
-            })
-          }}
-        >
-          {ENGINE_GROUPS.map((group) => (
-            <optgroup key={group.label} label={group.label}>
-              {group.options.map((option) => (
-                <option
-                  key={option.value}
-                  value={option.value}
-                  disabled={option.maturity === 'planned'}
-                >
-                  {option.maturity === 'planned'
-                    ? `${option.label} (planned)`
-                    : option.label}
-                </option>
-              ))}
-            </optgroup>
-          ))}
-        </select>
-      </FormField>
+      <div className="drawer-field">
+        <span>Database type</span>
+        <DatastoreEngineSelect value={connectionDraft.engine} onChange={updateEngine} />
+      </div>
 
       {isLocalDatabaseEngine ? (
         <LocalDatabaseActions
+          databaseLabel={engineLabel(connectionDraft.engine)}
+          localDatabaseManifest={localDatabaseManifest}
+          localDatabaseName={localDatabaseName}
           localDatabaseStatus={localDatabaseStatus}
-          pendingCreatePath={pendingCreatePath}
+          pendingCreateFolder={pendingCreateFolder}
           createLocalDatabase={createLocalDatabase}
           onChooseNewLocalDatabasePath={onChooseNewLocalDatabasePath}
+          onLocalDatabaseNameChange={onLocalDatabaseNameChange}
           onOpenExistingLocalDatabase={onOpenExistingLocalDatabase}
         />
       ) : null}
@@ -177,18 +173,30 @@ export function ConnectionForm({
 }
 
 function LocalDatabaseActions({
+  databaseLabel,
+  localDatabaseManifest,
+  localDatabaseName,
   localDatabaseStatus,
-  pendingCreatePath,
+  pendingCreateFolder,
   createLocalDatabase,
   onChooseNewLocalDatabasePath,
+  onLocalDatabaseNameChange,
   onOpenExistingLocalDatabase,
 }: {
+  databaseLabel: string
+  localDatabaseManifest?: LocalDatabaseManifest
+  localDatabaseName: string
   localDatabaseStatus: string
-  pendingCreatePath: string
+  pendingCreateFolder: string
   createLocalDatabase(mode: LocalDatabaseCreateRequest['mode']): Promise<void>
   onChooseNewLocalDatabasePath(): Promise<void>
+  onLocalDatabaseNameChange(value: string): void
   onOpenExistingLocalDatabase(): Promise<void>
 }) {
+  const canCreateEmpty = localDatabaseManifest?.canCreateEmpty ?? true
+  const canCreateStarter = localDatabaseManifest?.canCreateStarter ?? false
+  const createDisabled = !localDatabaseName.trim()
+
   return (
     <>
       <div className="connection-quick-actions" aria-label="Connection quick actions">
@@ -204,7 +212,7 @@ function LocalDatabaseActions({
           <button
             type="button"
             className="drawer-button drawer-button--primary"
-            title="Choose a path for a new SQLite database, then select empty or starter schema."
+            title={`Choose a folder for a new ${databaseLabel} database, then enter a database name.`}
             onClick={() => void onChooseNewLocalDatabasePath()}
           >
             Create New
@@ -212,27 +220,46 @@ function LocalDatabaseActions({
         </div>
       </div>
 
-      {pendingCreatePath ? (
-        <div className="drawer-callout" role="dialog" aria-label="Create SQLite database">
-          <strong>Create SQLite database</strong>
-          <span>{pendingCreatePath}</span>
+      {pendingCreateFolder ? (
+        <div className="drawer-callout" role="dialog" aria-label={`Create ${databaseLabel} database`}>
+          <strong>Create {databaseLabel} database</strong>
+          <div className="local-database-create-grid">
+            <label className="drawer-field">
+              <span>Folder</span>
+              <input value={pendingCreateFolder} readOnly />
+            </label>
+            <label className="drawer-field">
+              <span>Database name</span>
+              <input
+                value={localDatabaseName}
+                placeholder={`database.${localDatabaseManifest?.defaultExtension ?? 'db'}`}
+                onChange={(event) => onLocalDatabaseNameChange(event.target.value)}
+              />
+            </label>
+          </div>
           <div className="drawer-button-row drawer-button-row--compact">
-            <button
-              type="button"
-              className="drawer-button"
-              title="Create a blank SQLite database file at the selected path."
-              onClick={() => void createLocalDatabase('empty')}
-            >
-              Empty database
-            </button>
-            <button
-              type="button"
-              className="drawer-button drawer-button--primary"
-              title="Create a SQLite database with a small starter items table for local prototyping."
-              onClick={() => void createLocalDatabase('starter')}
-            >
-              Starter schema
-            </button>
+            {canCreateEmpty ? (
+              <button
+                type="button"
+                className="drawer-button"
+                disabled={createDisabled}
+                title={`Create a blank ${databaseLabel} database file in the selected folder.`}
+                onClick={() => void createLocalDatabase('empty')}
+              >
+                Empty database
+              </button>
+            ) : null}
+            {canCreateStarter ? (
+              <button
+                type="button"
+                className="drawer-button drawer-button--primary"
+                disabled={createDisabled}
+                title={`Create a ${databaseLabel} database with a small starter items table for local prototyping.`}
+                onClick={() => void createLocalDatabase('starter')}
+              >
+                Starter schema
+              </button>
+            ) : null}
           </div>
         </div>
       ) : null}

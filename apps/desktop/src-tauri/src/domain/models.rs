@@ -673,6 +673,8 @@ pub struct ExportBundle {
 pub struct ConnectionTestRequest {
     pub profile: ConnectionProfile,
     pub environment_id: String,
+    #[serde(default)]
+    pub secret: Option<String>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]

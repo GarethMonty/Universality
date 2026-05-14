@@ -1,7 +1,7 @@
 use super::super::super::*;
 
 pub(super) fn duckdb_manifest() -> AdapterManifest {
-    manifest_with_maturity(
+    let mut manifest = manifest_with_maturity(
         "adapter-duckdb",
         "duckdb",
         "embedded-olap",
@@ -9,7 +9,14 @@ pub(super) fn duckdb_manifest() -> AdapterManifest {
         "beta",
         "sql",
         EMBEDDED_OLAP_CAPABILITIES,
-    )
+    );
+    manifest.local_database = Some(LocalDatabaseManifest {
+        default_extension: "duckdb".into(),
+        extensions: vec!["duckdb".into(), "db".into()],
+        can_create_empty: true,
+        can_create_starter: true,
+    });
+    manifest
 }
 
 pub(super) fn duckdb_execution_capabilities() -> ExecutionCapabilities {

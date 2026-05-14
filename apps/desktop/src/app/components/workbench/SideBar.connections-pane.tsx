@@ -12,14 +12,16 @@ import {
   ConnectionsIcon,
   FavoriteIcon,
   MoreIcon,
-  PlusIcon,
   ReadOnlyIcon,
 } from './icons'
 import {
   ConnectionContextMenu,
   type ConnectionContextMenuState,
 } from './SideBar.connection-context-menu'
-import { ConnectionsHeader } from './SideBar.connections-header'
+import {
+  ConnectionGroupDropdown,
+  ConnectionsHeader,
+} from './SideBar.connections-header'
 import { ConnectionObjectTree } from './SideBar.connection-object-tree'
 import {
   environmentAccentVariables,
@@ -122,20 +124,24 @@ export function ConnectionsPane({
   return (
     <>
       <ConnectionsHeader
-        connectionGroupMode={connectionGroupMode}
-        onConnectionGroupModeChange={onConnectionGroupModeChange}
         onCreateConnection={onCreateConnection}
       />
 
-      <label className="sidebar-search">
-        <span className="sr-only">Search connections</span>
-        <input
-          type="search"
-          placeholder="Search connections"
-          value={connectionFilter}
-          onChange={(event) => onConnectionFilterChange(event.target.value)}
+      <div className="sidebar-search-row">
+        <label className="sidebar-search sidebar-search--inline">
+          <span className="sr-only">Search connections</span>
+          <input
+            type="search"
+            placeholder="Search connections"
+            value={connectionFilter}
+            onChange={(event) => onConnectionFilterChange(event.target.value)}
+          />
+        </label>
+        <ConnectionGroupDropdown
+          connectionGroupMode={connectionGroupMode}
+          onConnectionGroupModeChange={onConnectionGroupModeChange}
         />
-      </label>
+      </div>
 
       <div className="sidebar-scroll">
         {Object.keys(connectionGroups).length === 0 ? (
@@ -223,18 +229,6 @@ export function ConnectionsPane({
                         {connection.readOnly ? (
                           <ReadOnlyIcon className="tree-flag-icon" aria-label="Read-only" />
                         ) : null}
-                        <button
-                          type="button"
-                          className="sidebar-icon-button sidebar-icon-button--inline"
-                          aria-label={`Duplicate connection ${connection.name}`}
-                          title={`Duplicate ${connection.name} into a new editable connection profile.`}
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            onDuplicateConnection(connection.id)
-                          }}
-                        >
-                          <PlusIcon className="sidebar-icon" />
-                        </button>
                         <button
                           type="button"
                           className="sidebar-icon-button sidebar-icon-button--inline"

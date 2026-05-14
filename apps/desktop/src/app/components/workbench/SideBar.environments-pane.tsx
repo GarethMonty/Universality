@@ -6,25 +6,20 @@ import {
   PlusIcon,
   ReadOnlyIcon,
 } from './icons'
-import { SidebarSection } from './SideBar.section'
 
 export function EnvironmentsPane({
   activeEnvironmentId,
   environmentFilter,
   environments,
-  sectionStates,
   onCreateEnvironment,
   onEnvironmentFilterChange,
-  onSidebarSectionExpandedChange,
   onSelectEnvironment,
 }: {
   activeEnvironmentId: string
   environmentFilter: string
   environments: EnvironmentProfile[]
-  sectionStates: Record<string, boolean>
   onCreateEnvironment(): void
   onEnvironmentFilterChange(value: string): void
-  onSidebarSectionExpandedChange(sectionId: string, expanded: boolean): void
   onSelectEnvironment(environmentId: string): void
 }) {
   return (
@@ -65,47 +60,36 @@ export function EnvironmentsPane({
           </div>
         ) : null}
 
-        {environments.length > 0 ? (
-          <SidebarSection
-            count={environments.length}
-            index={0}
-            label="Workspace"
-            sectionId="environments:workspace"
-            sectionStates={sectionStates}
-            onExpandedChange={onSidebarSectionExpandedChange}
+        {environments.map((environment) => (
+          <button
+            key={environment.id}
+            type="button"
+            className={`tree-item${environment.id === activeEnvironmentId ? ' is-active' : ''}`}
+            title={`${environment.label}: edit variables, secret flags, color, and ${environment.risk} risk guardrails.`}
+            onClick={() => onSelectEnvironment(environment.id)}
           >
-            {environments.map((environment) => (
-              <button
-                key={environment.id}
-                type="button"
-                className={`tree-item${environment.id === activeEnvironmentId ? ' is-active' : ''}`}
-                title={`${environment.label}: edit variables, secret flags, color, and ${environment.risk} risk guardrails.`}
-                onClick={() => onSelectEnvironment(environment.id)}
-              >
-                <span className="tree-item-chevron">
-                  <ChevronRightIcon className="tree-icon tree-icon--muted" />
-                </span>
-                <span
-                  className="tree-item-badge tree-item-badge--swatch"
-                  style={{ '--environment-color': environment.color } as CSSProperties}
-                >
-                  <EnvironmentsIcon className="tree-icon" />
-                </span>
-                <span className="tree-item-content">
-                  <strong>{environment.label}</strong>
-                  <span>
-                    {environment.risk} / {Object.keys(environment.variables).length} vars
-                  </span>
-                </span>
-                <span className="tree-item-flags">
-                  {environment.requiresConfirmation ? (
-                    <ReadOnlyIcon className="tree-flag-icon" aria-label="Requires confirmation" />
-                  ) : null}
-                </span>
-              </button>
-            ))}
-          </SidebarSection>
-        ) : null}
+            <span className="tree-item-chevron">
+              <ChevronRightIcon className="tree-icon tree-icon--muted" />
+            </span>
+            <span
+              className="tree-item-badge tree-item-badge--swatch"
+              style={{ '--environment-color': environment.color } as CSSProperties}
+            >
+              <EnvironmentsIcon className="tree-icon" />
+            </span>
+            <span className="tree-item-content">
+              <strong>{environment.label}</strong>
+              <span>
+                {environment.risk} / {Object.keys(environment.variables).length} vars
+              </span>
+            </span>
+            <span className="tree-item-flags">
+              {environment.requiresConfirmation ? (
+                <ReadOnlyIcon className="tree-flag-icon" aria-label="Requires confirmation" />
+              ) : null}
+            </span>
+          </button>
+        ))}
       </div>
     </>
   )

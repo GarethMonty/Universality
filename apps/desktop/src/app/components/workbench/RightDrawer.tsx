@@ -48,7 +48,7 @@ interface RightDrawerProps {
   onImportPayloadChange(value: string): void
   onClose(): void
   onSaveConnection(profile: ConnectionProfile, secret?: string): void
-  onTestConnection(profile: ConnectionProfile, environmentId: string): void
+  onTestConnection(profile: ConnectionProfile, environmentId: string, secret?: string): void
   onRefreshDiagnostics(): void
   onExportWorkspace(): void
   onImportWorkspace(): void

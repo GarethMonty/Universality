@@ -14,7 +14,7 @@ interface ConnectionFooterProps {
   selectedEnvironmentId: string
   getConnectionForAction(): ConnectionProfile
   onSaveConnection(profile: ConnectionProfile, secret?: string): void
-  onTestConnection(profile: ConnectionProfile, environmentId: string): void
+  onTestConnection(profile: ConnectionProfile, environmentId: string, secret?: string): void
 }
 
 export function ConnectionFooter({
@@ -42,6 +42,9 @@ export function ConnectionFooter({
             {resolvedHost}
             {resolvedDatabase ? ` / ${resolvedDatabase}` : ''}
           </span>
+          {connectionTest.warnings.map((warning) => (
+            <span key={warning}>{warning}</span>
+          ))}
         </div>
       ) : null}
 
@@ -50,7 +53,9 @@ export function ConnectionFooter({
           type="button"
           className="drawer-button"
           title="Test this connection using the selected environment and stored secret reference."
-          onClick={() => onTestConnection(getConnectionForAction(), selectedEnvironmentId)}
+          onClick={() =>
+            onTestConnection(getConnectionForAction(), selectedEnvironmentId, secretDraft)
+          }
         >
           Test Connection
         </button>

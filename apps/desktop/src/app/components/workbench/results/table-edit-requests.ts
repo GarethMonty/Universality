@@ -43,8 +43,9 @@ export function buildTableCellEditRequest({
     return undefined
   }
 
-  const primaryKeyValue = row[primaryKeyIndex]
-  if (primaryKeyValue === undefined || primaryKeyValue === '') {
+  const primaryKey = primaryKeyPredicate(columns, row, target.table)
+
+  if (!primaryKey) {
     return undefined
   }
 
@@ -59,9 +60,7 @@ export function buildTableCellEditRequest({
       path: [],
       schema: target.schema,
       table: target.table,
-      primaryKey: {
-        [primaryKeyColumn]: coerceSqlCellValue(primaryKeyValue),
-      },
+      primaryKey,
     },
     changes: [
       {
@@ -70,6 +69,100 @@ export function buildTableCellEditRequest({
         valueType: valueTypeName(coercedValue),
       },
     ],
+  }
+}
+
+export function buildTableRowDeleteRequest({
+  columns,
+  connection,
+  editContext,
+  row,
+}: {
+  columns: string[]
+  connection?: ConnectionProfile
+  editContext?: DocumentEditContext
+  row: string[]
+}): DataEditExecutionRequest | undefined {
+  if (!connection || !editContext || connection.family !== 'sql' || connection.readOnly) {
+    return undefined
+  }
+
+  const target = parseSqlTableTarget(editContext.queryText)
+
+  if (!target) {
+    return undefined
+  }
+
+  const primaryKey = primaryKeyPredicate(columns, row, target.table)
+
+  if (!primaryKey) {
+    return undefined
+  }
+
+  return {
+    connectionId: editContext.connectionId,
+    environmentId: editContext.environmentId,
+    editKind: 'delete-row',
+    confirmationText: dataEditConfirmationText(connection, 'delete-row'),
+    target: {
+      objectKind: 'row',
+      path: [],
+      schema: target.schema,
+      table: target.table,
+      primaryKey,
+    },
+    changes: [],
+  }
+}
+
+export function buildTableRowInsertRequest({
+  columns,
+  connection,
+  editContext,
+  row,
+}: {
+  columns: string[]
+  connection?: ConnectionProfile
+  editContext?: DocumentEditContext
+  row: string[]
+}): DataEditExecutionRequest | undefined {
+  if (!connection || !editContext || connection.family !== 'sql' || connection.readOnly) {
+    return undefined
+  }
+
+  const target = parseSqlTableTarget(editContext.queryText)
+
+  if (!target) {
+    return undefined
+  }
+
+  const changes = columns
+    .map((field, index) => ({ field, value: row[index] ?? '' }))
+    .filter((change) => change.field && change.value.trim() !== '')
+    .map((change) => {
+      const value = coerceSqlCellValue(change.value)
+      return {
+        field: change.field,
+        value,
+        valueType: valueTypeName(value),
+      }
+    })
+
+  if (changes.length === 0) {
+    return undefined
+  }
+
+  return {
+    connectionId: editContext.connectionId,
+    environmentId: editContext.environmentId,
+    editKind: 'insert-row',
+    target: {
+      objectKind: 'row',
+      path: [],
+      schema: target.schema,
+      table: target.table,
+    },
+    changes,
   }
 }
 
@@ -83,9 +176,14 @@ export function parseSqlTableTarget(queryText: string): SqlTableTarget | undefin
     return undefined
   }
 
-  const identifiers = fromMatch[1]
-    .trim()
-    .match(/(?:"(?:[^"]|"")+"|`(?:[^`]|``)+`|\[(?:[^\]]|\]\])+\]|[A-Za-z_][\w$-]*)/g)
+  const tableReference = tableReferenceFromFromClause(fromMatch[1])
+
+  if (!tableReference) {
+    return undefined
+  }
+
+  const identifiers = tableReference
+    .match(identifierPattern)
     ?.map(unquoteIdentifier)
     .filter(Boolean)
 
@@ -97,6 +195,23 @@ export function parseSqlTableTarget(queryText: string): SqlTableTarget | undefin
   const schema = identifiers.length > 1 ? identifiers.at(-2) : undefined
 
   return table ? { schema, table } : undefined
+}
+
+const identifierPattern = /(?:"(?:[^"]|"")+"|`(?:[^`]|``)+`|\[(?:[^\]]|\]\])+\]|[A-Za-z_][\w$-]*)/g
+
+function tableReferenceFromFromClause(fromClause: string) {
+  const trimmed = fromClause.trim()
+
+  if (!trimmed || trimmed.startsWith('(')) {
+    return undefined
+  }
+
+  const referenceMatch =
+    /^(?:"(?:[^"]|"")+"|`(?:[^`]|``)+`|\[(?:[^\]]|\]\])+\]|[A-Za-z_][\w$-]*)(?:\s*\.\s*(?:"(?:[^"]|"")+"|`(?:[^`]|``)+`|\[(?:[^\]]|\]\])+\]|[A-Za-z_][\w$-]*))*/.exec(
+      trimmed,
+    )
+
+  return referenceMatch?.[0]
 }
 
 export function inferPrimaryKeyColumn(columns: string[], table: string) {
@@ -116,6 +231,25 @@ export function inferPrimaryKeyColumn(columns: string[], table: string) {
 
   const idColumns = columns.filter((column) => column.toLowerCase().endsWith('_id'))
   return idColumns.length === 1 ? idColumns[0] : undefined
+}
+
+function primaryKeyPredicate(columns: string[], row: string[], table: string) {
+  const primaryKeyColumn = inferPrimaryKeyColumn(columns, table)
+  const primaryKeyIndex = primaryKeyColumn ? columns.indexOf(primaryKeyColumn) : -1
+
+  if (!primaryKeyColumn || primaryKeyIndex < 0) {
+    return undefined
+  }
+
+  const primaryKeyValue = row[primaryKeyIndex]
+
+  if (primaryKeyValue === undefined || primaryKeyValue === '') {
+    return undefined
+  }
+
+  return {
+    [primaryKeyColumn]: coerceSqlCellValue(primaryKeyValue),
+  }
 }
 
 export function coerceSqlCellValue(value: string) {
@@ -160,4 +294,11 @@ function unquoteIdentifier(identifier: string) {
   }
 
   return identifier
+}
+
+function dataEditConfirmationText(
+  connection: ConnectionProfile,
+  editKind: DataEditExecutionRequest['editKind'],
+) {
+  return `CONFIRM ${connection.engine.toUpperCase()} ${editKind.toUpperCase()}`
 }

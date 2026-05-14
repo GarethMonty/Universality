@@ -5,7 +5,6 @@ import type {
 } from '@datanaut/shared-types'
 import {
   DEFAULT_FILTER_GROUP_ID,
-  defaultFilterGroup,
   mongoBuilderRowId,
 } from './mongo-find-defaults'
 
@@ -35,7 +34,7 @@ export function parseMongoFindQueryText(queryText: string): MongoFindBuilderStat
       enabled: filter.enabled ?? true,
       groupId: filter.groupId ?? DEFAULT_FILTER_GROUP_ID,
     })),
-    filterGroups: [defaultFilterGroup()],
+    filterGroups: [],
     projectionMode: projection.mode,
     projectionFields: projection.fields,
     sort: sortRowsFromQuery(query.sort),

@@ -60,7 +60,7 @@ export function planDataEditLocally(
       summary: `${request.editKind} data edit plan prepared for ${connection.name}.`,
       generatedRequest,
       requestLanguage: languageForConnection(connection),
-      destructive: request.editKind === 'delete-row' || request.editKind === 'delete-key',
+      destructive: request.editKind.includes('delete'),
       estimatedCost: 'Single-object edit; cost depends on the engine and indexes.',
       estimatedScanImpact:
         request.target.primaryKey ||
@@ -291,7 +291,19 @@ function browserEditableScopes(
       {
         scope: 'table',
         label: engine === 'dynamodb' ? 'Items' : 'Rows',
-        editKinds: engine === 'dynamodb' ? ['put-item', 'update-item'] : ['update-row'],
+        editKinds: engine === 'dynamodb' ? ['put-item', 'update-item', 'delete-item'] : ['update-row'],
+        requiresPrimaryKey: true,
+        liveExecution: false,
+      },
+    ]
+  }
+
+  if (family === 'search') {
+    return [
+      {
+        scope: 'index',
+        label: 'Documents',
+        editKinds: ['index-document', 'update-document', 'delete-document'],
         requiresPrimaryKey: true,
         liveExecution: false,
       },

@@ -113,7 +113,11 @@ export interface Actions {
   saveAndCloseTab(tabId: string): Promise<void>
   openSavedWork(savedWorkId: string): Promise<void>
   deleteSavedWork(savedWorkId: string): Promise<void>
-  testConnection(profile: ConnectionProfile, environmentId: string): Promise<void>
+  testConnection(
+    profile: ConnectionProfile,
+    environmentId: string,
+    secret?: string,
+  ): Promise<void>
   loadExplorer(request: ExplorerRequest): Promise<void>
   loadStructureMap(request: StructureRequest): Promise<void>
   inspectExplorer(

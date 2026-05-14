@@ -106,7 +106,7 @@ export function defaultQueryTextForConnection(connection: ConnectionProfile) {
     case 'mongodb':
       return '{\n  "collection": "products",\n  "filter": {},\n  "limit": 20\n}'
     case 'dynamodb':
-      return '{\n  "table": "Orders",\n  "keyCondition": "pk = :pk",\n  "values": { ":pk": "CUSTOMER#123" },\n  "limit": 25\n}'
+      return '{\n  "operation": "Query",\n  "tableName": "Orders",\n  "keyConditionExpression": "#pk = :pk",\n  "expressionAttributeNames": { "#pk": "pk" },\n  "expressionAttributeValues": { ":pk": { "S": "CUSTOMER#123" } },\n  "limit": 25\n}'
     case 'cosmosdb':
       return 'select top 50 * from c'
     case 'litedb':
@@ -133,7 +133,7 @@ export function defaultQueryTextForConnection(connection: ConnectionProfile) {
       return '{\n  "start": "1h-ago",\n  "queries": [\n    { "metric": "sys.cpu.user", "aggregator": "avg" }\n  ]\n}'
     case 'elasticsearch':
     case 'opensearch':
-      return '{\n  "query": { "match_all": {} },\n  "size": 25\n}'
+      return '{\n  "index": "products",\n  "body": {\n    "query": { "match_all": {} },\n    "size": 20\n  }\n}'
     case 'bigquery':
     case 'snowflake':
     case 'clickhouse':

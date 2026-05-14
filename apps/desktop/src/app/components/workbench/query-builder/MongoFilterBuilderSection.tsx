@@ -1,11 +1,14 @@
 import type {
   MongoBuilderValueType,
   MongoFindFilterGroup,
+  MongoFindFilterRow,
   MongoFilterOperator,
 } from '@datanaut/shared-types'
+import type { FieldDragPayload } from '../results/field-drag'
 import { BuilderSection } from './BuilderSection'
 import type { MongoFindSectionProps } from './MongoBuilderSection.types'
 import { rowId } from './MongoBuilderSection.types'
+import { defaultFilterGroup } from './mongo-find-defaults'
 
 const FILTER_OPERATORS: Array<{ value: MongoFilterOperator; label: string }> = [
   { value: 'eq', label: '=' },
@@ -26,17 +29,33 @@ export function MongoFilterBuilderSection({
   filterGroups,
   updateDraft,
 }: MongoFindSectionProps) {
+  const hasExplicitGroups = filterGroups.length > 0
+
   return (
     <BuilderSection
       title="Filters"
       actionLabel="Add Group"
       dropHint="Drop a result field to filter"
-      onDropField={(field) =>
+      secondaryActionLabel="Add Filter"
+      onDropField={(field, payload) =>
         updateDraft({
           filterGroups,
           filters: [
             ...draft.filters,
-            filterRow(filterGroups[0]?.id ?? 'filter-group-default', field),
+            filterRowFromDroppedField(
+              hasExplicitGroups ? filterGroups[0]?.id : undefined,
+              field,
+              payload,
+            ),
+          ],
+        })
+      }
+      onSecondaryAdd={() =>
+        updateDraft({
+          filterGroups,
+          filters: [
+            ...draft.filters,
+            filterRow(hasExplicitGroups ? filterGroups[0]?.id : undefined),
           ],
         })
       }
@@ -44,16 +63,26 @@ export function MongoFilterBuilderSection({
         updateDraft({
           filterGroups: [
             ...filterGroups,
-            {
-              id: rowId('filter-group'),
-              label: `Group ${filterGroups.length + 1}`,
-              logic: 'and',
-            },
+            filterGroups.length === 0
+              ? defaultFilterGroup()
+              : {
+                  id: rowId('filter-group'),
+                  label: `Group ${filterGroups.length + 1}`,
+                  logic: 'and',
+                },
           ],
         })
       }
     >
       {draft.filters.length === 0 ? <p className="query-builder-empty">No filters.</p> : null}
+      {!hasExplicitGroups && draft.filters.length > 0 ? (
+        <FilterRows
+          draft={draft}
+          filterGroups={filterGroups}
+          rows={draft.filters}
+          updateDraft={updateDraft}
+        />
+      ) : null}
       {filterGroups.map((group) => (
         <FilterGroup
           draft={draft}
@@ -129,6 +158,24 @@ function FilterGroup({
         ) : null}
       </div>
       {rows.length === 0 ? <p className="query-builder-empty">No filters in this group.</p> : null}
+      <FilterRows
+        draft={draft}
+        filterGroups={filterGroups}
+        rows={rows}
+        updateDraft={updateDraft}
+      />
+    </div>
+  )
+}
+
+function FilterRows({
+  draft,
+  filterGroups,
+  rows,
+  updateDraft,
+}: MongoFindSectionProps & { rows: MongoFindFilterRow[] }) {
+  return (
+    <>
       {rows.map((row) => (
         <div
           className={`query-builder-row query-builder-row--filter${
@@ -234,11 +281,11 @@ function FilterGroup({
           </button>
         </div>
       ))}
-    </div>
+    </>
   )
 }
 
-function filterRow(groupId: string, field = '') {
+function filterRow(groupId: string | undefined, field = '') {
   return {
     id: rowId('filter'),
     enabled: true,
@@ -248,4 +295,57 @@ function filterRow(groupId: string, field = '') {
     value: '',
     valueType: 'string' as const,
   }
+}
+
+function filterRowFromDroppedField(
+  groupId: string | undefined,
+  field: string,
+  payload: FieldDragPayload,
+) {
+  const valueType = mongoBuilderValueType(payload.value, payload.valueType)
+
+  return {
+    ...filterRow(groupId, field),
+    value: mongoBuilderValue(payload.value, valueType),
+    valueType,
+  }
+}
+
+function mongoBuilderValueType(
+  value: unknown,
+  dragValueType: string | undefined,
+): MongoBuilderValueType {
+  if (dragValueType === 'number' || typeof value === 'number') {
+    return 'number'
+  }
+
+  if (dragValueType === 'boolean' || typeof value === 'boolean') {
+    return 'boolean'
+  }
+
+  if (dragValueType === 'null' || value === null) {
+    return 'null'
+  }
+
+  if (
+    dragValueType === 'object' ||
+    dragValueType === 'array' ||
+    (typeof value === 'object' && value !== null)
+  ) {
+    return 'json'
+  }
+
+  return 'string'
+}
+
+function mongoBuilderValue(value: unknown, valueType: MongoBuilderValueType) {
+  if (valueType === 'null') {
+    return ''
+  }
+
+  if (valueType === 'json') {
+    return JSON.stringify(value ?? null)
+  }
+
+  return value === undefined || value === null ? '' : String(value)
 }

@@ -216,7 +216,10 @@ fn validate_edit_target(
     }
 
     if request.changes.is_empty()
-        && !matches!(request.edit_kind.as_str(), "delete-row" | "delete-key")
+        && !matches!(
+            request.edit_kind.as_str(),
+            "delete-row" | "delete-key" | "delete-item" | "delete-document"
+        )
     {
         warnings.push("Data edits need at least one change.".into());
     }

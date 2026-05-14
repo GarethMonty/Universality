@@ -56,18 +56,22 @@ export const clientExecution = {
       return invokeDesktop<LocalDatabasePickResult>('pick_local_database_file', { request })
     }
 
-    if (request.engine !== 'sqlite') {
+    const extension = localDatabaseExtension(request.engine)
+
+    if (!extension) {
       return { canceled: true }
     }
 
     const filename =
       request.purpose === 'create'
-        ? 'datanaut-preview-local.sqlite'
-        : 'datanaut-preview-existing.sqlite'
+        ? undefined
+        : `datanaut-preview-existing.${extension}`
 
     return {
       canceled: false,
-      path: `C:\\Users\\gmont\\Datanaut\\${filename}`,
+      path: filename
+        ? `C:\\Users\\gmont\\Datanaut\\${filename}`
+        : 'C:\\Users\\gmont\\Datanaut',
     }
   },
 
@@ -81,14 +85,37 @@ export const clientExecution = {
     return {
       engine: request.engine,
       path: request.path,
-      message:
-        request.mode === 'starter'
-          ? 'Preview SQLite starter database prepared.'
-          : 'Preview SQLite empty database prepared.',
-      warnings:
-        request.engine === 'sqlite'
-          ? []
-          : ['This local database engine is reserved for future adapter work.'],
+      message: previewLocalDatabaseMessage(request),
+      warnings: request.engine === 'litedb'
+        ? [
+            'LiteDB file was prepared. The .NET LiteDB sidecar will initialize database pages when live file access is enabled.',
+          ]
+        : [],
     }
   },
+}
+
+function localDatabaseExtension(engine: LocalDatabasePickRequest['engine']) {
+  switch (engine) {
+    case 'sqlite':
+      return 'sqlite'
+    case 'duckdb':
+      return 'duckdb'
+    case 'litedb':
+      return 'db'
+    default:
+      return undefined
+  }
+}
+
+function previewLocalDatabaseMessage(request: LocalDatabaseCreateRequest) {
+  const label = request.engine === 'duckdb'
+    ? 'DuckDB'
+    : request.engine === 'litedb'
+      ? 'LiteDB'
+      : 'SQLite'
+
+  return request.mode === 'starter'
+    ? `Preview ${label} starter database prepared.`
+    : `Preview ${label} empty database prepared.`
 }

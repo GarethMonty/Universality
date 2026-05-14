@@ -212,7 +212,12 @@ function wideColumnConnectionTree(connection: ConnectionProfile): ConnectionTree
           branch('streams', 'Streams', 'streams', 'Change data capture', [
             leaf('stream-orders', 'Orders stream', 'stream', 'sample stream'),
           ]),
-        ]),
+        ], {
+          path: [connection.name, 'Tables'],
+          queryable: true,
+          builderKind: 'dynamodb-key-condition',
+          queryTemplate: dynamoDbQueryTemplate('Orders'),
+        }),
       ]),
     ]
   }
@@ -221,8 +226,8 @@ function wideColumnConnectionTree(connection: ConnectionProfile): ConnectionTree
     branch('keyspaces', 'Keyspaces', 'keyspaces', 'Wide-column namespaces', [
       branch('keyspace-app', 'app', 'keyspace', `${connection.engine} keyspace`, [
         branch('tables', 'Tables', 'tables', 'Partition-key-first tables', [
-          leaf('table-events', 'events_by_customer', 'table', 'sample table'),
-          leaf('table-orders', 'orders_by_day', 'table', 'sample table'),
+          cassandraTableLeaf(connection, 'app', 'events_by_customer'),
+          cassandraTableLeaf(connection, 'app', 'orders_by_day'),
         ]),
         branch('materialized-views', 'Materialized Views', 'materialized-views', 'Derived query tables', [
           leaf('view-orders-status', 'orders_by_status', 'materialized-view', 'sample view'),
@@ -235,19 +240,70 @@ function wideColumnConnectionTree(connection: ConnectionProfile): ConnectionTree
   ]
 }
 
+function cassandraTableLeaf(connection: ConnectionProfile, keyspace: string, table: string) {
+  return leaf(`table-${table}`, table, 'table', 'partition-key table', {
+    path: [connection.name, keyspace, 'Tables'],
+    queryable: true,
+    builderKind: connection.engine === 'cassandra' ? 'cql-partition' : undefined,
+    queryTemplate: `select *\nfrom ${keyspace}.${table}\nwhere customer_id = 'CUSTOMER#123'\nlimit 20;`,
+  })
+}
+
+function dynamoDbQueryTemplate(table: string) {
+  return JSON.stringify(
+    {
+      operation: 'Query',
+      tableName: table,
+      keyConditionExpression: '#pk = :pk',
+      expressionAttributeNames: { '#pk': 'pk' },
+      expressionAttributeValues: { ':pk': { S: 'CUSTOMER#123' } },
+      limit: 20,
+    },
+    null,
+    2,
+  )
+}
+
 function searchConnectionTree(connection: ConnectionProfile): ConnectionTreeNode[] {
   return [
     branch('indices', 'Indices', 'indices', `${connection.engine} searchable indices`, [
-      leaf('index-products', 'products', 'index', 'sample index'),
-      leaf('index-events', 'events-*', 'index', 'sample index pattern'),
+      searchIndexLeaf(connection, 'products'),
+      searchIndexLeaf(connection, 'events-*'),
     ]),
     branch('data-streams', 'Data Streams', 'data-streams', 'Append-oriented streams', [
-      leaf('stream-logs', 'logs-app-default', 'data-stream', 'sample stream'),
+      searchIndexLeaf(connection, 'logs-app-default', 'data-stream'),
     ]),
     branch('mappings', 'Mappings', 'mappings', 'Field mappings and analyzers', [
       leaf('mapping-products', 'products mapping', 'mapping', 'sample mapping'),
     ]),
   ]
+}
+
+function searchIndexLeaf(
+  connection: ConnectionProfile,
+  index: string,
+  kind: 'index' | 'data-stream' = 'index',
+) {
+  return leaf(`${kind}-${index}`, index, kind, kind === 'index' ? 'sample index' : 'sample stream', {
+    path: [connection.name, kind === 'index' ? 'Indices' : 'Data Streams'],
+    queryable: true,
+    builderKind: 'search-dsl',
+    queryTemplate: searchDslQueryTemplate(index),
+  })
+}
+
+function searchDslQueryTemplate(index: string) {
+  return JSON.stringify(
+    {
+      index,
+      body: {
+        query: { match_all: {} },
+        size: 20,
+      },
+    },
+    null,
+    2,
+  )
 }
 
 function analyticsConnectionTree(connection: ConnectionProfile): ConnectionTreeNode[] {
@@ -295,8 +351,9 @@ function branch(
   kind: string,
   detail: string,
   children: ConnectionTreeNode[],
+  options: Partial<ConnectionTreeNode> = {},
 ): ConnectionTreeNode {
-  return { id, label, kind, detail, children }
+  return { id, label, kind, detail, children, ...options }
 }
 
 function leaf(

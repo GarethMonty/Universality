@@ -1,4 +1,5 @@
 export const DEFAULT_COLUMN_WIDTH = 160
+export const DATA_GRID_HEADER_HEIGHT = 30
 export const ROW_NUMBER_WIDTH = 48
 
 export interface GridSelection {

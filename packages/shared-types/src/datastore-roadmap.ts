@@ -783,6 +783,12 @@ export const DATASTORE_FEATURE_BACKLOG: DatastoreFeatureBacklogEntry[] = [
       'File backup workflow',
       'Collection compaction status',
     ],
+    localDatabase: {
+      defaultExtension: 'db',
+      extensions: ['db', 'litedb'],
+      canCreateEmpty: true,
+      canCreateStarter: false,
+    },
     diagnosticFeatures: [
       'File accessibility checks',
       'Index and collection size readouts',
@@ -1553,6 +1559,12 @@ export const DATASTORE_FEATURE_BACKLOG: DatastoreFeatureBacklogEntry[] = [
       'SQL over CSV and Parquet',
       'Import/export workflows',
     ],
+    localDatabase: {
+      defaultExtension: 'duckdb',
+      extensions: ['duckdb', 'db'],
+      canCreateEmpty: true,
+      canCreateStarter: true,
+    },
     advancedFeatures: [
       'EXPLAIN/ANALYZE/profiling',
       'PRAGMA metadata panels',

@@ -1,47 +1,108 @@
 import type {
+  ConnectionProfile,
   MongoFindBuilderState,
   QueryBuilderState,
   QueryTabState,
 } from '@datanaut/shared-types'
+import { CqlPartitionBuilder } from './CqlPartitionBuilder'
+import { isCqlPartitionBuilderState } from './cql-partition'
+import { DynamoDbKeyConditionBuilder } from './DynamoDbKeyConditionBuilder'
+import { isDynamoDbKeyConditionBuilderState } from './dynamodb-key-condition'
 import {
   buildMongoFindQueryText,
   isMongoFindBuilderState,
-  normalizeFilterGroups,
 } from './mongo-find'
 import {
   MongoFilterBuilderSection,
   MongoProjectionBuilderSection,
   MongoSortBuilderSection,
 } from './MongoFindBuilderSections'
+import { isSqlSelectBuilderState } from './sql-select'
+import { SqlSelectBuilder } from './SqlSelectBuilder'
+import { isSearchDslBuilderState } from './search-dsl'
+import { SearchDslBuilder } from './SearchDslBuilder'
 
 interface QueryBuilderPanelProps {
+  connection?: ConnectionProfile
   tab: QueryTabState
   builderState?: QueryBuilderState
   collectionOptions?: string[]
+  tableOptions?: string[]
   onBuilderStateChange?(tabId: string, builderState: QueryBuilderState): void
 }
 
 export function QueryBuilderPanel({
   builderState,
   collectionOptions = [],
+  connection,
   tab,
+  tableOptions = [],
   onBuilderStateChange,
 }: QueryBuilderPanelProps) {
   const resolvedBuilderState = builderState ?? tab.builderState
 
-  if (!isMongoFindBuilderState(resolvedBuilderState)) {
-    return null
+  if (isMongoFindBuilderState(resolvedBuilderState)) {
+    return (
+      <MongoFindBuilder
+        key={tab.id}
+        tab={tab}
+        builderState={resolvedBuilderState}
+        collectionOptions={collectionOptions}
+        onBuilderStateChange={onBuilderStateChange}
+      />
+    )
   }
 
-  return (
-    <MongoFindBuilder
-      key={tab.id}
-      tab={tab}
-      builderState={resolvedBuilderState}
-      collectionOptions={collectionOptions}
-      onBuilderStateChange={onBuilderStateChange}
-    />
-  )
+  if (connection && isSqlSelectBuilderState(resolvedBuilderState)) {
+    return (
+      <SqlSelectBuilder
+        key={tab.id}
+        connection={connection}
+        tab={tab}
+        builderState={resolvedBuilderState}
+        tableOptions={tableOptions}
+        onBuilderStateChange={onBuilderStateChange}
+      />
+    )
+  }
+
+  if (isDynamoDbKeyConditionBuilderState(resolvedBuilderState)) {
+    return (
+      <DynamoDbKeyConditionBuilder
+        key={tab.id}
+        tab={tab}
+        builderState={resolvedBuilderState}
+        tableOptions={tableOptions}
+        onBuilderStateChange={onBuilderStateChange}
+      />
+    )
+  }
+
+  if (isCqlPartitionBuilderState(resolvedBuilderState)) {
+    return (
+      <CqlPartitionBuilder
+        key={tab.id}
+        tab={tab}
+        builderState={resolvedBuilderState}
+        tableOptions={tableOptions}
+        onBuilderStateChange={onBuilderStateChange}
+      />
+    )
+  }
+
+  if (isSearchDslBuilderState(resolvedBuilderState)) {
+    return (
+      <SearchDslBuilder
+        key={tab.id}
+        tab={tab}
+        builderState={resolvedBuilderState}
+        indexOptions={tableOptions}
+        onBuilderStateChange={onBuilderStateChange}
+      />
+    )
+  }
+
+  return null
 }
 
 function MongoFindBuilder({
@@ -56,7 +117,7 @@ function MongoFindBuilder({
   onBuilderStateChange?(tabId: string, builderState: QueryBuilderState): void
 }) {
   const draft = builderState
-  const filterGroups = normalizeFilterGroups(draft.filterGroups)
+  const filterGroups = draft.filterGroups ?? []
   const resolvedCollectionOptions = uniqueValues([
     draft.collection,
     ...collectionOptions,

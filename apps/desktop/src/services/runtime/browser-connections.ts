@@ -14,16 +14,12 @@ export function setActiveConnection(
     return next
   }
 
-  let tab = next.tabs.find((item) => item.connectionId === connection.id)
-
-  if (!tab) {
-    tab = createQueryTabForConnection(next, connection, true)
-    next.tabs.push(tab)
-  }
+  const tab = next.tabs.find((item) => item.connectionId === connection.id)
 
   next.ui.activeConnectionId = connection.id
-  next.ui.activeEnvironmentId = tab.environmentId
-  next.ui.activeTabId = tab.id
+  next.ui.activeEnvironmentId =
+    tab?.environmentId ?? connection.environmentIds[0] ?? next.ui.activeEnvironmentId
+  next.ui.activeTabId = tab?.id ?? ''
   next.updatedAt = new Date().toISOString()
   return next
 }
@@ -100,5 +96,4 @@ export function upsertEnvironment(
   next.updatedAt = new Date().toISOString()
   return next
 }
-
 

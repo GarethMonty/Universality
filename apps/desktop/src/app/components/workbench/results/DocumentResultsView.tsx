@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import type {
   ConnectionProfile,
   DataEditChange,
@@ -32,6 +33,7 @@ interface DocumentResultsViewProps {
   connection?: ConnectionProfile
   editContext?: DocumentEditContext
   documents: Array<Record<string, unknown>>
+  footerControls?: ReactNode
   resultDurationMs?: number
   resultSummary?: string
   totalDocumentCount?: number
@@ -57,6 +59,7 @@ export function DocumentResultsView({
   connection,
   editContext,
   documents,
+  footerControls,
   resultDurationMs,
   resultSummary,
   totalDocumentCount,
@@ -350,6 +353,7 @@ export function DocumentResultsView({
           <button type="button" className="drawer-button" onClick={collapseAll}>
             Collapse All
           </button>
+          {footerControls}
           {copyMessage ? <span>{copyMessage}</span> : null}
         </div>
         <div className="document-data-grid-footer-right">

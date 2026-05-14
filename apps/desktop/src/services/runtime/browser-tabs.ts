@@ -103,7 +103,7 @@ export function uniqueScopedQueryTitle(
   label: string,
   hasBuilder: boolean,
 ) {
-  const extension = connection.family === 'document' ? 'json' : 'sql'
+  const extension = tabTitleParts(connection).extension
   const candidate = hasBuilder ? `${label}.find.${extension}` : `${label}.${extension}`
   const titles = new Set(snapshot.tabs.map((tab) => tab.title))
 
@@ -154,6 +154,7 @@ export function upsertTab(snapshot: WorkspaceSnapshot, tab: QueryTabState): Work
   next.ui.activeConnectionId = tab.connectionId
   next.ui.activeEnvironmentId = tab.environmentId
   next.ui.activeTabId = tab.id
+  next.ui.rightDrawer = 'none'
   next.updatedAt = new Date().toISOString()
   return next
 }
@@ -198,6 +199,10 @@ export function defaultQueryTabTitle(
 
 
 export function tabTitleParts(connection: ConnectionProfile) {
+  if (connection.engine === 'dynamodb' || connection.family === 'search') {
+    return { prefix: 'Query', extension: 'json' }
+  }
+
   if (connection.family === 'document') {
     return { prefix: 'Query', extension: 'json' }
   }
@@ -340,5 +345,3 @@ export function reopenClosedQueryTab(
   next.updatedAt = new Date().toISOString()
   return next
 }
-
-

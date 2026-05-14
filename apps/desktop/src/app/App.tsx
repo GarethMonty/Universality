@@ -2,6 +2,7 @@ import { useCallback, useDeferredValue, useEffect, useRef, useState } from 'reac
 import type { CSSProperties } from 'react'
 import type {
   ConnectionProfile,
+  EnvironmentProfile,
   ExecutionRequest,
   QueryBuilderState,
   QueryTabState,
@@ -24,17 +25,38 @@ import { StatusBar } from './components/workbench/StatusBar'
 import { StructureWorkspace } from './components/workbench/StructureWorkspace'
 import { QueryBuilderPanel } from './components/workbench/query-builder/QueryBuilderPanel'
 import {
+  buildCqlPartitionQueryText,
+  isCqlPartitionBuilderState,
+  parseCqlPartitionQueryText,
+} from './components/workbench/query-builder/cql-partition'
+import {
+  buildDynamoDbKeyConditionQueryText,
+  isDynamoDbKeyConditionBuilderState,
+  parseDynamoDbKeyConditionQueryText,
+} from './components/workbench/query-builder/dynamodb-key-condition'
+import {
   buildMongoFindQueryText,
   isMongoFindBuilderState,
   parseMongoFindQueryText,
 } from './components/workbench/query-builder/mongo-find'
+import {
+  buildSqlSelectQueryText,
+  isSqlSelectBuilderState,
+  parseSqlSelectQueryText,
+} from './components/workbench/query-builder/sql-select'
+import {
+  buildSearchDslQueryText,
+  isSearchDslBuilderState,
+  parseSearchDslQueryText,
+} from './components/workbench/query-builder/search-dsl'
 import { AppStateProvider, useAppState } from './state/app-state'
+import { createConnectionProfile, createEnvironmentProfile } from './state/app-state-factories'
 import {
   appendFieldToQueryText,
   builderStateForTab,
   defaultCapabilities,
   deriveCapabilities,
-  mongoCollectionOptions,
+  queryBuilderObjectOptions,
   resolveThemeMode,
   selectPayload,
 } from './workspace-helpers'
@@ -81,6 +103,7 @@ function DesktopWorkspace() {
   const [queryWindowMode, setQueryWindowMode] = useState<'both' | 'builder' | 'raw'>(
     'both',
   )
+  const [connectionDraft, setConnectionDraft] = useState<ConnectionProfile | undefined>()
   const hasBuilderTabEverLoaded = useRef(false)
   const builderStateDraftRef = useRef<Record<string, QueryBuilderState>>({})
   const [builderStateDrafts, setBuilderStateDrafts] = useState<
@@ -150,20 +173,17 @@ function DesktopWorkspace() {
   const activeEditorQueryText =
     activeTab &&
     activeBuilderState &&
-    isMongoFindBuilderState(activeBuilderState) &&
     activeQueryWindowMode !== 'raw'
-      ? buildMongoFindQueryText(activeBuilderState)
+      ? buildQueryTextForBuilderState(activeBuilderState, activeConnection)
       : activeTab?.queryText
 
   const resolveBuilderQueryText = useCallback((tab: QueryTabState): string | undefined => {
     const builderState =
-      activeConnection && builderStateForTab(tab, activeConnection, builderStateDraftRef.current)
+      activeConnection
+        ? builderStateForTab(tab, activeConnection, builderStateDraftRef.current)
+        : undefined
 
     if (!builderState) {
-      return undefined
-    }
-
-    if (!isMongoFindBuilderState(builderState)) {
       return undefined
     }
 
@@ -171,7 +191,7 @@ function DesktopWorkspace() {
       return undefined
     }
 
-    return buildMongoFindQueryText(builderState)
+    return buildQueryTextForBuilderState(builderState, activeConnection)
   }, [activeConnection, activeQueryWindowMode])
   const resolveQueryText = useCallback((tab: QueryTabState): string => {
     const hasDraftText =
@@ -188,16 +208,12 @@ function DesktopWorkspace() {
 
     const generatedQueryText = resolveBuilderQueryText(activeTab)
     const builderState =
-      activeConnection &&
-      builderStateForTab(activeTab, activeConnection, builderStateDraftRef.current)
+      activeConnection
+        ? builderStateForTab(activeTab, activeConnection, builderStateDraftRef.current)
+        : undefined
 
-    if (!generatedQueryText) {
+    if (!generatedQueryText || !builderState) {
       void actions.executeQuery(activeTab.id, mode, guardrailId, resolveQueryText(activeTab))
-      return
-    }
-
-    if (!isMongoFindBuilderState(builderState)) {
-      void actions.executeQuery(activeTab.id, mode, guardrailId)
       return
     }
 
@@ -223,11 +239,9 @@ function DesktopWorkspace() {
       return
     }
 
-    const liveQueryText = isMongoFindBuilderState(builderState)
-      ? buildMongoFindQueryText(builderState)
-      : undefined
+    const liveQueryText = buildQueryTextForBuilderState(builderState, activeConnection)
     const nextBuilderState =
-      isMongoFindBuilderState(builderState) && liveQueryText
+      liveQueryText
         ? {
             ...builderState,
             lastAppliedQueryText: liveQueryText,
@@ -338,9 +352,10 @@ function DesktopWorkspace() {
       !activeEnvironmentId ||
       activeSidebarPane !== 'explorer' ||
       sidebarCollapsed ||
+      explorerStatus === 'loading' ||
       (explorer?.connectionId === activeConnectionId &&
         explorer.environmentId === activeEnvironmentId &&
-        (explorer.nodes.length > 0 || explorerStatus === 'loading'))
+        (explorer.nodes.length > 0 || explorer.scope === undefined))
     ) {
       return
     }
@@ -416,7 +431,7 @@ function DesktopWorkspace() {
     const searchable = `${node.label} ${node.kind} ${node.detail} ${(node.path ?? []).join(' ')}`.toLowerCase()
     return matchesFamily && searchable.includes(filter)
   }) : []
-  const queryBuilderCollectionOptions = mongoCollectionOptions(activeConnection, explorerItems)
+  const queryBuilderOptions = queryBuilderObjectOptions(activeConnection, explorerItems)
   const commandItems = [
     'Open command palette',
     'Open connections',
@@ -443,7 +458,11 @@ function DesktopWorkspace() {
     'Open environments',
     'New environment',
   ].filter((item) => item.toLowerCase().includes(deferredCommandQuery.toLowerCase()))
-  const connectionTest = activeConnection ? connectionTests[activeConnection.id] : undefined
+  const drawerConnection =
+    snapshot.ui.rightDrawer === 'connection' && connectionDraft
+      ? connectionDraft
+      : activeConnection
+  const connectionTest = drawerConnection ? connectionTests[drawerConnection.id] : undefined
   const activeRenderer =
     activeTab &&
     rendererPreference.tabId === activeTab.id &&
@@ -522,6 +541,7 @@ function DesktopWorkspace() {
   }
 
   const openConnectionDrawer = () => {
+    setConnectionDraft(undefined)
     if (snapshot?.ui.activeConnectionId) {
       void actions.updateUiState({
         activeActivity: 'connections',
@@ -533,6 +553,7 @@ function DesktopWorkspace() {
   }
 
   const openConnectionDrawerFor = (connectionId: string) => {
+    setConnectionDraft(undefined)
     if (connectionId === snapshot?.ui.activeConnectionId) {
       openConnectionDrawer()
       return
@@ -550,6 +571,7 @@ function DesktopWorkspace() {
   }
 
   const openOperationsDrawer = (connectionId: string) => {
+    setConnectionDraft(undefined)
     void (async () => {
       await actions.selectConnection(connectionId)
       await actions.updateUiState({
@@ -570,6 +592,7 @@ function DesktopWorkspace() {
   }
 
   const openDiagnosticsDrawer = () => {
+    setConnectionDraft(undefined)
     void actions.updateUiState({
       activeActivity: 'settings',
       rightDrawer: 'diagnostics',
@@ -578,12 +601,86 @@ function DesktopWorkspace() {
   }
 
   const closeDrawer = () => {
+    setConnectionDraft(undefined)
     void actions.updateUiState({
       activeActivity:
         snapshot.ui.activeActivity === 'settings'
           ? snapshot.ui.activeSidebarPane
           : snapshot.ui.activeActivity,
       rightDrawer: 'none',
+    })
+  }
+
+  const saveConnectionProfile = (
+    profile: ConnectionProfile,
+    secret: string | undefined,
+  ) => {
+    void (async () => {
+      let nextProfile = profile
+
+      if (connectionDraft?.id === profile.id && profile.environmentIds.length === 0) {
+        const environment = createEnvironmentProfile()
+        await actions.saveEnvironment(environment)
+        nextProfile = {
+          ...profile,
+          environmentIds: [environment.id],
+          updatedAt: new Date().toISOString(),
+        }
+      }
+
+      await actions.saveConnection(nextProfile, secret)
+
+      if (connectionDraft?.id === profile.id) {
+        setConnectionDraft(undefined)
+      }
+    })()
+  }
+
+  const cloneEnvironmentProfile = (environment: EnvironmentProfile) => {
+    const clone = createEnvironmentProfile({
+      color: environment.color,
+      exportable: environment.exportable,
+      inheritsFrom: environment.inheritsFrom,
+      label: `Copy of ${environment.label}`,
+      requiresConfirmation: environment.requiresConfirmation,
+      risk: environment.risk,
+      safeMode: environment.safeMode,
+      sensitiveKeys: [...environment.sensitiveKeys],
+      variables: { ...environment.variables },
+    })
+
+    void (async () => {
+      await actions.saveEnvironment(clone)
+      await actions.updateUiState({
+        activeActivity: 'environments',
+        activeEnvironmentId: clone.id,
+        activeSidebarPane: 'environments',
+        sidebarCollapsed: false,
+      })
+    })()
+  }
+
+  const openNewConnectionDraft = () => {
+    const environmentId =
+      snapshot.ui.activeEnvironmentId ||
+      activeEnvironment?.id ||
+      snapshot.environments[0]?.id ||
+      ''
+    const draft = createConnectionProfile(environmentId || 'env-local')
+
+    setConnectionDraft(
+      environmentId
+        ? draft
+        : {
+            ...draft,
+            environmentIds: [],
+          },
+    )
+    void actions.updateUiState({
+      activeActivity: 'connections',
+      activeSidebarPane: 'connections',
+      sidebarCollapsed: false,
+      rightDrawer: 'connection',
     })
   }
 
@@ -632,6 +729,7 @@ function DesktopWorkspace() {
       return
     }
 
+    setConnectionDraft(undefined)
     void (async () => {
       await actions.createTab(connectionId)
       await actions.updateUiState({
@@ -645,6 +743,7 @@ function DesktopWorkspace() {
       snapshot.ui.activeEnvironmentId ||
       snapshot.connections.find((connection) => connection.id === connectionId)?.environmentIds[0]
 
+    setConnectionDraft(undefined)
     void (async () => {
       await actions.createScopedTab({
         connectionId,
@@ -671,7 +770,7 @@ function DesktopWorkspace() {
     }
 
     if (command === 'New connection') {
-      void actions.createConnection()
+      openNewConnectionDraft()
       return
     }
 
@@ -924,7 +1023,7 @@ function DesktopWorkspace() {
                 sidebarCollapsed: false,
               })
             }
-            onCreateConnection={() => void actions.createConnection()}
+            onCreateConnection={openNewConnectionDraft}
             onCreateEnvironment={() => void actions.createEnvironment()}
             onConnectionGroupModeChange={(connectionGroupMode) =>
               void actions.updateUiState({ connectionGroupMode })
@@ -981,6 +1080,7 @@ function DesktopWorkspace() {
                 activeEnvironment={activeEnvironment}
                 environments={snapshot.environments}
                 onCreateEnvironment={() => void actions.createEnvironment()}
+                onCloneEnvironment={cloneEnvironmentProfile}
                 onSaveEnvironment={(environment) => void actions.saveEnvironment(environment)}
               />
             ) : showingExplorerWorkspace ? (
@@ -1072,9 +1172,11 @@ function DesktopWorkspace() {
                       >
                         {hasBuilderQuery && activeQueryWindowMode !== 'raw' ? (
                           <QueryBuilderPanel
+                            connection={activeConnection}
                             tab={activeTab}
                             builderState={activeBuilderState}
-                            collectionOptions={queryBuilderCollectionOptions}
+                            collectionOptions={queryBuilderOptions}
+                            tableOptions={queryBuilderOptions}
                             onBuilderStateChange={persistBuilderState}
                           />
                         ) : null}
@@ -1088,11 +1190,13 @@ function DesktopWorkspace() {
                               queryTextDraftRef.current[activeTab.id] = nextQueryText
                               if (
                                 activeBuilderState &&
-                                isMongoFindBuilderState(activeBuilderState) &&
                                 activeQueryWindowMode === 'both'
                               ) {
-                                const parsedBuilderState =
-                                  parseMongoFindQueryText(nextQueryText)
+                                const parsedBuilderState = parseBuilderStateFromQueryText(
+                                  nextQueryText,
+                                  activeBuilderState,
+                                  activeConnection,
+                                )
 
                                 if (parsedBuilderState) {
                                   persistBuilderState(activeTab.id, parsedBuilderState)
@@ -1116,7 +1220,7 @@ function DesktopWorkspace() {
                   </>
                 ) : (
                   <WelcomeSurface
-                    onCreateConnection={() => void actions.createConnection()}
+                    onCreateConnection={openNewConnectionDraft}
                     onImportWorkspace={openDiagnosticsDrawer}
                     onOpenDiagnostics={openDiagnosticsDrawer}
                   />
@@ -1185,8 +1289,8 @@ function DesktopWorkspace() {
           <RightDrawer
             key={[
               snapshot.ui.rightDrawer,
-              activeConnection?.id ?? 'none',
-              activeConnection?.updatedAt ?? 'none',
+              drawerConnection?.id ?? 'none',
+              drawerConnection?.updatedAt ?? 'none',
               activeEnvironment?.id ?? 'none',
               activeEnvironment?.updatedAt ?? 'none',
             ].join('-')}
@@ -1194,7 +1298,7 @@ function DesktopWorkspace() {
             width={snapshot.ui.rightDrawerWidth}
             health={payload.health}
             theme={snapshot.preferences.theme}
-            activeConnection={activeConnection}
+            activeConnection={drawerConnection}
             activeEnvironment={activeEnvironment}
             environments={snapshot.environments}
             connectionTest={connectionTest}
@@ -1207,13 +1311,12 @@ function DesktopWorkspace() {
             onExportPassphraseChange={setExportPassphrase}
             onImportPayloadChange={setImportPayload}
             onClose={closeDrawer}
-            onSaveConnection={(profile, secret) =>
-              void actions.saveConnection(profile, secret)
-            }
-            onTestConnection={(profile, environmentId) =>
+            onSaveConnection={saveConnectionProfile}
+            onTestConnection={(profile, environmentId, secret) =>
               void actions.testConnection(
                 profile,
                 environmentId || activeEnvironment?.id || '',
+                secret,
               )
             }
             onRefreshDiagnostics={() => void actions.refreshDiagnostics()}
@@ -1261,6 +1364,61 @@ function DesktopWorkspace() {
       />
     </div>
   )
+}
+
+function buildQueryTextForBuilderState(
+  builderState: QueryBuilderState,
+  connection: ConnectionProfile | undefined,
+) {
+  if (isMongoFindBuilderState(builderState)) {
+    return buildMongoFindQueryText(builderState)
+  }
+
+  if (connection && isSqlSelectBuilderState(builderState)) {
+    return buildSqlSelectQueryText(builderState, connection.engine)
+  }
+
+  if (isDynamoDbKeyConditionBuilderState(builderState)) {
+    return buildDynamoDbKeyConditionQueryText(builderState)
+  }
+
+  if (isCqlPartitionBuilderState(builderState)) {
+    return buildCqlPartitionQueryText(builderState)
+  }
+
+  if (isSearchDslBuilderState(builderState)) {
+    return buildSearchDslQueryText(builderState)
+  }
+
+  return undefined
+}
+
+function parseBuilderStateFromQueryText(
+  queryText: string,
+  currentBuilderState: QueryBuilderState,
+  connection: ConnectionProfile | undefined,
+) {
+  if (isMongoFindBuilderState(currentBuilderState)) {
+    return parseMongoFindQueryText(queryText)
+  }
+
+  if (connection && isSqlSelectBuilderState(currentBuilderState)) {
+    return parseSqlSelectQueryText(queryText, connection.engine)
+  }
+
+  if (isDynamoDbKeyConditionBuilderState(currentBuilderState)) {
+    return parseDynamoDbKeyConditionQueryText(queryText)
+  }
+
+  if (isCqlPartitionBuilderState(currentBuilderState)) {
+    return parseCqlPartitionQueryText(queryText)
+  }
+
+  if (isSearchDslBuilderState(currentBuilderState)) {
+    return parseSearchDslQueryText(queryText)
+  }
+
+  return undefined
 }
 
 export default App

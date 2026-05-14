@@ -1,8 +1,8 @@
 import type { ConnectionProfile } from '@datanaut/shared-types'
 import {
+  CopyIcon,
   ExplorerIcon,
   PlayIcon,
-  PlusIcon,
   RenameIcon,
   SettingsIcon,
   TrashIcon,
@@ -89,7 +89,7 @@ export function ConnectionContextMenu({
         aria-label={`Duplicate connection ${connection.name}`}
         onClick={() => runAndClose(() => onDuplicateConnection(connection.id))}
       >
-        <PlusIcon className="connection-context-menu-icon" />
+        <CopyIcon className="connection-context-menu-icon" />
         <span>Duplicate</span>
       </button>
       <button

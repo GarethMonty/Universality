@@ -11,7 +11,7 @@ pub(super) fn default_query_text(connection: &ConnectionProfile) -> String {
         "mongodb" | "litedb" => {
             "{\n  \"collection\": \"products\",\n  \"filter\": {},\n  \"limit\": 50\n}".into()
         }
-        "dynamodb" => "{\n  \"table\": \"Orders\",\n  \"keyCondition\": \"pk = :pk\",\n  \"values\": { \":pk\": \"CUSTOMER#123\" },\n  \"limit\": 25\n}".into(),
+        "dynamodb" => "{\n  \"operation\": \"Query\",\n  \"tableName\": \"Orders\",\n  \"keyConditionExpression\": \"#pk = :pk\",\n  \"expressionAttributeNames\": { \"#pk\": \"pk\" },\n  \"expressionAttributeValues\": { \":pk\": { \"S\": \"CUSTOMER#123\" } },\n  \"limit\": 25\n}".into(),
         "cosmosdb" => "select top 50 * from c".into(),
         "redis" | "valkey" => "SCAN 0 MATCH session:* COUNT 25".into(),
         "memcached" => "stats".into(),
@@ -23,7 +23,7 @@ pub(super) fn default_query_text(connection: &ConnectionProfile) -> String {
         "prometheus" => "up".into(),
         "opentsdb" => "{\n  \"start\": \"1h-ago\",\n  \"queries\": [\n    { \"metric\": \"sys.cpu.user\", \"aggregator\": \"avg\" }\n  ]\n}".into(),
         "elasticsearch" | "opensearch" => {
-            "{\n  \"query\": { \"match_all\": {} },\n  \"size\": 25\n}".into()
+            "{\n  \"index\": \"products\",\n  \"body\": {\n    \"query\": { \"match_all\": {} },\n    \"size\": 20\n  }\n}".into()
         }
         _ => "select 1;".into(),
     }
@@ -77,6 +77,10 @@ pub(super) fn editor_label_for_connection(connection: &ConnectionProfile) -> Str
 pub(super) fn query_tab_title_parts(
     connection: &ConnectionProfile,
 ) -> (&'static str, &'static str) {
+    if connection.engine == "dynamodb" || connection.family == "search" {
+        return ("Query", "json");
+    }
+
     match connection.family.as_str() {
         "document" => ("Query", "json"),
         "keyvalue" => ("Console", "redis"),
@@ -216,11 +220,7 @@ fn scoped_query_tab_title(
     target_label: &str,
     has_builder: bool,
 ) -> String {
-    let extension = if connection.family == "document" {
-        "json"
-    } else {
-        "sql"
-    };
+    let (_, extension) = query_tab_title_parts(connection);
     let candidate = if has_builder {
         format!("{target_label}.find.{extension}")
     } else {

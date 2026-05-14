@@ -206,10 +206,8 @@ export function SideBar({
           activeEnvironmentId={activeEnvironmentId}
           environmentFilter={environmentFilter}
           environments={filteredEnvironments}
-          sectionStates={sidebarSectionStates}
           onCreateEnvironment={onCreateEnvironment}
           onEnvironmentFilterChange={setEnvironmentFilter}
-          onSidebarSectionExpandedChange={onSidebarSectionExpandedChange}
           onSelectEnvironment={onSelectEnvironment}
         />
       ) : null}

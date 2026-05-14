@@ -3,14 +3,35 @@ dist/
 coverage/
 .DS_Store
 Thumbs.db
+
+# Local workspace/debug data
 .vscode/ui-dev.log
 .datanaut/
+*.log
+*.trace
+*.dmp
+*.dump
+*.profraw
+*.profdata
+
+# Test and tooling artifacts
+test-results/
+playwright-report/
+.nyc_output/
+.cache/
+.vite/
+.turbo/
 
 apps/desktop/dist/
 apps/desktop/coverage/
 apps/desktop/src-tauri/target/
+apps/desktop/src-tauri/target-*/
 apps/desktop/src-tauri/gen/
 
 packages/*/dist/
 tests/fixtures/sqlite/datanaut.sqlite3
 tests/fixtures/.generated.env
+*.sqlite-wal
+*.sqlite-shm
+*.db-wal
+*.db-shm

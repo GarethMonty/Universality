@@ -6,11 +6,13 @@ export function EnvironmentWorkspace({
   activeEnvironment,
   environments,
   onCreateEnvironment,
+  onCloneEnvironment,
   onSaveEnvironment,
 }: {
   activeEnvironment?: EnvironmentProfile
   environments: EnvironmentProfile[]
   onCreateEnvironment(): void
+  onCloneEnvironment(environment: EnvironmentProfile): void
   onSaveEnvironment(environment: EnvironmentProfile): void
 }) {
   const [environmentDraft, setEnvironmentDraft] = useState(activeEnvironment)
@@ -51,6 +53,9 @@ export function EnvironmentWorkspace({
   const sensitiveKeys = new Set(environmentDraft.sensitiveKeys)
   const resolvedSensitiveKeys = new Set(resolvedPreview.sensitiveKeys)
   const unresolvedKeys = new Set(resolvedPreview.unresolvedKeys)
+  const hasEnvironmentChanges =
+    Boolean(activeEnvironment) &&
+    comparableEnvironment(environmentDraft) !== comparableEnvironment(activeEnvironment)
 
   const updateDraft = (patch: Partial<EnvironmentProfile>) => {
     setEnvironmentDraft((current) =>
@@ -175,16 +180,22 @@ export function EnvironmentWorkspace({
           <h1>{environmentDraft.label}</h1>
         </div>
         <div className="environment-actions">
-          <button type="button" className="drawer-button" onClick={onCreateEnvironment}>
-            New Environment
-          </button>
           <button
             type="button"
-            className="drawer-button drawer-button--primary"
-            onClick={() => onSaveEnvironment(environmentDraft)}
+            className="drawer-button"
+            onClick={() => onCloneEnvironment(environmentDraft)}
           >
-            Save Environment
+            Clone
           </button>
+          {hasEnvironmentChanges ? (
+            <button
+              type="button"
+              className="drawer-button drawer-button--primary"
+              onClick={() => onSaveEnvironment(environmentDraft)}
+            >
+              Save
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -375,4 +386,26 @@ export function EnvironmentWorkspace({
       </div>
     </section>
   )
+}
+
+function comparableEnvironment(environment: EnvironmentProfile | undefined) {
+  if (!environment) {
+    return ''
+  }
+
+  return JSON.stringify({
+    color: environment.color,
+    exportable: environment.exportable,
+    inheritsFrom: environment.inheritsFrom ?? '',
+    label: environment.label,
+    requiresConfirmation: environment.requiresConfirmation,
+    risk: environment.risk,
+    safeMode: environment.safeMode,
+    sensitiveKeys: [...environment.sensitiveKeys].sort(),
+    variables: Object.fromEntries(
+      Object.entries(environment.variables).sort(([left], [right]) =>
+        left.localeCompare(right),
+      ),
+    ),
+  })
 }

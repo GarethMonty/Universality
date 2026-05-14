@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { KeyboardEvent } from 'react'
+import type { DragEvent, KeyboardEvent } from 'react'
 import {
   coerceValue,
   editableValue,
@@ -41,6 +41,17 @@ export function DocumentGridRowView({
   const editingField = editingCell === 'field'
   const editingType = editingCell === 'type'
   const editingValue = editingCell === 'value'
+  const draggedValue = draggableRowValue(row)
+  const draggedValueType = documentDragValueType(draggedValue, row.type)
+  const draggedValueLabel = String(row.path.length === 0 ? row.label : row.valueLabel)
+  const writeRowDragData = (event: DragEvent<HTMLElement>) => {
+    event.stopPropagation()
+    writeFieldDragData(event, row.fieldPath, {
+      value: draggedValue,
+      valueLabel: draggedValueLabel,
+      valueType: draggedValueType,
+    })
+  }
 
   const handleTypeKeyDown = (event: KeyboardEvent<HTMLSelectElement>) => {
     if (event.key === 'Escape') {
@@ -63,8 +74,10 @@ export function DocumentGridRowView({
       <div
         className="document-data-grid-cell document-data-grid-cell--id"
         role="gridcell"
+        draggable={Boolean(row.fieldPath) && !editingField}
         style={{ paddingLeft: 8 + row.depth * 18 }}
         title={row.fieldPath ? `Drag ${row.fieldPath} to the query builder` : row.label}
+        onDragStart={writeRowDragData}
       >
         {row.expandable ? (
           <button
@@ -88,8 +101,9 @@ export function DocumentGridRowView({
           <span
             className="document-data-grid-field"
             draggable={Boolean(row.fieldPath)}
+            data-field-path={row.fieldPath || undefined}
             title={row.fieldPath ? `Drag ${row.fieldPath} to the query builder` : row.label}
-            onDragStart={(event) => writeFieldDragData(event, row.fieldPath)}
+            onDragStart={writeRowDragData}
             onDoubleClick={() => onBeginEditing(row, 'field')}
           >
             {row.label}
@@ -140,8 +154,14 @@ export function DocumentGridRowView({
           <button
             type="button"
             className="document-data-grid-value"
-            title="Copy value"
+            draggable={Boolean(row.fieldPath)}
+            title={
+              row.fieldPath
+                ? `Drag ${row.fieldPath} with value ${draggedValueLabel} to the query builder`
+                : 'Copy value'
+            }
             onClick={() => onScheduleCopyValue(row.value)}
+            onDragStart={writeRowDragData}
             onDoubleClick={() => {
               onCancelScheduledCopy()
               onBeginEditing(row, 'value')
@@ -153,6 +173,36 @@ export function DocumentGridRowView({
       </div>
     </div>
   )
+}
+
+function draggableRowValue(row: DocumentGridRow) {
+  if (
+    row.path.length === 0 &&
+    row.fieldPath === '_id' &&
+    row.value &&
+    typeof row.value === 'object' &&
+    Object.hasOwn(row.value, '_id')
+  ) {
+    return (row.value as Record<string, unknown>)._id
+  }
+
+  return row.value
+}
+
+function documentDragValueType(value: unknown, fallbackType: DocumentValueType) {
+  if (value === null) {
+    return 'null'
+  }
+
+  if (Array.isArray(value)) {
+    return 'array'
+  }
+
+  if (typeof value === 'object') {
+    return 'object'
+  }
+
+  return fallbackType
 }
 
 function FieldNameEditor({

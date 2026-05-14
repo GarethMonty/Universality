@@ -6,17 +6,16 @@ import {
   KeyValueIcon,
   TableIcon,
 } from './icons'
+import { DatastoreIcon } from './DatastoreIcon'
 
 export function EngineIcon({ connection }: { connection: ConnectionProfile }) {
-  if (connection.family === 'document') {
-    return <JsonIcon className="tree-icon" />
-  }
-
-  if (connection.family === 'keyvalue') {
-    return <KeyValueIcon className="tree-icon" />
-  }
-
-  return <DatabaseIcon className="tree-icon" />
+  return (
+    <DatastoreIcon
+      decorative={false}
+      engine={connection.engine}
+      label={`${connection.name} datastore icon`}
+    />
+  )
 }
 
 export function ExplorerNodeIcon({ kind }: { kind: string }) {

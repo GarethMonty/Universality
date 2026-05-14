@@ -5,6 +5,7 @@ import type {
   EnvironmentProfile,
   LocalDatabaseCreateRequest,
   LocalDatabaseCreateResult,
+  LocalDatabaseManifest,
   LocalDatabasePickRequest,
   LocalDatabasePickResult,
 } from '@datanaut/shared-types'
@@ -26,7 +27,7 @@ interface ConnectionBladeProps {
   connectionTest?: ConnectionTestResult
   onClose(): void
   onSaveConnection(profile: ConnectionProfile, secret?: string): void
-  onTestConnection(profile: ConnectionProfile, environmentId: string): void
+  onTestConnection(profile: ConnectionProfile, environmentId: string, secret?: string): void
   onPickLocalDatabaseFile(request: LocalDatabasePickRequest): Promise<LocalDatabasePickResult>
   onCreateLocalDatabase(
     request: LocalDatabaseCreateRequest,
@@ -55,14 +56,14 @@ export function ConnectionBlade({
         },
   )
   const [secretDraft, setSecretDraft] = useState('')
-  const [pendingCreatePath, setPendingCreatePath] = useState('')
+  const [pendingCreateFolder, setPendingCreateFolder] = useState('')
+  const [localDatabaseName, setLocalDatabaseName] = useState('')
   const [localDatabaseStatus, setLocalDatabaseStatus] = useState('')
 
   const selectedEngineOption = engineOption(connectionDraft.engine)
-  const isLocalDatabaseEngine = Boolean(
-    selectedEngineOption?.localDatabase && selectedEngineOption.maturity === 'mvp',
-  )
-  const databaseLabel = connectionDraft.engine === 'sqlite' ? 'Database file' : 'Database'
+  const localDatabaseManifest = selectedEngineOption?.localDatabase
+  const isLocalDatabaseEngine = Boolean(localDatabaseManifest)
+  const databaseLabel = isLocalDatabaseEngine ? 'Database file' : 'Database'
   const selectedEnvironmentId = connectionDraft.environmentIds[0] ?? ''
   const selectedEnvironment = environments.find(
     (environment) => environment.id === selectedEnvironmentId,
@@ -83,6 +84,12 @@ export function ConnectionBlade({
     patch: Partial<ConnectionProfile>,
     options: { preserveName?: boolean } = {},
   ) => {
+    if (patch.engine && patch.engine !== connectionDraft.engine) {
+      setPendingCreateFolder('')
+      setLocalDatabaseName('')
+      setLocalDatabaseStatus('')
+    }
+
     setConnectionDraft((current) => {
       const next = {
         ...current,
@@ -124,7 +131,7 @@ export function ConnectionBlade({
     }
 
     setLocalDatabasePath(result.path)
-    setLocalDatabaseStatus('SQLite database path selected.')
+    setLocalDatabaseStatus(`${selectedEngineOption?.label ?? 'Local'} database path selected.`)
   }
 
   const chooseNewLocalDatabasePath = async () => {
@@ -138,18 +145,28 @@ export function ConnectionBlade({
       return
     }
 
-    setPendingCreatePath(result.path)
+    setPendingCreateFolder(result.path)
+    setLocalDatabaseName((current) =>
+      current.trim()
+        ? current
+        : defaultLocalDatabaseName(localDatabaseManifest),
+    )
     setLocalDatabaseStatus('')
   }
 
   const createLocalDatabase = async (mode: LocalDatabaseCreateRequest['mode']) => {
-    if (!pendingCreatePath) {
+    if (!pendingCreateFolder || !localDatabaseName.trim()) {
       return
     }
 
+    const databasePath = composeLocalDatabasePath(
+      pendingCreateFolder,
+      localDatabaseName,
+      localDatabaseManifest,
+    )
     const result = await onCreateLocalDatabase({
       engine: connectionDraft.engine,
-      path: pendingCreatePath,
+      path: databasePath,
       mode,
       connectionId: connectionDraft.id,
       environmentId: selectedEnvironmentId || undefined,
@@ -174,14 +191,12 @@ export function ConnectionBlade({
     }
 
     setConnectionDraft(updatedConnection)
-    setPendingCreatePath('')
+    setPendingCreateFolder('')
     setLocalDatabaseStatus(
       result.warnings.length > 0
         ? `${result.message} ${result.warnings.join(' ')}`
         : result.message,
     )
-    onSaveConnection(updatedConnection, secretDraft)
-    onTestConnection(updatedConnection, selectedEnvironmentId)
   }
 
   return (
@@ -208,13 +223,16 @@ export function ConnectionBlade({
             databaseLabel={databaseLabel}
             environments={environments}
             isLocalDatabaseEngine={isLocalDatabaseEngine}
+            localDatabaseManifest={localDatabaseManifest}
+            localDatabaseName={localDatabaseName}
             localDatabaseStatus={localDatabaseStatus}
             namePlaceholder={inferConnectionName(connectionDraft)}
-            pendingCreatePath={pendingCreatePath}
+            pendingCreateFolder={pendingCreateFolder}
             secretDraft={secretDraft}
             selectedEnvironmentId={selectedEnvironmentId}
             createLocalDatabase={createLocalDatabase}
             onChooseNewLocalDatabasePath={chooseNewLocalDatabasePath}
+            onLocalDatabaseNameChange={setLocalDatabaseName}
             onOpenExistingLocalDatabase={openExistingLocalDatabase}
             onSecretDraftChange={setSecretDraft}
             onSetNameOverridden={setNameOverridden}
@@ -237,4 +255,39 @@ export function ConnectionBlade({
       />
     </>
   )
+}
+
+function defaultLocalDatabaseName(manifest?: LocalDatabaseManifest) {
+  const extension = manifest?.defaultExtension ?? 'db'
+  return `datanaut.${extension}`
+}
+
+function composeLocalDatabasePath(
+  folder: string,
+  databaseName: string,
+  manifest?: LocalDatabaseManifest,
+) {
+  const trimmedFolder = folder.trim()
+  const fileName = databaseNameWithExtension(
+    databaseName.trim(),
+    manifest?.defaultExtension,
+  )
+  const separator = trimmedFolder.endsWith('\\') || trimmedFolder.endsWith('/')
+    ? ''
+    : trimmedFolder.includes('\\')
+      ? '\\'
+      : '/'
+
+  return `${trimmedFolder}${separator}${fileName}`
+}
+
+function databaseNameWithExtension(databaseName: string, extension?: string) {
+  const trimmed = databaseName.trim()
+  const defaultExtension = extension?.replace(/^\./, '')
+
+  if (!defaultExtension || /\.[^\\/]+$/.test(trimmed)) {
+    return trimmed
+  }
+
+  return `${trimmed}.${defaultExtension}`
 }

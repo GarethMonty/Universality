@@ -36,7 +36,10 @@ export function browserDataEditWarnings(
     warnings.push('Wide-column edits require complete key conditions.')
   }
 
-  if (request.changes.length === 0 && !['delete-row', 'delete-key'].includes(request.editKind)) {
+  if (
+    request.changes.length === 0 &&
+    !['delete-row', 'delete-key', 'delete-item', 'delete-document'].includes(request.editKind)
+  ) {
     warnings.push('Data edits need at least one change.')
   }
 
@@ -80,6 +83,10 @@ export function browserDataEditRequest(
 
   if (connection.engine === 'dynamodb') {
     return dynamoDbEditRequest(request)
+  }
+
+  if (connection.engine === 'elasticsearch' || connection.engine === 'opensearch') {
+    return searchEditRequest(request)
   }
 
   if (connection.engine === 'cassandra') {
@@ -146,6 +153,30 @@ function keyValueEditRequest(request: DataEditPlanRequest) {
 }
 
 function dynamoDbEditRequest(request: DataEditPlanRequest) {
+  if (request.editKind === 'delete-item') {
+    return JSON.stringify(
+      {
+        TableName: request.target.table ?? '<table>',
+        Key: request.target.itemKey ?? {},
+        ReturnValues: 'ALL_OLD',
+      },
+      null,
+      2,
+    )
+  }
+
+  if (request.editKind === 'put-item') {
+    return JSON.stringify(
+      {
+        TableName: request.target.table ?? '<table>',
+        Item: request.changes[0]?.value ?? {},
+        ReturnValues: 'NONE',
+      },
+      null,
+      2,
+    )
+  }
+
   return JSON.stringify(
     {
       TableName: request.target.table ?? '<table>',
@@ -154,6 +185,41 @@ function dynamoDbEditRequest(request: DataEditPlanRequest) {
       ExpressionAttributeNames: { '#field': request.changes[0]?.field ?? '<field>' },
       ExpressionAttributeValues: { ':value': request.changes[0]?.value ?? '<value>' },
       ReturnValues: 'ALL_NEW',
+    },
+    null,
+    2,
+  )
+}
+
+function searchEditRequest(request: DataEditPlanRequest) {
+  const index = request.target.table ?? '<index>'
+  const documentId = request.target.documentId ?? '<document-id>'
+
+  if (request.editKind === 'delete-document') {
+    return `DELETE /${index}/_doc/${documentId}?refresh=true`
+  }
+
+  const document = request.changes[0]?.value ?? Object.fromEntries(
+    request.changes.map((change) => [change.field ?? dataEditPath(change.field, change.path), change.value ?? null]),
+  )
+
+  if (request.editKind === 'update-document') {
+    return JSON.stringify(
+      {
+        method: 'POST',
+        path: `/${index}/_update/${documentId}?refresh=true`,
+        body: { doc: document },
+      },
+      null,
+      2,
+    )
+  }
+
+  return JSON.stringify(
+    {
+      method: 'PUT',
+      path: `/${index}/_doc/${documentId}?refresh=true`,
+      body: document,
     },
     null,
     2,

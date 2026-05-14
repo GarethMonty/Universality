@@ -6,10 +6,7 @@ import type {
   MongoFindFilterRow,
   QueryBuilderState,
 } from '@datanaut/shared-types'
-import {
-  defaultFilterGroup,
-  normalizeFilterGroups,
-} from './mongo-find-defaults'
+import { normalizeFilterGroups } from './mongo-find-defaults'
 export { defaultFilterGroup, normalizeFilterGroups } from './mongo-find-defaults'
 export { parseMongoFindQueryText } from './mongo-find-parser'
 
@@ -32,7 +29,7 @@ export function createDefaultMongoFindBuilderState(
     kind: 'mongo-find',
     collection,
     filters: [],
-    filterGroups: [defaultFilterGroup()],
+    filterGroups: [],
     projectionMode: 'all',
     projectionFields: [],
     sort: [],
@@ -44,7 +41,7 @@ export function createDefaultMongoFindBuilderState(
     kind: 'mongo-find',
     collection,
     filters: [],
-    filterGroups: [defaultFilterGroup()],
+    filterGroups: [],
     projectionMode: 'all',
     projectionFields: [],
     sort: [],

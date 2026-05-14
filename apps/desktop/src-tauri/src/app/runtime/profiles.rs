@@ -12,6 +12,7 @@ use crate::{
     },
     security,
 };
+use std::time::Instant;
 
 impl ManagedAppState {
     pub fn set_active_connection(
@@ -174,12 +175,24 @@ impl ManagedAppState {
         profile: &ConnectionProfile,
         environment_id: &str,
     ) -> Result<(ResolvedConnectionProfile, ResolvedEnvironment, Vec<String>), CommandError> {
+        self.resolve_connection_profile_with_secret(profile, environment_id, None)
+    }
+
+    fn resolve_connection_profile_with_secret(
+        &self,
+        profile: &ConnectionProfile,
+        environment_id: &str,
+        inline_secret: Option<&str>,
+    ) -> Result<(ResolvedConnectionProfile, ResolvedEnvironment, Vec<String>), CommandError> {
         let resolved_environment = self.resolve_environment(environment_id);
         let interpolate = |value: &str| interpolate_value(value, &resolved_environment.variables);
-        let password = match &profile.auth.secret_ref {
-            Some(secret_ref) => security::resolve_secret_value(secret_ref).ok(),
-            None => None,
-        };
+        let password = inline_secret
+            .filter(|secret| !secret.trim().is_empty())
+            .map(str::to_string)
+            .or_else(|| match &profile.auth.secret_ref {
+                Some(secret_ref) => security::resolve_secret_value(secret_ref).ok(),
+                None => None,
+            });
 
         let resolved = ResolvedConnectionProfile {
             id: profile.id.clone(),
@@ -204,8 +217,13 @@ impl ManagedAppState {
         request: ConnectionTestRequest,
     ) -> Result<ConnectionTestResult, CommandError> {
         self.ensure_unlocked()?;
-        let (resolved, _resolved_environment, warnings) =
-            self.resolve_connection_profile(&request.profile, &request.environment_id)?;
+        let started = Instant::now();
+        let (resolved, _resolved_environment, warnings) = self
+            .resolve_connection_profile_with_secret(
+                &request.profile,
+                &request.environment_id,
+                request.secret.as_deref(),
+            )?;
 
         if has_unresolved_tokens(&resolved.host)
             || resolved
@@ -224,6 +242,188 @@ impl ManagedAppState {
             });
         }
 
-        adapters::test_connection(&resolved, warnings).await
+        match adapters::test_connection(&resolved, warnings.clone()).await {
+            Ok(result) => Ok(result),
+            Err(error) => Ok(connection_test_failure_result(
+                &resolved, warnings, error, started,
+            )),
+        }
+    }
+}
+
+fn connection_test_failure_result(
+    connection: &ResolvedConnectionProfile,
+    mut warnings: Vec<String>,
+    error: CommandError,
+    started: Instant,
+) -> ConnectionTestResult {
+    warnings.extend(fixture_connection_warnings(connection));
+
+    ConnectionTestResult {
+        ok: false,
+        engine: connection.engine.clone(),
+        message: format!(
+            "Connection test failed for {}: {}",
+            connection.name, error.message
+        ),
+        warnings,
+        resolved_host: connection.host.clone(),
+        resolved_database: connection.database.clone(),
+        duration_ms: Some(started.elapsed().as_millis() as u64),
+    }
+}
+
+fn fixture_connection_warnings(connection: &ResolvedConnectionProfile) -> Vec<String> {
+    let Some(endpoint) = fixture_endpoint_for_engine(&connection.engine) else {
+        return Vec::new();
+    };
+
+    if !is_localhost(&connection.host) {
+        return Vec::new();
+    }
+
+    let mut warnings = Vec::new();
+
+    if connection.port != Some(endpoint.port) {
+        warnings.push(format!(
+            "Datanaut Docker fixtures expose {} on localhost:{}.",
+            endpoint.label, endpoint.port
+        ));
+    }
+
+    if let Some(database) = endpoint.database {
+        if connection.database.as_deref() != Some(database) {
+            warnings.push(format!("Fixture database is \"{database}\"."));
+        }
+    }
+
+    if let Some(username) = endpoint.username {
+        if connection.username.as_deref() != Some(username) {
+            warnings.push(format!("Fixture user is \"{username}\"."));
+        }
+    }
+
+    if let Some(password) = endpoint.password {
+        if connection.password.as_deref() != Some(password) {
+            warnings.push(format!("Fixture password is \"{password}\"."));
+        }
+    }
+
+    warnings
+}
+
+struct FixtureEndpoint {
+    label: &'static str,
+    port: u16,
+    database: Option<&'static str>,
+    username: Option<&'static str>,
+    password: Option<&'static str>,
+}
+
+fn fixture_endpoint_for_engine(engine: &str) -> Option<FixtureEndpoint> {
+    match engine {
+        "postgresql" => Some(FixtureEndpoint {
+            label: "PostgreSQL",
+            port: 54329,
+            database: Some("datanaut"),
+            username: Some("datanaut"),
+            password: Some("datanaut"),
+        }),
+        "mysql" => Some(FixtureEndpoint {
+            label: "MySQL",
+            port: 33060,
+            database: Some("commerce"),
+            username: Some("datanaut"),
+            password: Some("datanaut"),
+        }),
+        "sqlserver" => Some(FixtureEndpoint {
+            label: "SQL Server",
+            port: 14333,
+            database: Some("datanaut"),
+            username: Some("sa"),
+            password: Some("Datanaut_pwd_123"),
+        }),
+        "mongodb" => Some(FixtureEndpoint {
+            label: "MongoDB",
+            port: 27018,
+            database: Some("catalog"),
+            username: Some("datanaut"),
+            password: Some("datanaut"),
+        }),
+        "redis" => Some(FixtureEndpoint {
+            label: "Redis",
+            port: 6380,
+            database: Some("0"),
+            username: None,
+            password: None,
+        }),
+        _ => None,
+    }
+}
+
+fn is_localhost(host: &str) -> bool {
+    matches!(
+        host.trim().to_lowercase().as_str(),
+        "localhost" | "127.0.0.1" | "::1"
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fixture_connection_warnings_help_with_mongodb_fixture_ports() {
+        let connection = resolved_connection("mongodb", 27017, Some("admin"), Some("root"), None);
+
+        let warnings = fixture_connection_warnings(&connection);
+
+        assert_eq!(
+            warnings,
+            vec![
+                "Datanaut Docker fixtures expose MongoDB on localhost:27018.",
+                "Fixture database is \"catalog\".",
+                "Fixture user is \"datanaut\".",
+                "Fixture password is \"datanaut\".",
+            ]
+        );
+    }
+
+    #[test]
+    fn fixture_connection_warnings_respect_inline_test_secret() {
+        let connection = resolved_connection(
+            "mongodb",
+            27017,
+            Some("catalog"),
+            Some("datanaut"),
+            Some("datanaut"),
+        );
+
+        assert_eq!(
+            fixture_connection_warnings(&connection),
+            vec!["Datanaut Docker fixtures expose MongoDB on localhost:27018."]
+        );
+    }
+
+    fn resolved_connection(
+        engine: &str,
+        port: u16,
+        database: Option<&str>,
+        username: Option<&str>,
+        password: Option<&str>,
+    ) -> ResolvedConnectionProfile {
+        ResolvedConnectionProfile {
+            id: "conn-test".into(),
+            name: "Test connection".into(),
+            engine: engine.into(),
+            family: "document".into(),
+            host: "localhost".into(),
+            port: Some(port),
+            database: database.map(str::to_string),
+            username: username.map(str::to_string),
+            password: password.map(str::to_string),
+            connection_string: None,
+            read_only: false,
+        }
     }
 }

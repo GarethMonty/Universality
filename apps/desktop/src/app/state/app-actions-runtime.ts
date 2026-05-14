@@ -2,6 +2,7 @@ import { useCallback, useMemo } from 'react'
 import type { ExecutionRequest, ResultPageRequest } from '@datanaut/shared-types'
 import { desktopClient } from '../../services/runtime/client'
 import { ensureWorkspaceUnlocked } from './app-state-factories'
+import { buildConnectionTestFailure } from './connection-test-results'
 import { toUserMessage } from './app-state-selectors'
 import type { Actions, AppActionContext } from './app-state-types'
 
@@ -30,10 +31,14 @@ export function useRuntimeActions({
   handleError,
 }: AppActionContext): RuntimeActions {
   const testConnection = useCallback<Actions['testConnection']>(
-    async (profile, environmentId) => {
+    async (profile, environmentId, secret) => {
       try {
         ensureWorkspaceUnlocked(state.payload)
-        const result = await desktopClient.testConnection({ profile, environmentId })
+        const result = await desktopClient.testConnection({
+          profile,
+          environmentId,
+          secret: secret?.trim() || undefined,
+        })
         dispatch({
           type: 'CONNECTION_TEST_READY',
           profileId: profile.id,
@@ -41,8 +46,9 @@ export function useRuntimeActions({
         })
       } catch (error) {
         dispatch({
-          type: 'EXPLORER_ERROR',
-          message: toUserMessage(error, 'Unable to load live explorer metadata.'),
+          type: 'CONNECTION_TEST_READY',
+          profileId: profile.id,
+          result: buildConnectionTestFailure(profile, error, secret),
         })
       }
     },

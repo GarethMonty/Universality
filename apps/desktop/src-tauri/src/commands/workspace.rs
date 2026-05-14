@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 
+use duckdb::Connection as DuckDbConnection;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use tauri::{AppHandle, State};
 use tauri_plugin_dialog::{DialogExt, FilePath};
@@ -354,25 +355,22 @@ pub fn pick_local_database_file(
         state.ensure_unlocked()?;
     }
 
-    if request.engine != "sqlite" {
-        return Err(CommandError::new(
-            "local-database-unsupported",
-            "Local database creation is currently supported for SQLite only.",
-        ));
-    }
+    let Some(spec) = local_database_spec(&request.engine) else {
+        return Err(local_database_unsupported_error());
+    };
 
     let title = if request.purpose == "create" {
-        "Create SQLite database"
+        format!("Choose {} database folder", spec.label)
     } else {
-        "Open SQLite database"
+        format!("Open {} database", spec.label)
     };
     let dialog = app
         .dialog()
         .file()
-        .set_title(title)
-        .add_filter("SQLite database", &["sqlite", "sqlite3", "db"]);
+        .set_title(&title)
+        .add_filter(spec.filter_label, spec.extensions);
     let selected = if request.purpose == "create" {
-        dialog.blocking_save_file()
+        dialog.blocking_pick_folder()
     } else {
         dialog.blocking_pick_file()
     };
@@ -393,17 +391,23 @@ pub async fn create_local_database(
         state.ensure_unlocked()?;
     }
 
-    if request.engine != "sqlite" {
-        return Err(CommandError::new(
-            "local-database-unsupported",
-            "Local database creation is currently supported for SQLite only.",
-        ));
-    }
+    let Some(spec) = local_database_spec(&request.engine) else {
+        return Err(local_database_unsupported_error());
+    };
 
     if request.mode != "empty" && request.mode != "starter" {
         return Err(CommandError::new(
             "local-database-mode-unsupported",
             "Choose either an empty database or starter schema.",
+        ));
+    }
+    if request.mode == "starter" && !spec.can_create_starter {
+        return Err(CommandError::new(
+            "local-database-mode-unsupported",
+            format!(
+                "{} databases can currently be created as empty files only.",
+                spec.label
+            ),
         ));
     }
 
@@ -416,17 +420,28 @@ pub async fn create_local_database(
         ));
     }
 
-    create_sqlite_local_database(&path, &request.mode).await?;
+    let warnings = match request.engine.as_str() {
+        "sqlite" => {
+            create_sqlite_local_database(&path, &request.mode).await?;
+            Vec::new()
+        }
+        "duckdb" => {
+            create_duckdb_local_database(&path, &request.mode)?;
+            Vec::new()
+        }
+        "litedb" => create_litedb_local_database(&path)?,
+        _ => return Err(local_database_unsupported_error()),
+    };
 
     Ok(LocalDatabaseCreateResult {
         engine: request.engine,
         path: path.to_string_lossy().to_string(),
-        message: if request.mode == "starter" {
-            "SQLite starter database created.".into()
+        message: if request.mode == "starter" && spec.can_create_starter {
+            format!("{} starter database created.", spec.label)
         } else {
-            "SQLite database created.".into()
+            format!("{} database created.", spec.label)
         },
-        warnings: Vec::new(),
+        warnings,
     })
 }
 
@@ -485,6 +500,44 @@ fn dialog_path_to_string(path: FilePath) -> Result<String, CommandError> {
         .map_err(|error| CommandError::new("dialog-path-error", error.to_string()))
 }
 
+struct LocalDatabaseSpec {
+    label: &'static str,
+    filter_label: &'static str,
+    extensions: &'static [&'static str],
+    can_create_starter: bool,
+}
+
+fn local_database_spec(engine: &str) -> Option<LocalDatabaseSpec> {
+    match engine {
+        "sqlite" => Some(LocalDatabaseSpec {
+            label: "SQLite",
+            filter_label: "SQLite database",
+            extensions: &["sqlite", "sqlite3", "db"],
+            can_create_starter: true,
+        }),
+        "duckdb" => Some(LocalDatabaseSpec {
+            label: "DuckDB",
+            filter_label: "DuckDB database",
+            extensions: &["duckdb", "db"],
+            can_create_starter: true,
+        }),
+        "litedb" => Some(LocalDatabaseSpec {
+            label: "LiteDB",
+            filter_label: "LiteDB database",
+            extensions: &["db", "litedb"],
+            can_create_starter: false,
+        }),
+        _ => None,
+    }
+}
+
+fn local_database_unsupported_error() -> CommandError {
+    CommandError::new(
+        "local-database-unsupported",
+        "Local database files can be created for SQLite, DuckDB, and LiteDB.",
+    )
+}
+
 async fn create_sqlite_local_database(path: &Path, mode: &str) -> Result<(), CommandError> {
     if let Some(parent) = path
         .parent()
@@ -529,6 +582,57 @@ async fn create_sqlite_local_database(path: &Path, mode: &str) -> Result<(), Com
     Ok(())
 }
 
+fn create_duckdb_local_database(path: &Path, mode: &str) -> Result<(), CommandError> {
+    if let Some(parent) = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    {
+        std::fs::create_dir_all(parent)?;
+    }
+
+    let db = DuckDbConnection::open(path)
+        .map_err(|error| CommandError::new("duckdb-create-error", error.to_string()))?;
+    db.execute_batch("select 1;")
+        .map_err(|error| CommandError::new("duckdb-create-error", error.to_string()))?;
+
+    if mode == "starter" {
+        db.execute_batch(
+            "create table if not exists items (
+                id integer primary key,
+                name varchar not null,
+                status varchar not null,
+                created_at timestamp default current_timestamp
+            );
+            insert into items
+            select 1, 'First local item', 'new', current_timestamp
+            where not exists (select 1 from items);",
+        )
+        .map_err(|error| CommandError::new("duckdb-create-error", error.to_string()))?;
+    }
+
+    Ok(())
+}
+
+fn create_litedb_local_database(path: &Path) -> Result<Vec<String>, CommandError> {
+    if let Some(parent) = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    {
+        std::fs::create_dir_all(parent)?;
+    }
+
+    if !path.exists() {
+        std::fs::OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(path)?;
+    }
+
+    Ok(vec![
+        "LiteDB file was prepared. The .NET LiteDB sidecar will initialize database pages when live file access is enabled.".into(),
+    ])
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -538,6 +642,13 @@ mod tests {
         std::env::temp_dir()
             .join("datanaut-local-db-tests")
             .join(format!("{unique}.sqlite"))
+    }
+
+    fn test_local_path(name: &str, extension: &str) -> PathBuf {
+        let unique = crate::app::runtime::generate_id(name);
+        std::env::temp_dir()
+            .join("datanaut-local-db-tests")
+            .join(format!("{unique}.{extension}"))
     }
 
     #[test]
@@ -592,5 +703,30 @@ mod tests {
 
             assert_eq!(count, 1);
         });
+    }
+
+    #[test]
+    fn duckdb_database_creation_supports_starter_table() {
+        let path = test_local_path("duckdb-starter", "duckdb");
+        create_duckdb_local_database(&path, "starter").unwrap();
+
+        let db = DuckDbConnection::open(&path).unwrap();
+        let count: i64 = db
+            .query_row("select count(*) from items", [], |row| row.get(0))
+            .unwrap();
+        let _ = std::fs::remove_file(path);
+
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn litedb_database_creation_prepares_local_file() {
+        let path = test_local_path("litedb-empty", "db");
+        let warnings = create_litedb_local_database(&path).unwrap();
+        let metadata = std::fs::metadata(&path).unwrap();
+        let _ = std::fs::remove_file(path);
+
+        assert!(metadata.is_file());
+        assert_eq!(warnings.len(), 1);
     }
 }

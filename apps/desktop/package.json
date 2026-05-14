@@ -14,14 +14,15 @@
     "tauri:build": "tauri build"
   },
   "dependencies": {
+    "@datanaut/shared-types": "file:../../packages/shared-types",
     "@monaco-editor/react": "^4.7.0",
     "@tanstack/react-virtual": "^3.13.24",
     "@tauri-apps/api": "^2.8.0",
-    "@datanaut/shared-types": "file:../../packages/shared-types",
     "lucide-react": "^1.9.0",
     "monaco-editor": "^0.55.1",
     "react": "^19.2.5",
-    "react-dom": "^19.2.5"
+    "react-dom": "^19.2.5",
+    "simple-icons": "^16.19.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

@@ -182,6 +182,10 @@ export type DataEditKind =
   | 'delete-key'
   | 'put-item'
   | 'update-item'
+  | 'delete-item'
+  | 'index-document'
+  | 'update-document'
+  | 'delete-document'
 
 export interface DataEditTarget {
   objectKind: string
@@ -315,6 +319,7 @@ export interface AdapterDiagnosticsResponse {
 export interface ConnectionTestRequest {
   profile: ConnectionProfile
   environmentId: string
+  secret?: string
 }
 
 export interface ConnectionTestResult {

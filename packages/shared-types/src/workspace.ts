@@ -72,7 +72,12 @@ export interface QueryTabDefinition {
   savedQueryId?: string
 }
 
-export type QueryBuilderKind = 'mongo-find'
+export type QueryBuilderKind =
+  | 'mongo-find'
+  | 'sql-select'
+  | 'dynamodb-key-condition'
+  | 'cql-partition'
+  | 'search-dsl'
 
 export type MongoFilterOperator =
   | 'eq'
@@ -127,7 +132,196 @@ export interface MongoFindBuilderState {
   lastAppliedQueryText?: string
 }
 
-export type QueryBuilderState = MongoFindBuilderState
+export type SqlSelectFilterOperator =
+  | 'eq'
+  | 'ne'
+  | 'gt'
+  | 'gte'
+  | 'lt'
+  | 'lte'
+  | 'like'
+  | 'in'
+  | 'is-null'
+  | 'is-not-null'
+
+export type SqlBuilderValueType = 'string' | 'number' | 'boolean' | 'null'
+
+export interface SqlSelectProjectionField {
+  id: string
+  field: string
+}
+
+export interface SqlSelectFilterRow {
+  id: string
+  enabled?: boolean
+  field: string
+  operator: SqlSelectFilterOperator
+  value: string
+  valueType: SqlBuilderValueType
+}
+
+export interface SqlSelectSortRow {
+  id: string
+  field: string
+  direction: 'asc' | 'desc'
+}
+
+export interface SqlSelectBuilderState {
+  kind: 'sql-select'
+  schema?: string
+  table: string
+  projectionFields: SqlSelectProjectionField[]
+  filters: SqlSelectFilterRow[]
+  filterLogic: 'and' | 'or'
+  sort: SqlSelectSortRow[]
+  limit?: number
+  lastAppliedQueryText?: string
+}
+
+export type DynamoDbConditionOperator =
+  | 'eq'
+  | 'ne'
+  | 'gt'
+  | 'gte'
+  | 'lt'
+  | 'lte'
+  | 'between'
+  | 'begins-with'
+  | 'contains'
+  | 'exists'
+
+export type DynamoDbBuilderValueType = 'string' | 'number' | 'boolean' | 'null' | 'json'
+
+export interface DynamoDbConditionRow {
+  id: string
+  enabled?: boolean
+  field: string
+  operator: DynamoDbConditionOperator
+  value: string
+  secondValue?: string
+  valueType: DynamoDbBuilderValueType
+}
+
+export interface DynamoDbProjectionField {
+  id: string
+  field: string
+}
+
+export interface DynamoDbKeyConditionBuilderState {
+  kind: 'dynamodb-key-condition'
+  table: string
+  indexName?: string
+  partitionKey: DynamoDbConditionRow
+  sortKey?: DynamoDbConditionRow
+  filters: DynamoDbConditionRow[]
+  projectionFields: DynamoDbProjectionField[]
+  consistentRead?: boolean
+  limit?: number
+  lastAppliedQueryText?: string
+}
+
+export type CqlConditionOperator =
+  | 'eq'
+  | 'gt'
+  | 'gte'
+  | 'lt'
+  | 'lte'
+  | 'in'
+  | 'contains'
+
+export type CqlBuilderValueType = 'string' | 'number' | 'boolean' | 'null'
+
+export interface CqlProjectionField {
+  id: string
+  field: string
+}
+
+export interface CqlConditionRow {
+  id: string
+  enabled?: boolean
+  field: string
+  operator: CqlConditionOperator
+  value: string
+  valueType: CqlBuilderValueType
+}
+
+export interface CqlPartitionBuilderState {
+  kind: 'cql-partition'
+  keyspace?: string
+  table: string
+  projectionFields: CqlProjectionField[]
+  partitionKeys: CqlConditionRow[]
+  clusteringKeys: CqlConditionRow[]
+  filters: CqlConditionRow[]
+  allowFiltering?: boolean
+  limit?: number
+  lastAppliedQueryText?: string
+}
+
+export type SearchDslQueryMode =
+  | 'match-all'
+  | 'match'
+  | 'term'
+  | 'range'
+  | 'query-string'
+
+export type SearchDslFilterOperator =
+  | 'term'
+  | 'match'
+  | 'exists'
+  | 'range-gte'
+  | 'range-lte'
+
+export type SearchDslValueType = 'string' | 'number' | 'boolean'
+
+export interface SearchDslFilterRow {
+  id: string
+  enabled?: boolean
+  field: string
+  operator: SearchDslFilterOperator
+  value: string
+  valueType: SearchDslValueType
+}
+
+export interface SearchDslSortRow {
+  id: string
+  field: string
+  direction: 'asc' | 'desc'
+}
+
+export interface SearchDslAggregationRow {
+  id: string
+  field: string
+  name?: string
+  size?: number
+}
+
+export interface SearchDslSourceField {
+  id: string
+  field: string
+}
+
+export interface SearchDslBuilderState {
+  kind: 'search-dsl'
+  index: string
+  queryMode: SearchDslQueryMode
+  field: string
+  value: string
+  valueType: SearchDslValueType
+  filters: SearchDslFilterRow[]
+  sourceFields: SearchDslSourceField[]
+  sort: SearchDslSortRow[]
+  aggregations: SearchDslAggregationRow[]
+  size?: number
+  lastAppliedQueryText?: string
+}
+
+export type QueryBuilderState =
+  | MongoFindBuilderState
+  | SqlSelectBuilderState
+  | DynamoDbKeyConditionBuilderState
+  | CqlPartitionBuilderState
+  | SearchDslBuilderState
 
 export interface QueryExecutionNotice {
   code: string

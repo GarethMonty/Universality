@@ -1,8 +1,12 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import type { ConnectionProfile, DataEditExecutionResponse } from '@datanaut/shared-types'
+import type {
+  ConnectionProfile,
+  DataEditExecutionRequest,
+  DataEditExecutionResponse,
+} from '@datanaut/shared-types'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { computeRenderedColumnWidths } from './data-grid-layout'
-import { FIELD_DRAG_MIME } from './field-drag'
+import { FIELD_DRAG_MIME, FIELD_DRAG_PAYLOAD_MIME } from './field-drag'
 import { JsonTreeView } from './JsonTreeView'
 import { ResultPayloadView } from './ResultPayloadView'
 
@@ -122,7 +126,19 @@ describe('ResultPayloadView', () => {
 
     expect(dataTransfer.effectAllowed).toBe('copy')
     expect(dataTransfer.setData).toHaveBeenCalledWith(FIELD_DRAG_MIME, 'status')
+    expect(dataTransfer.setData).toHaveBeenCalledWith(
+      FIELD_DRAG_PAYLOAD_MIME,
+      JSON.stringify({
+        fieldPath: 'status',
+        value: 'active',
+        valueLabel: 'active',
+        valueType: 'string',
+      }),
+    )
     expect(dataTransfer.setData).toHaveBeenCalledWith('text/plain', 'status')
+
+    const valueCell = screen.getByRole('button', { name: 'active' })
+    expect(valueCell).toHaveAttribute('draggable', 'true')
   })
 
   it('enables Mongo document inline edits, typed badges, and context actions', async () => {
@@ -265,7 +281,7 @@ describe('ResultPayloadView', () => {
   })
 
   it('renders table payloads with selection, buffered filtering, and copy actions', async () => {
-    render(
+    const { container } = render(
       <ResultPayloadView
         payload={{
           renderer: 'table',
@@ -285,6 +301,9 @@ describe('ResultPayloadView', () => {
     expect(screen.getByText('1 of 2 buffered row(s)')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Avery' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Blake' })).not.toBeInTheDocument()
+    expect(
+      container.querySelector('.data-grid-row:not(.data-grid-row--header)'),
+    ).toHaveStyle({ transform: 'translateY(30px)' })
 
     fireEvent.pointerDown(screen.getByRole('button', { name: 'Avery' }))
     fireEvent.click(screen.getByRole('button', { name: 'Copy Selection' }))
@@ -292,6 +311,550 @@ describe('ResultPayloadView', () => {
     await waitFor(() => {
       expect(writeTextSpy).toHaveBeenCalledWith('Avery')
     })
+  })
+
+  it('executes SQL table cell edits through safe update-row requests', async () => {
+    const executeDataEdit = vi.fn(async (): Promise<DataEditExecutionResponse> => ({
+      connectionId: 'conn-sql',
+      environmentId: 'env-dev',
+      editKind: 'update-row',
+      executionSupport: 'live',
+      executed: true,
+      plan: {
+        operationId: 'sqlserver.data-edit.update-row',
+        engine: 'sqlserver',
+        summary: 'Updated row.',
+        generatedRequest: 'update [dbo].[orders] set [status] = @P1 where [order_id] = @P2;',
+        requestLanguage: 'sql',
+        destructive: false,
+        requiredPermissions: ['update table row'],
+        warnings: [],
+      },
+      messages: ['Updated row.'],
+      warnings: [],
+    }))
+
+    render(
+      <ResultPayloadView
+        connection={sqlConnection()}
+        editContext={{
+          connectionId: 'conn-sql',
+          environmentId: 'env-dev',
+          queryText: 'select order_id, status from dbo.orders',
+        }}
+        onExecuteDataEdit={executeDataEdit}
+        payload={{
+          renderer: 'table',
+          columns: ['order_id', 'status'],
+          rows: [['101', 'processing']],
+        }}
+      />,
+    )
+
+    fireEvent.doubleClick(screen.getByRole('button', { name: 'processing' }))
+    const input = screen.getByLabelText('Edit status row 1')
+    fireEvent.change(input, { target: { value: 'fulfilled' } })
+    fireEvent.blur(input)
+
+    await waitFor(() => {
+      expect(executeDataEdit).toHaveBeenCalledWith({
+        connectionId: 'conn-sql',
+        environmentId: 'env-dev',
+        editKind: 'update-row',
+        target: {
+          objectKind: 'row',
+          path: [],
+          schema: 'dbo',
+          table: 'orders',
+          primaryKey: {
+            order_id: 101,
+          },
+        },
+        changes: [
+          {
+            field: 'status',
+            value: 'fulfilled',
+            valueType: 'string',
+          },
+        ],
+      })
+    })
+    expect(screen.getByRole('button', { name: 'fulfilled' })).toBeInTheDocument()
+  })
+
+  it('keeps SQL table cells read-only when a primary key cannot be inferred', () => {
+    render(
+      <ResultPayloadView
+        connection={sqlConnection()}
+        editContext={{
+          connectionId: 'conn-sql',
+          environmentId: 'env-dev',
+          queryText: 'select status from dbo.orders',
+        }}
+        onExecuteDataEdit={vi.fn()}
+        payload={{
+          renderer: 'table',
+          columns: ['status'],
+          rows: [['processing']],
+        }}
+      />,
+    )
+
+    fireEvent.doubleClick(screen.getByRole('button', { name: 'processing' }))
+
+    expect(screen.queryByLabelText('Edit status row 1')).not.toBeInTheDocument()
+  })
+
+  it('inserts SQL rows from the grid insert panel', async () => {
+    const executeDataEdit = vi.fn(async (): Promise<DataEditExecutionResponse> => ({
+      connectionId: 'conn-sql',
+      environmentId: 'env-dev',
+      editKind: 'insert-row',
+      executionSupport: 'live',
+      executed: true,
+      plan: {
+        operationId: 'sqlserver.data-edit.insert-row',
+        engine: 'sqlserver',
+        summary: 'Inserted row.',
+        generatedRequest: 'insert into [dbo].[orders] ([order_id], [status]) values (@P1, @P2);',
+        requestLanguage: 'sql',
+        destructive: false,
+        requiredPermissions: ['insert-row on table'],
+        warnings: [],
+      },
+      messages: ['Inserted row.'],
+      warnings: [],
+    }))
+
+    render(
+      <ResultPayloadView
+        connection={sqlConnection()}
+        editContext={{
+          connectionId: 'conn-sql',
+          environmentId: 'env-dev',
+          queryText: 'select order_id, status from dbo.orders',
+        }}
+        onExecuteDataEdit={executeDataEdit}
+        payload={{
+          renderer: 'table',
+          columns: ['order_id', 'status'],
+          rows: [['101', 'processing']],
+        }}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add Row' }))
+    fireEvent.change(screen.getByLabelText('Insert order_id'), {
+      target: { value: '103' },
+    })
+    fireEvent.change(screen.getByLabelText('Insert status'), {
+      target: { value: 'queued' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Insert' }))
+
+    await waitFor(() => {
+      expect(executeDataEdit).toHaveBeenCalledWith({
+        connectionId: 'conn-sql',
+        environmentId: 'env-dev',
+        editKind: 'insert-row',
+        target: {
+          objectKind: 'row',
+          path: [],
+          schema: 'dbo',
+          table: 'orders',
+        },
+        changes: [
+          {
+            field: 'order_id',
+            value: 103,
+            valueType: 'number',
+          },
+          {
+            field: 'status',
+            value: 'queued',
+            valueType: 'string',
+          },
+        ],
+      })
+    })
+    expect(screen.getByRole('button', { name: 'queued' })).toBeInTheDocument()
+  })
+
+  it('deletes SQL rows from the context menu with explicit confirmation', async () => {
+    const executeDataEdit = vi.fn(async (): Promise<DataEditExecutionResponse> => ({
+      connectionId: 'conn-sql',
+      environmentId: 'env-dev',
+      editKind: 'delete-row',
+      executionSupport: 'live',
+      executed: true,
+      plan: {
+        operationId: 'sqlserver.data-edit.delete-row',
+        engine: 'sqlserver',
+        summary: 'Deleted row.',
+        generatedRequest: 'delete from [dbo].[orders] where [order_id] = @P1;',
+        requestLanguage: 'sql',
+        destructive: true,
+        confirmationText: 'CONFIRM SQLSERVER DELETE-ROW',
+        requiredPermissions: ['delete table row'],
+        warnings: [],
+      },
+      messages: ['Deleted row.'],
+      warnings: [],
+    }))
+
+    render(
+      <ResultPayloadView
+        connection={sqlConnection()}
+        editContext={{
+          connectionId: 'conn-sql',
+          environmentId: 'env-dev',
+          queryText: 'select order_id, status from dbo.orders',
+        }}
+        onExecuteDataEdit={executeDataEdit}
+        payload={{
+          renderer: 'table',
+          columns: ['order_id', 'status'],
+          rows: [
+            ['101', 'processing'],
+            ['102', 'queued'],
+          ],
+        }}
+      />,
+    )
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: 'processing' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete Row' }))
+    fireEvent.change(screen.getByLabelText('Delete confirmation text'), {
+      target: { value: 'CONFIRM SQLSERVER DELETE-ROW' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+
+    await waitFor(() => {
+      expect(executeDataEdit).toHaveBeenCalledWith({
+        connectionId: 'conn-sql',
+        environmentId: 'env-dev',
+        editKind: 'delete-row',
+        confirmationText: 'CONFIRM SQLSERVER DELETE-ROW',
+        target: {
+          objectKind: 'row',
+          path: [],
+          schema: 'dbo',
+          table: 'orders',
+          primaryKey: {
+            order_id: 101,
+          },
+        },
+        changes: [],
+      })
+    })
+    expect(screen.queryByRole('button', { name: 'processing' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'queued' })).toBeInTheDocument()
+  })
+
+  it('executes DynamoDB table cell edits through safe update-item requests', async () => {
+    const executeDataEdit = vi.fn(async (): Promise<DataEditExecutionResponse> => ({
+      connectionId: 'conn-dynamodb',
+      environmentId: 'env-dev',
+      editKind: 'update-item',
+      executionSupport: 'live',
+      executed: true,
+      plan: {
+        operationId: 'dynamodb.data-edit.update-item',
+        engine: 'dynamodb',
+        summary: 'Updated item.',
+        generatedRequest: 'UpdateItem',
+        requestLanguage: 'query-dsl',
+        destructive: false,
+        requiredPermissions: ['write item/row with complete key'],
+        warnings: [],
+      },
+      messages: ['Updated item.'],
+      warnings: [],
+    }))
+
+    render(
+      <ResultPayloadView
+        connection={dynamoConnection()}
+        editContext={{
+          connectionId: 'conn-dynamodb',
+          environmentId: 'env-dev',
+          queryText: '{ "operation": "Query", "TableName": "Orders" }',
+        }}
+        onExecuteDataEdit={executeDataEdit}
+        payload={{
+          renderer: 'table',
+          columns: ['pk', 'sk', 'status'],
+          rows: [['CUSTOMER#123', 'ORDER#1001', 'open']],
+        }}
+      />,
+    )
+
+    fireEvent.doubleClick(screen.getByRole('button', { name: 'open' }))
+    const input = screen.getByLabelText('Edit status row 1')
+    fireEvent.change(input, { target: { value: 'closed' } })
+    fireEvent.blur(input)
+
+    await waitFor(() => {
+      expect(executeDataEdit).toHaveBeenCalledWith({
+        connectionId: 'conn-dynamodb',
+        environmentId: 'env-dev',
+        editKind: 'update-item',
+        target: {
+          objectKind: 'item',
+          path: [],
+          table: 'Orders',
+          itemKey: {
+            pk: 'CUSTOMER#123',
+            sk: 'ORDER#1001',
+          },
+        },
+        changes: [
+          {
+            field: 'status',
+            value: 'closed',
+            valueType: 'string',
+          },
+        ],
+      })
+    })
+    expect(screen.getByRole('button', { name: 'closed' })).toBeInTheDocument()
+  })
+
+  it('deletes DynamoDB items from the context menu with explicit confirmation', async () => {
+    const executeDataEdit = vi.fn(async (): Promise<DataEditExecutionResponse> => ({
+      connectionId: 'conn-dynamodb',
+      environmentId: 'env-dev',
+      editKind: 'delete-item',
+      executionSupport: 'live',
+      executed: true,
+      plan: {
+        operationId: 'dynamodb.data-edit.delete-item',
+        engine: 'dynamodb',
+        summary: 'Deleted item.',
+        generatedRequest: 'DeleteItem',
+        requestLanguage: 'query-dsl',
+        destructive: true,
+        confirmationText: 'CONFIRM DYNAMODB DELETE-ITEM',
+        requiredPermissions: ['write item/row with complete key'],
+        warnings: [],
+      },
+      messages: ['Deleted item.'],
+      warnings: [],
+    }))
+
+    render(
+      <ResultPayloadView
+        connection={dynamoConnection()}
+        editContext={{
+          connectionId: 'conn-dynamodb',
+          environmentId: 'env-dev',
+          queryText: '{ "operation": "Query", "TableName": "Orders" }',
+        }}
+        onExecuteDataEdit={executeDataEdit}
+        payload={{
+          renderer: 'table',
+          columns: ['pk', 'sk', 'status'],
+          rows: [
+            ['CUSTOMER#123', 'ORDER#1001', 'open'],
+            ['CUSTOMER#123', 'ORDER#1002', 'closed'],
+          ],
+        }}
+      />,
+    )
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: 'open' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete Row' }))
+    fireEvent.change(screen.getByLabelText('Delete confirmation text'), {
+      target: { value: 'CONFIRM DYNAMODB DELETE-ITEM' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+
+    await waitFor(() => {
+      expect(executeDataEdit).toHaveBeenCalledWith({
+        connectionId: 'conn-dynamodb',
+        environmentId: 'env-dev',
+        editKind: 'delete-item',
+        confirmationText: 'CONFIRM DYNAMODB DELETE-ITEM',
+        target: {
+          objectKind: 'item',
+          path: [],
+          table: 'Orders',
+          itemKey: {
+            pk: 'CUSTOMER#123',
+            sk: 'ORDER#1001',
+          },
+        },
+        changes: [],
+      })
+    })
+    expect(screen.queryByRole('button', { name: 'open' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'closed' })).toBeInTheDocument()
+  })
+
+  it('puts DynamoDB items from the grid insert panel', async () => {
+    const executeDataEdit = vi.fn(async (): Promise<DataEditExecutionResponse> => ({
+      connectionId: 'conn-dynamodb',
+      environmentId: 'env-dev',
+      editKind: 'put-item',
+      executionSupport: 'live',
+      executed: true,
+      plan: {
+        operationId: 'dynamodb.data-edit.put-item',
+        engine: 'dynamodb',
+        summary: 'Put item.',
+        generatedRequest: 'PutItem',
+        requestLanguage: 'query-dsl',
+        destructive: false,
+        requiredPermissions: ['write item/row with complete key'],
+        warnings: [],
+      },
+      messages: ['Put item.'],
+      warnings: [],
+    }))
+
+    render(
+      <ResultPayloadView
+        connection={dynamoConnection()}
+        editContext={{
+          connectionId: 'conn-dynamodb',
+          environmentId: 'env-dev',
+          queryText: '{ "operation": "Query", "TableName": "Orders" }',
+        }}
+        onExecuteDataEdit={executeDataEdit}
+        payload={{
+          renderer: 'table',
+          columns: ['pk', 'sk', 'status', 'total'],
+          rows: [['CUSTOMER#123', 'ORDER#1001', 'open', '10']],
+        }}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add Row' }))
+    fireEvent.change(screen.getByLabelText('Insert pk'), {
+      target: { value: 'CUSTOMER#123' },
+    })
+    fireEvent.change(screen.getByLabelText('Insert sk'), {
+      target: { value: 'ORDER#1003' },
+    })
+    fireEvent.change(screen.getByLabelText('Insert status'), {
+      target: { value: 'queued' },
+    })
+    fireEvent.change(screen.getByLabelText('Insert total'), {
+      target: { value: '42' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Insert' }))
+
+    await waitFor(() => {
+      expect(executeDataEdit).toHaveBeenCalledWith({
+        connectionId: 'conn-dynamodb',
+        environmentId: 'env-dev',
+        editKind: 'put-item',
+        target: {
+          objectKind: 'item',
+          path: [],
+          table: 'Orders',
+          itemKey: {
+            pk: 'CUSTOMER#123',
+            sk: 'ORDER#1003',
+          },
+        },
+        changes: [
+          {
+            field: 'pk',
+            value: 'CUSTOMER#123',
+            valueType: 'string',
+          },
+          {
+            field: 'sk',
+            value: 'ORDER#1003',
+            valueType: 'string',
+          },
+          {
+            field: 'status',
+            value: 'queued',
+            valueType: 'string',
+          },
+          {
+            field: 'total',
+            value: 42,
+            valueType: 'number',
+          },
+        ],
+      })
+    })
+    expect(screen.getByRole('button', { name: 'queued' })).toBeInTheDocument()
+  })
+
+  it('builds Cassandra row edits only from complete CQL key predicates', async () => {
+    const executeDataEdit = vi.fn(async (): Promise<DataEditExecutionResponse> => ({
+      connectionId: 'conn-cassandra',
+      environmentId: 'env-dev',
+      editKind: 'update-row',
+      executionSupport: 'live',
+      executed: true,
+      plan: {
+        operationId: 'cassandra.data-edit.update-row',
+        engine: 'cassandra',
+        summary: 'Updated row.',
+        generatedRequest:
+          'update commerce.orders set status = ? where account_id = ? and order_id = ?;',
+        requestLanguage: 'cql',
+        destructive: false,
+        requiredPermissions: ['write item/row with complete key'],
+        warnings: [],
+      },
+      messages: ['Updated row.'],
+      warnings: [],
+    }))
+
+    render(
+      <ResultPayloadView
+        connection={cassandraConnection()}
+        editContext={{
+          connectionId: 'conn-cassandra',
+          environmentId: 'env-dev',
+          queryText:
+            "select account_id, order_id, status from commerce.orders where account_id = 'acct-1' and order_id = 'order-1' limit 20;",
+        }}
+        onExecuteDataEdit={executeDataEdit}
+        payload={{
+          renderer: 'table',
+          columns: ['account_id', 'order_id', 'status'],
+          rows: [['acct-1', 'order-1', 'open']],
+        }}
+      />,
+    )
+
+    fireEvent.doubleClick(screen.getByRole('button', { name: 'open' }))
+    const input = screen.getByLabelText('Edit status row 1')
+    fireEvent.change(input, { target: { value: 'closed' } })
+    fireEvent.blur(input)
+
+    await waitFor(() => {
+      expect(executeDataEdit).toHaveBeenCalledWith({
+        connectionId: 'conn-cassandra',
+        environmentId: 'env-dev',
+        editKind: 'update-row',
+        target: {
+          objectKind: 'row',
+          path: [],
+          schema: 'commerce',
+          table: 'orders',
+          primaryKey: {
+            account_id: 'acct-1',
+            order_id: 'order-1',
+          },
+        },
+        changes: [
+          {
+            field: 'status',
+            value: 'closed',
+            valueType: 'string',
+          },
+        ],
+      })
+    })
+    expect(screen.getByRole('button', { name: 'closed' })).toBeInTheDocument()
   })
 
   it('stretches table columns to fill the visible grid width', () => {
@@ -312,10 +875,245 @@ describe('ResultPayloadView', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Expand session:1' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Expand session:1' }))
 
     expect(screen.getByText('user')).toBeInTheDocument()
     expect(screen.getByText('"avery"')).toBeInTheDocument()
     expect(screen.getByText('cart')).toBeInTheDocument()
+  })
+
+  it('executes Redis value and TTL edits from key-value results', async () => {
+    const executeDataEdit = vi.fn(async (
+      request: DataEditExecutionRequest,
+    ): Promise<DataEditExecutionResponse> => ({
+      connectionId: request.connectionId,
+      environmentId: request.environmentId,
+      editKind: request.editKind,
+      executionSupport: 'live',
+      executed: true,
+      plan: {
+        operationId: `redis.data-edit.${request.editKind}`,
+        engine: 'redis',
+        summary: 'Edited key.',
+        generatedRequest: 'SET session:1 paused',
+        requestLanguage: 'redis',
+        destructive: false,
+        requiredPermissions: ['write concrete key'],
+        warnings: [],
+      },
+      messages: ['Edited key.'],
+      warnings: [],
+    }))
+
+    render(
+      <ResultPayloadView
+        connection={redisConnection()}
+        editContext={{
+          connectionId: 'conn-redis',
+          environmentId: 'env-dev',
+          queryText: 'GET session:1',
+        }}
+        onExecuteDataEdit={executeDataEdit}
+        payload={{
+          renderer: 'keyvalue',
+          entries: {
+            'session:1': 'active',
+          },
+        }}
+      />,
+    )
+
+    fireEvent.doubleClick(screen.getByRole('button', { name: 'active' }))
+    fireEvent.change(screen.getByLabelText('Edit value session:1'), {
+      target: { value: 'paused' },
+    })
+    fireEvent.blur(screen.getByLabelText('Edit value session:1'))
+
+    await waitFor(() => {
+      expect(executeDataEdit).toHaveBeenCalledWith({
+        connectionId: 'conn-redis',
+        environmentId: 'env-dev',
+        editKind: 'set-key-value',
+        target: {
+          objectKind: 'key',
+          path: [],
+          key: 'session:1',
+        },
+        changes: [
+          {
+            value: 'paused',
+            valueType: 'string',
+          },
+        ],
+      })
+    })
+    expect(screen.getByRole('button', { name: 'paused' })).toBeInTheDocument()
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: 'paused' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Set TTL' }))
+    fireEvent.change(screen.getByLabelText('TTL seconds'), { target: { value: '60' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Set TTL' }))
+
+    await waitFor(() => {
+      expect(executeDataEdit).toHaveBeenLastCalledWith({
+        connectionId: 'conn-redis',
+        environmentId: 'env-dev',
+        editKind: 'set-ttl',
+        target: {
+          objectKind: 'key',
+          path: [],
+          key: 'session:1',
+        },
+        changes: [
+          {
+            value: 60,
+            valueType: 'number',
+          },
+        ],
+      })
+    })
+  })
+
+  it('adds Redis keys from key-value results', async () => {
+    const executeDataEdit = vi.fn(async (
+      request: DataEditExecutionRequest,
+    ): Promise<DataEditExecutionResponse> => ({
+      connectionId: request.connectionId,
+      environmentId: request.environmentId,
+      editKind: request.editKind,
+      executionSupport: 'live',
+      executed: true,
+      plan: {
+        operationId: 'redis.data-edit.set-key-value',
+        engine: 'redis',
+        summary: 'Added key.',
+        generatedRequest: 'SET session:2 {"state":"new"}',
+        requestLanguage: 'redis',
+        destructive: false,
+        requiredPermissions: ['write concrete key'],
+        warnings: [],
+      },
+      messages: ['Added key.'],
+      warnings: [],
+    }))
+
+    render(
+      <ResultPayloadView
+        connection={redisConnection()}
+        editContext={{
+          connectionId: 'conn-redis',
+          environmentId: 'env-dev',
+          queryText: 'SCAN 0',
+        }}
+        onExecuteDataEdit={executeDataEdit}
+        payload={{
+          renderer: 'keyvalue',
+          entries: {
+            'session:1': 'active',
+          },
+        }}
+      />,
+    )
+
+    const [openAddButton] = screen.getAllByRole('button', { name: 'Add Key' })
+    expect(openAddButton).toBeDefined()
+    fireEvent.click(openAddButton!)
+    fireEvent.change(screen.getByLabelText('New key name'), {
+      target: { value: 'session:2' },
+    })
+    fireEvent.change(screen.getByLabelText('New key value'), {
+      target: { value: '{"state":"new"}' },
+    })
+    const submitAddButton = screen.getAllByRole('button', { name: 'Add Key' }).at(-1)
+    expect(submitAddButton).toBeDefined()
+    fireEvent.click(submitAddButton!)
+
+    await waitFor(() => {
+      expect(executeDataEdit).toHaveBeenCalledWith({
+        connectionId: 'conn-redis',
+        environmentId: 'env-dev',
+        editKind: 'set-key-value',
+        target: {
+          objectKind: 'key',
+          path: [],
+          key: 'session:2',
+        },
+        changes: [
+          {
+            value: { state: 'new' },
+            valueType: 'object',
+          },
+        ],
+      })
+    })
+    expect(screen.getByRole('button', { name: 'session:2' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '{"state":"new"}' })).toBeInTheDocument()
+  })
+
+  it('deletes Redis keys with explicit confirmation', async () => {
+    const executeDataEdit = vi.fn(async (
+      request: DataEditExecutionRequest,
+    ): Promise<DataEditExecutionResponse> => ({
+      connectionId: request.connectionId,
+      environmentId: request.environmentId,
+      editKind: request.editKind,
+      executionSupport: 'live',
+      executed: true,
+      plan: {
+        operationId: 'redis.data-edit.delete-key',
+        engine: 'redis',
+        summary: 'Deleted key.',
+        generatedRequest: 'DEL session:1',
+        requestLanguage: 'redis',
+        destructive: true,
+        confirmationText: 'CONFIRM REDIS DELETE-KEY',
+        requiredPermissions: ['write concrete key'],
+        warnings: [],
+      },
+      messages: ['Deleted key.'],
+      warnings: [],
+    }))
+
+    render(
+      <ResultPayloadView
+        connection={redisConnection()}
+        editContext={{
+          connectionId: 'conn-redis',
+          environmentId: 'env-dev',
+          queryText: 'GET session:1',
+        }}
+        onExecuteDataEdit={executeDataEdit}
+        payload={{
+          renderer: 'keyvalue',
+          entries: {
+            'session:1': 'active',
+          },
+        }}
+      />,
+    )
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: 'active' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete Key' }))
+    fireEvent.change(screen.getByLabelText('Delete key confirmation text'), {
+      target: { value: 'CONFIRM REDIS DELETE-KEY' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+
+    await waitFor(() => {
+      expect(executeDataEdit).toHaveBeenCalledWith({
+        connectionId: 'conn-redis',
+        environmentId: 'env-dev',
+        editKind: 'delete-key',
+        confirmationText: 'CONFIRM REDIS DELETE-KEY',
+        target: {
+          objectKind: 'key',
+          path: [],
+          key: 'session:1',
+        },
+        changes: [],
+      })
+    })
+    expect(screen.queryByRole('button', { name: 'active' })).not.toBeInTheDocument()
   })
 
   it('shows actual returned documents in the JSON and Raw views', () => {
@@ -385,13 +1183,246 @@ describe('ResultPayloadView', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Expand search hits' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Expand hits' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Expand [0]' }))
+    expect(screen.getByRole('region', { name: 'Search hits results' })).toBeInTheDocument()
+    expect(screen.getByText('product-1')).toBeInTheDocument()
 
-    expect(screen.getByText('source')).toBeInTheDocument()
-    expect(screen.getByText('highlights')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Expand product-1' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Expand product-1' }))
+
+    expect(screen.getByText('sku')).toBeInTheDocument()
     expect(screen.getByText('aggregations')).toBeInTheDocument()
+  })
+
+  it('updates search hit source documents through guarded search edit requests', async () => {
+    const executeDataEdit = vi.fn(async (
+      request: DataEditExecutionRequest,
+    ): Promise<DataEditExecutionResponse> => ({
+      connectionId: request.connectionId,
+      environmentId: request.environmentId,
+      editKind: request.editKind,
+      executionSupport: 'live',
+      executed: true,
+      plan: {
+        operationId: 'elasticsearch.data-edit.update-document',
+        engine: 'elasticsearch',
+        summary: 'Updated document.',
+        generatedRequest: 'POST /orders/_update/101?refresh=true',
+        requestLanguage: 'query-dsl',
+        destructive: false,
+        requiredPermissions: ['write concrete index document'],
+        warnings: [],
+      },
+      messages: ['Updated document.'],
+      warnings: [],
+    }))
+
+    render(
+      <ResultPayloadView
+        connection={searchConnection()}
+        editContext={{
+          connectionId: 'conn-search',
+          environmentId: 'env-dev',
+          queryText: '{ "index": "orders", "body": { "query": { "match_all": {} } } }',
+        }}
+        onExecuteDataEdit={executeDataEdit}
+        payload={{
+          renderer: 'searchHits',
+          total: 1,
+          hits: [
+            {
+              id: '101',
+              score: 1.25,
+              source: { status: 'processing', total: 42 },
+            },
+          ],
+        }}
+      />,
+    )
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: '101' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Update Document' }))
+    fireEvent.change(screen.getByLabelText('Search document source JSON'), {
+      target: { value: '{ "status": "fulfilled", "total": 42 }' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Update' }))
+
+    await waitFor(() => {
+      expect(executeDataEdit).toHaveBeenCalledWith({
+        connectionId: 'conn-search',
+        environmentId: 'env-dev',
+        editKind: 'update-document',
+        target: {
+          objectKind: 'document',
+          path: [],
+          table: 'orders',
+          documentId: '101',
+        },
+        changes: [
+          {
+            field: 'status',
+            value: 'fulfilled',
+            valueType: 'string',
+          },
+          {
+            field: 'total',
+            value: 42,
+            valueType: 'number',
+          },
+        ],
+      })
+    })
+    expect(screen.getByText(/fulfilled/)).toBeInTheDocument()
+  })
+
+  it('indexes new search documents from search hits results', async () => {
+    const executeDataEdit = vi.fn(async (
+      request: DataEditExecutionRequest,
+    ): Promise<DataEditExecutionResponse> => ({
+      connectionId: request.connectionId,
+      environmentId: request.environmentId,
+      editKind: request.editKind,
+      executionSupport: 'live',
+      executed: true,
+      plan: {
+        operationId: 'elasticsearch.data-edit.index-document',
+        engine: 'elasticsearch',
+        summary: 'Indexed document.',
+        generatedRequest: 'PUT /orders/_doc/102?refresh=true',
+        requestLanguage: 'query-dsl',
+        destructive: false,
+        requiredPermissions: ['write concrete index document'],
+        warnings: [],
+      },
+      messages: ['Indexed document.'],
+      warnings: [],
+    }))
+
+    render(
+      <ResultPayloadView
+        connection={searchConnection()}
+        editContext={{
+          connectionId: 'conn-search',
+          environmentId: 'env-dev',
+          queryText: '{ "index": "orders", "body": { "query": { "match_all": {} } } }',
+        }}
+        onExecuteDataEdit={executeDataEdit}
+        payload={{
+          renderer: 'searchHits',
+          total: 0,
+          hits: [],
+        }}
+      />,
+    )
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Add Document' })[0]!)
+    fireEvent.change(screen.getByLabelText('Search document id'), {
+      target: { value: '102' },
+    })
+    fireEvent.click(screen.getAllByRole('button', { name: 'Add Document' }).at(-1)!)
+    fireEvent.change(screen.getByLabelText('Search document source JSON'), {
+      target: { value: '{ "status": "queued", "total": 99 }' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Index' }))
+
+    await waitFor(() => {
+      expect(executeDataEdit).toHaveBeenCalledWith({
+        connectionId: 'conn-search',
+        environmentId: 'env-dev',
+        editKind: 'index-document',
+        target: {
+          objectKind: 'document',
+          path: [],
+          table: 'orders',
+          documentId: '102',
+        },
+        changes: [
+          {
+            field: 'status',
+            value: 'queued',
+            valueType: 'string',
+          },
+          {
+            field: 'total',
+            value: 99,
+            valueType: 'number',
+          },
+        ],
+      })
+    })
+    expect(screen.getByRole('button', { name: '102' })).toBeInTheDocument()
+    expect(screen.getByText(/queued/)).toBeInTheDocument()
+  })
+
+  it('deletes search hit documents with explicit confirmation', async () => {
+    const executeDataEdit = vi.fn(async (
+      request: DataEditExecutionRequest,
+    ): Promise<DataEditExecutionResponse> => ({
+      connectionId: request.connectionId,
+      environmentId: request.environmentId,
+      editKind: request.editKind,
+      executionSupport: 'live',
+      executed: true,
+      plan: {
+        operationId: 'elasticsearch.data-edit.delete-document',
+        engine: 'elasticsearch',
+        summary: 'Deleted document.',
+        generatedRequest: 'DELETE /orders/_doc/101?refresh=true',
+        requestLanguage: 'query-dsl',
+        destructive: true,
+        confirmationText: 'CONFIRM ELASTICSEARCH DELETE-DOCUMENT',
+        requiredPermissions: ['write concrete index document'],
+        warnings: [],
+      },
+      messages: ['Deleted document.'],
+      warnings: [],
+    }))
+
+    render(
+      <ResultPayloadView
+        connection={searchConnection()}
+        editContext={{
+          connectionId: 'conn-search',
+          environmentId: 'env-dev',
+          queryText: '{ "index": "orders", "body": { "query": { "match_all": {} } } }',
+        }}
+        onExecuteDataEdit={executeDataEdit}
+        payload={{
+          renderer: 'searchHits',
+          total: 1,
+          hits: [
+            {
+              id: '101',
+              score: 1.25,
+              source: { status: 'processing' },
+            },
+          ],
+        }}
+      />,
+    )
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: '101' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete Document' }))
+    fireEvent.change(screen.getByLabelText('Delete search document confirmation text'), {
+      target: { value: 'CONFIRM ELASTICSEARCH DELETE-DOCUMENT' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+
+    await waitFor(() => {
+      expect(executeDataEdit).toHaveBeenCalledWith({
+        connectionId: 'conn-search',
+        environmentId: 'env-dev',
+        editKind: 'delete-document',
+        confirmationText: 'CONFIRM ELASTICSEARCH DELETE-DOCUMENT',
+        target: {
+          objectKind: 'document',
+          path: [],
+          table: 'orders',
+          documentId: '101',
+        },
+        changes: [],
+      })
+    })
+    expect(screen.queryByRole('button', { name: '101' })).not.toBeInTheDocument()
   })
 })
 
@@ -435,6 +1466,150 @@ function mongoConnection(): ConnectionProfile {
         service: 'Datanaut',
         account: 'conn-mongo',
         label: 'Mongo credential',
+      },
+    },
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  }
+}
+
+function sqlConnection(): ConnectionProfile {
+  return {
+    id: 'conn-sql',
+    name: 'SQL Server',
+    engine: 'sqlserver',
+    family: 'sql',
+    host: '127.0.0.1',
+    port: 1433,
+    database: 'datanaut',
+    environmentIds: ['env-dev'],
+    tags: [],
+    favorite: false,
+    readOnly: false,
+    icon: 'sqlserver',
+    auth: {
+      username: 'sa',
+      secretRef: {
+        id: 'secret-sql',
+        provider: 'manual',
+        service: 'Datanaut',
+        account: 'conn-sql',
+        label: 'SQL credential',
+      },
+    },
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  }
+}
+
+function redisConnection(): ConnectionProfile {
+  return {
+    id: 'conn-redis',
+    name: 'Redis',
+    engine: 'redis',
+    family: 'keyvalue',
+    host: '127.0.0.1',
+    port: 6379,
+    database: '0',
+    environmentIds: ['env-dev'],
+    tags: [],
+    favorite: false,
+    readOnly: false,
+    icon: 'redis',
+    auth: {
+      username: 'default',
+      secretRef: {
+        id: 'secret-redis',
+        provider: 'manual',
+        service: 'Datanaut',
+        account: 'conn-redis',
+        label: 'Redis credential',
+      },
+    },
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  }
+}
+
+function dynamoConnection(): ConnectionProfile {
+  return {
+    id: 'conn-dynamodb',
+    name: 'DynamoDB',
+    engine: 'dynamodb',
+    family: 'widecolumn',
+    host: '127.0.0.1',
+    port: 8001,
+    database: 'local',
+    environmentIds: ['env-dev'],
+    tags: [],
+    favorite: false,
+    readOnly: false,
+    icon: 'dynamodb',
+    auth: {
+      username: 'local',
+      secretRef: {
+        id: 'secret-dynamodb',
+        provider: 'manual',
+        service: 'Datanaut',
+        account: 'conn-dynamodb',
+        label: 'DynamoDB credential',
+      },
+    },
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  }
+}
+
+function cassandraConnection(): ConnectionProfile {
+  return {
+    id: 'conn-cassandra',
+    name: 'Cassandra',
+    engine: 'cassandra',
+    family: 'widecolumn',
+    host: '127.0.0.1',
+    port: 9042,
+    database: 'commerce',
+    environmentIds: ['env-dev'],
+    tags: [],
+    favorite: false,
+    readOnly: false,
+    icon: 'cassandra',
+    auth: {
+      username: 'cassandra',
+      secretRef: {
+        id: 'secret-cassandra',
+        provider: 'manual',
+        service: 'Datanaut',
+        account: 'conn-cassandra',
+        label: 'Cassandra credential',
+      },
+    },
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  }
+}
+
+function searchConnection(): ConnectionProfile {
+  return {
+    id: 'conn-search',
+    name: 'Search',
+    engine: 'elasticsearch',
+    family: 'search',
+    host: '127.0.0.1',
+    port: 9200,
+    database: '',
+    environmentIds: ['env-dev'],
+    tags: [],
+    favorite: false,
+    readOnly: false,
+    icon: 'elasticsearch',
+    auth: {
+      secretRef: {
+        id: 'secret-search',
+        provider: 'manual',
+        service: 'Datanaut',
+        account: 'conn-search',
+        label: 'Search credential',
       },
     },
     createdAt: '2026-01-01T00:00:00.000Z',
