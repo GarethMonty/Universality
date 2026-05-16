@@ -55,7 +55,7 @@ fn sqlite_connect_options(
         .connection_string
         .as_deref()
         .filter(|value| !value.trim().is_empty())
-        .or_else(|| connection.database.as_deref())
+        .or(connection.database.as_deref())
         .filter(|value| !value.trim().is_empty())
         .unwrap_or(connection.host.as_str())
         .trim();

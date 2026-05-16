@@ -10,7 +10,6 @@ type WorkspaceActions = Pick<
   | 'clearWorkbenchMessages'
   | 'setTheme'
   | 'updateUiState'
-  | 'setLocked'
   | 'refreshDiagnostics'
   | 'exportWorkspace'
   | 'importWorkspace'
@@ -65,17 +64,6 @@ export function useWorkspaceActions({
     [applyPayload, handleError],
   )
 
-  const setLocked = useCallback<Actions['setLocked']>(
-    async (isLocked) => {
-      try {
-        applyPayload(await desktopClient.setLocked(isLocked))
-      } catch (error) {
-        handleError(error)
-      }
-    },
-    [applyPayload, handleError],
-  )
-
   const refreshDiagnostics = useCallback<Actions['refreshDiagnostics']>(
     async () => {
       try {
@@ -122,7 +110,6 @@ export function useWorkspaceActions({
       clearWorkbenchMessages,
       setTheme,
       updateUiState,
-      setLocked,
       refreshDiagnostics,
       exportWorkspace,
       importWorkspace,
@@ -134,7 +121,6 @@ export function useWorkspaceActions({
       importWorkspace,
       openWorkbenchMessages,
       refreshDiagnostics,
-      setLocked,
       setTheme,
       updateUiState,
     ],

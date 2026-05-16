@@ -2,6 +2,13 @@
 
 DataPad++ desktop releases are created from GitHub Actions with a version input. The workflow updates every release version file, commits that release bump, creates or reuses `app-vX.Y.Z` at the release commit, builds platform bundles, and uploads artifacts to a draft GitHub Release.
 
+Expected release assets:
+
+- Windows x64: NSIS installer, MSI installer, and zipped raw `.exe`.
+- Linux x64: `.deb`, `.rpm`, AppImage, and tarred raw executable.
+- macOS Intel: `.app`/DMG bundle outputs and tarred raw executable.
+- macOS Apple Silicon: `.app`/DMG bundle outputs and tarred raw executable.
+
 ## Before Running Release
 
 - Choose the next semantic version, for example `0.1.1` or `0.2.0-beta.1`.
@@ -24,23 +31,35 @@ Updater artifact signing:
 
 macOS code signing and notarization:
 
-- `APPLE_CERTIFICATE`
-- `APPLE_CERTIFICATE_PASSWORD`
-- `APPLE_SIGNING_IDENTITY`
+- `APPLE_CERTIFICATE`: base64 encoded `.p12` certificate that includes the private key.
+- `APPLE_CERTIFICATE_PASSWORD`: password used when exporting the `.p12`.
+- `APPLE_SIGNING_IDENTITY`: codesigning identity contained in that `.p12`.
 - `APPLE_ID`
 - `APPLE_PASSWORD`
 - `APPLE_TEAM_ID`
+
+The release workflow has a `macos_signing` input:
+
+- `auto`: sign and notarize macOS artifacts when all Apple secrets are present and valid; otherwise build unsigned artifacts when no Apple secrets are configured.
+- `disabled`: never pass Apple signing secrets to Tauri. Use this for internal unsigned test builds.
+- `required`: fail the release if signing/notarization secrets are missing or invalid. Use this for production release candidates.
+
+If macOS signing fails with `SecKeychainItemImport`, the `APPLE_CERTIFICATE` secret is usually not a base64 encoded `.p12` with a private key, or `APPLE_CERTIFICATE_PASSWORD` does not match. On Windows, create the secret value with:
+
+```powershell
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("DeveloperIDApplication.p12")) | Set-Clipboard
+```
 
 Windows Authenticode signing is not configured yet. Before a public stable Windows release, add certificate-backed signing so installers build trust with Windows SmartScreen.
 
 ## Manual Release Steps
 
 1. Open the GitHub Actions `Release` workflow.
-2. Run the workflow manually with the exact semantic version, for example `0.1.0` or `0.2.0-beta.1`.
+2. Run the workflow manually with the exact semantic version, for example `0.1.0` or `0.2.0-beta.1`. Choose `macos_signing=disabled` for unsigned internal builds, or `macos_signing=required` when preparing a production release.
 3. Wait for the workflow to commit `chore: release v<version>` and create `app-v<version>`.
 4. Wait for all platform builds to finish.
 5. Open the draft GitHub Release named `DataPad++ v<version>`.
-6. Confirm release assets exist for Windows, Linux, macOS Intel, and macOS Apple Silicon where each platform build succeeded.
+6. Confirm release assets exist for Windows, Linux, macOS Intel, and macOS Apple Silicon where each platform build succeeded. Windows should include both NSIS and MSI installer outputs.
 7. Download representative installers and smoke-test launch.
 8. Publish the draft release only after smoke tests pass.
 

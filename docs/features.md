@@ -216,5 +216,9 @@ Releases are manual GitHub Actions workflows with automated version updates:
 3. It commits `chore: release v<version>`.
 4. It creates or reuses `app-v<version>` at that commit.
 5. It builds draft Tauri artifacts for Windows, Linux, macOS Intel, and macOS Apple Silicon.
+6. It uploads installer/bundle outputs plus raw executable archives:
+   - Windows x64: NSIS installer, MSI installer, zipped `.exe`.
+   - Linux x64: `.deb`, `.rpm`, AppImage, tarred executable.
+   - macOS Intel and Apple Silicon: app/DMG bundles plus tarred executable.
 
 Release artifacts are draft-first so installers can be smoke-tested before publication.

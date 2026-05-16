@@ -1598,7 +1598,6 @@ describe('App', () => {
 
     await createCatalogMongoWithBuilderTab()
 
-    const queryEditor = await screen.findByLabelText('Query editor')
     const rawQuery = '{ "collection": "accounts", "filter": { "status": "open" }, "limit": 10 }'
 
     fireEvent.click(screen.getByRole('button', { name: 'Show raw query only' }))
@@ -1610,7 +1609,8 @@ describe('App', () => {
       )
     })
 
-    fireEvent.change(queryEditor, { target: { value: rawQuery } })
+    const rawEditor = screen.getByLabelText('Query editor')
+    fireEvent.change(rawEditor, { target: { value: rawQuery } })
     fireEvent.click(screen.getByRole('button', { name: 'Run query' }))
 
     await waitFor(() => {

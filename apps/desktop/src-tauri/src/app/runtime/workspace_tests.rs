@@ -6,6 +6,7 @@ use super::{
     generate_id,
     tabs::reorder_query_tabs_in_place,
     timestamp_now,
+    workspace::migrate_snapshot,
 };
 use crate::domain::models::{ConnectionAuth, ConnectionProfile, QueryTabState};
 
@@ -120,6 +121,18 @@ fn existing_debug_workspace_is_not_empty_and_should_be_preserved() {
     });
 
     assert!(!workspace_is_empty(&snapshot));
+}
+
+#[test]
+fn migrated_workspace_is_unlocked_after_lock_ui_removal() {
+    let mut snapshot = blank_workspace_snapshot();
+    snapshot.lock_state.is_locked = true;
+    snapshot.lock_state.locked_at = Some("2026-05-16T10:00:00Z".into());
+
+    let migrated = migrate_snapshot(snapshot);
+
+    assert!(!migrated.lock_state.is_locked);
+    assert!(migrated.lock_state.locked_at.is_none());
 }
 
 #[test]

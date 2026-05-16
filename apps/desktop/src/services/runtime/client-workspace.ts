@@ -29,19 +29,6 @@ export const clientWorkspace = {
     return buildBrowserPayload(next)
   },
 
-  async setLocked(isLocked: boolean): Promise<BootstrapPayload> {
-    if (isTauriRuntime()) {
-      return invokeDesktop<BootstrapPayload>(isLocked ? 'lock_app' : 'unlock_app')
-    }
-
-    const next = cloneSnapshot(loadBrowserSnapshot())
-    next.lockState.isLocked = isLocked
-    next.lockState.lockedAt = isLocked ? new Date().toISOString() : undefined
-    next.updatedAt = new Date().toISOString()
-    saveBrowserSnapshot(next)
-    return buildBrowserPayload(next)
-  },
-
   async createDiagnosticsReport(): Promise<DiagnosticsReport> {
     if (isTauriRuntime()) {
       return invokeDesktop<DiagnosticsReport>('create_diagnostics_report')

@@ -22,7 +22,6 @@ import {
   History,
   KeyRound,
   Layers3,
-  Lock,
   Moon,
   MoreVertical,
   Palette,
@@ -60,7 +59,6 @@ export const SavedWorkIcon = adapt(BookMarked)
 export const SearchIcon = adapt(Search)
 export const SettingsIcon = adapt(Settings)
 export const ThemeIcon = adapt(Moon)
-export const LockIcon = adapt(Lock)
 export const ChevronRightIcon = adapt(ChevronRight)
 export const ChevronDownIcon = adapt(ChevronDown)
 export const PanelIcon = adapt(PanelBottom)

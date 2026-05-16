@@ -176,9 +176,11 @@ pub fn generate_id(prefix: &str) -> String {
     format!("{prefix}-{nanos}")
 }
 
-fn migrate_snapshot(mut snapshot: WorkspaceSnapshot) -> WorkspaceSnapshot {
+pub(super) fn migrate_snapshot(mut snapshot: WorkspaceSnapshot) -> WorkspaceSnapshot {
     snapshot.schema_version = persistence::SCHEMA_VERSION;
     snapshot.adapter_manifests = adapters::manifests();
+    snapshot.lock_state.is_locked = false;
+    snapshot.lock_state.locked_at = None;
     strip_demo_records(&mut snapshot);
     migrate_connection_modes(&mut snapshot);
     ensure_library_nodes(&mut snapshot);

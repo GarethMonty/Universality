@@ -3,5 +3,5 @@
   "identifier": "main-capability",
   "description": "Default capability for the DataPad++ desktop window.",
   "windows": ["main"],
-  "permissions": ["core:default", "opener:default"]
+  "permissions": ["core:default"]
 }

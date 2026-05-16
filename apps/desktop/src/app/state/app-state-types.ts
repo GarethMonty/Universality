@@ -169,7 +169,6 @@ export interface Actions {
   clearWorkbenchMessages(): void
   setTheme(theme: WorkspaceSnapshot['preferences']['theme']): Promise<void>
   updateUiState(patch: UpdateUiStateRequest): Promise<void>
-  setLocked(isLocked: boolean): Promise<void>
   refreshDiagnostics(): Promise<void>
   exportWorkspace(passphrase: string): Promise<void>
   importWorkspace(passphrase: string, encryptedPayload: string): Promise<void>

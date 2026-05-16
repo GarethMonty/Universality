@@ -70,7 +70,6 @@ const defaultActions: Actions = {
   clearWorkbenchMessages: () => undefined,
   setTheme: noop,
   updateUiState: noop,
-  setLocked: noop,
   refreshDiagnostics: noop,
   exportWorkspace: noop,
   importWorkspace: noop,

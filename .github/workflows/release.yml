@@ -7,6 +7,15 @@ on:
         description: 'Semantic version to release. The workflow updates version files, commits, tags, and builds it.'
         required: true
         type: string
+      macos_signing:
+        description: 'macOS signing mode. Use disabled for unsigned test builds, required for production signing.'
+        required: false
+        default: auto
+        type: choice
+        options:
+          - auto
+          - disabled
+          - required
 
 permissions:
   contents: write
@@ -115,20 +124,24 @@ jobs:
         include:
           - label: Linux x64
             platform: ubuntu-22.04
-            args: ''
+            args: '--bundles deb,rpm,appimage'
             rust-targets: ''
+            artifact-suffix: linux-x64
           - label: Windows x64
             platform: windows-latest
-            args: ''
+            args: '--bundles nsis,msi'
             rust-targets: ''
+            artifact-suffix: windows-x64
           - label: macOS Intel
             platform: macos-13
-            args: '--target x86_64-apple-darwin'
+            args: '--target x86_64-apple-darwin --bundles app,dmg'
             rust-targets: x86_64-apple-darwin
+            artifact-suffix: macos-x64
           - label: macOS Apple Silicon
             platform: macos-latest
-            args: '--target aarch64-apple-darwin'
+            args: '--target aarch64-apple-darwin --bundles app,dmg'
             rust-targets: aarch64-apple-darwin
+            artifact-suffix: macos-arm64
 
     runs-on: ${{ matrix.platform }}
 
@@ -169,7 +182,135 @@ jobs:
       - name: Install workspace dependencies
         run: npm ci
 
+      - name: Validate macOS signing secrets
+        id: mac_signing
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          MACOS_SIGNING_MODE: ${{ inputs.macos_signing }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+
+          mode="${MACOS_SIGNING_MODE:-auto}"
+          if [[ "${mode}" == "disabled" ]]; then
+            echo "enabled=false" >> "${GITHUB_OUTPUT}"
+            echo "::notice title=Unsigned macOS build::macos_signing is disabled, so Apple signing and notarization secrets will not be passed to Tauri."
+            exit 0
+          fi
+
+          required_secrets=(
+            APPLE_CERTIFICATE
+            APPLE_CERTIFICATE_PASSWORD
+            APPLE_SIGNING_IDENTITY
+            APPLE_ID
+            APPLE_PASSWORD
+            APPLE_TEAM_ID
+          )
+          present=()
+          missing=()
+          for name in "${required_secrets[@]}"; do
+            if [[ -n "${!name:-}" ]]; then
+              present+=("${name}")
+            else
+              missing+=("${name}")
+            fi
+          done
+
+          if (( ${#present[@]} == 0 )); then
+            if [[ "${mode}" == "required" ]]; then
+              echo "::error title=Missing macOS signing secrets::macos_signing is required, but no Apple signing/notarization secrets are configured."
+              exit 1
+            fi
+            echo "enabled=false" >> "${GITHUB_OUTPUT}"
+            echo "::notice title=Unsigned macOS build::No Apple signing/notarization secrets were configured. Building unsigned macOS artifacts."
+            exit 0
+          fi
+
+          if (( ${#missing[@]} > 0 )); then
+            echo "::error title=Incomplete macOS signing secrets::Missing required secret(s): ${missing[*]}. Set all Apple signing/notarization secrets, or rerun with macos_signing=disabled for unsigned artifacts."
+            exit 1
+          fi
+
+          cert_path="${RUNNER_TEMP}/apple-certificate.p12"
+          export CERT_PATH="${cert_path}"
+          if ! python3 - <<'PY'
+          import base64
+          import binascii
+          import os
+          import pathlib
+          import sys
+
+          raw = ''.join(os.environ['APPLE_CERTIFICATE'].split())
+          try:
+              certificate = base64.b64decode(raw, validate=True)
+          except binascii.Error as exc:
+              print(f'APPLE_CERTIFICATE is not valid base64: {exc}', file=sys.stderr)
+              sys.exit(1)
+
+          if not certificate:
+              print('APPLE_CERTIFICATE decoded to an empty file.', file=sys.stderr)
+              sys.exit(1)
+
+          pathlib.Path(os.environ['CERT_PATH']).write_bytes(certificate)
+          PY
+          then
+            echo "::error title=Invalid APPLE_CERTIFICATE::APPLE_CERTIFICATE must be base64 encoded .p12 content exported with its private key."
+            exit 1
+          fi
+
+          validation_keychain="${RUNNER_TEMP}/datapadplusplus-signing-validation.keychain-db"
+          cleanup() {
+            security delete-keychain "${validation_keychain}" >/dev/null 2>&1 || true
+            rm -f "${cert_path}"
+          }
+          trap cleanup EXIT
+
+          security create-keychain -p "validation-password" "${validation_keychain}"
+          security set-keychain-settings -lut 21600 "${validation_keychain}"
+          if ! security import "${cert_path}" -k "${validation_keychain}" -P "${APPLE_CERTIFICATE_PASSWORD}" -T /usr/bin/codesign >/tmp/apple-cert-import.out 2>/tmp/apple-cert-import.err; then
+            echo "::error title=Invalid macOS signing certificate::APPLE_CERTIFICATE could not be imported. Confirm it is a base64 encoded .p12 file that includes the private key and that APPLE_CERTIFICATE_PASSWORD matches."
+            cat /tmp/apple-cert-import.err
+            exit 1
+          fi
+
+          if ! security find-identity -v -p codesigning "${validation_keychain}" | grep -F "${APPLE_SIGNING_IDENTITY}" >/dev/null; then
+            echo "::error title=Signing identity not found::APPLE_SIGNING_IDENTITY was not found in APPLE_CERTIFICATE."
+            security find-identity -v -p codesigning "${validation_keychain}" || true
+            exit 1
+          fi
+
+          echo "enabled=true" >> "${GITHUB_OUTPUT}"
+          echo "macOS signing secrets validated."
+
       - name: Build and publish Tauri release
+        if: runner.os != 'macOS' || steps.mac_signing.outputs.enabled != 'true'
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: apps/desktop
+          tagName: app-v${{ inputs.version }}
+          releaseName: DataPad++ v${{ inputs.version }}
+          releaseBody: |
+            Desktop release artifacts for DataPad++.
+
+            This release is created as a draft for manual installer smoke testing before publication.
+            Release checklist: docs/release-checklist.md
+          releaseDraft: true
+          prerelease: ${{ contains(inputs.version, '-') }}
+          releaseCommitish: ${{ needs.validate.outputs.release-sha }}
+          args: ${{ matrix.args }}
+
+      - name: Build and publish signed macOS Tauri release
+        if: runner.os == 'macOS' && steps.mac_signing.outputs.enabled == 'true'
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -194,3 +335,51 @@ jobs:
           prerelease: ${{ contains(inputs.version, '-') }}
           releaseCommitish: ${{ needs.validate.outputs.release-sha }}
           args: ${{ matrix.args }}
+
+      - name: Package raw executable
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          RUST_TARGET: ${{ matrix.rust-targets }}
+          ARTIFACT_SUFFIX: ${{ matrix.artifact-suffix }}
+        run: |
+          $targetRoot = Join-Path "apps/desktop/src-tauri" "target"
+          if ($env:RUST_TARGET) {
+            $releaseDir = Join-Path $targetRoot (Join-Path $env:RUST_TARGET "release")
+          } else {
+            $releaseDir = Join-Path $targetRoot "release"
+          }
+
+          $binaryName = if ($IsWindows) { "datapadplusplus-desktop.exe" } else { "datapadplusplus-desktop" }
+          $binaryPath = Join-Path $releaseDir $binaryName
+          if (-not (Test-Path -LiteralPath $binaryPath)) {
+            throw "Expected release executable was not found at $binaryPath"
+          }
+
+          $assetsDir = "release-assets"
+          New-Item -ItemType Directory -Force -Path $assetsDir | Out-Null
+
+          $baseName = "DataPadPlusPlus-$($env:RELEASE_VERSION)-$($env:ARTIFACT_SUFFIX)-executable"
+          if ($IsWindows) {
+            $archivePath = Join-Path $assetsDir "$baseName.zip"
+            Compress-Archive -LiteralPath $binaryPath -DestinationPath $archivePath -Force
+          } else {
+            $archivePath = Join-Path $assetsDir "$baseName.tar.gz"
+            tar -czf $archivePath -C $releaseDir $binaryName
+          }
+
+          Get-ChildItem -LiteralPath $assetsDir | Format-Table Name,Length
+
+      - name: Upload raw executable to draft release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: app-v${{ inputs.version }}
+        run: |
+          $assets = Get-ChildItem -LiteralPath "release-assets" -File | ForEach-Object { $_.FullName }
+          if (-not $assets -or $assets.Count -eq 0) {
+            throw "No raw executable archive was produced."
+          }
+          foreach ($asset in $assets) {
+            gh release upload $env:TAG_NAME $asset --clobber
+          }

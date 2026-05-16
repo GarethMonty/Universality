@@ -579,12 +579,6 @@ pub fn set_ui_state(
 }
 
 #[tauri::command]
-pub fn lock_app(state: State<'_, SharedAppState>) -> Result<BootstrapPayload, CommandError> {
-    let mut state = state.lock().unwrap();
-    state.set_locked(true)
-}
-
-#[tauri::command]
 pub fn unlock_app(state: State<'_, SharedAppState>) -> Result<BootstrapPayload, CommandError> {
     let mut state = state.lock().unwrap();
     state.set_locked(false)

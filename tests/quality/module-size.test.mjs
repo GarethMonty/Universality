@@ -6,7 +6,99 @@ import test from 'node:test'
 const repoRoot = path.resolve(import.meta.dirname, '..', '..')
 const defaultMaxLines = 400
 
-const documentedExceptions = new Map()
+const documentedExceptions = new Map([
+  [
+    'apps/desktop/src/app/components/workbench/EnvironmentWorkspace.tsx',
+    {
+      maxLines: 425,
+      reason: 'Dense environment editor with color, variable, and clone flows kept together for now.',
+    },
+  ],
+  [
+    'apps/desktop/src/app/components/workbench/results/DataGridView.tsx',
+    {
+      maxLines: 455,
+      reason: 'Virtualized grid selection, keyboard copy, and editing coordination are tightly coupled.',
+    },
+  ],
+  [
+    'apps/desktop/src/app/components/workbench/RightDrawer.connection-modes.tsx',
+    {
+      maxLines: 575,
+      reason: 'Connection method forms share stateful local-file and cloud mode behavior.',
+    },
+  ],
+  [
+    'apps/desktop/src/app/components/workbench/SideBar.connection-object-tree.tsx',
+    {
+      maxLines: 550,
+      reason: 'Tree rendering, scoped refresh, batching, and context menu behavior are one UI unit.',
+    },
+  ],
+  [
+    'apps/desktop/src/app/components/workbench/SideBar.connection-tree.ts',
+    {
+      maxLines: 570,
+      reason: 'Fallback connection tree templates cover all datastore families until live explorers mature.',
+    },
+  ],
+  [
+    'apps/desktop/src/app/components/workbench/SideBar.datastore-tree-registry.ts',
+    {
+      maxLines: 1120,
+      reason: 'Data-heavy datastore registry centralizes family placement and object actions.',
+    },
+  ],
+  [
+    'apps/desktop/src/app/components/workbench/SideBar.library-pane.tsx',
+    {
+      maxLines: 1050,
+      reason: 'Library tree drag/drop, recents, search, context menus, and environment badges remain coupled.',
+    },
+  ],
+  [
+    'apps/desktop/src/app/state/app-actions-tabs.ts',
+    {
+      maxLines: 445,
+      reason: 'Tab and Library actions share save/open lifecycle state.',
+    },
+  ],
+  [
+    'apps/desktop/src/app/state/workspace-migration.ts',
+    {
+      maxLines: 440,
+      reason: 'Workspace schema migration intentionally keeps versioned normalization in one place.',
+    },
+  ],
+  [
+    'apps/desktop/src/services/runtime/browser-tabs.ts',
+    {
+      maxLines: 475,
+      reason: 'Browser-preview tab persistence mirrors the desktop tab runtime contract.',
+    },
+  ],
+  [
+    'apps/desktop/src-tauri/src/app/runtime/library.rs',
+    {
+      maxLines: 830,
+      reason: 'Library runtime owns folder, item, migration, and local-file save invariants.',
+    },
+  ],
+  [
+    'apps/desktop/src-tauri/src/app/runtime/profiles.rs',
+    {
+      maxLines: 450,
+      reason: 'Connection and environment profile commands share validation and persistence helpers.',
+    },
+  ],
+  [
+    'apps/desktop/src-tauri/src/app/runtime/tabs.rs',
+    {
+      maxLines: 460,
+      reason: 'Tab lifecycle, scoped query creation, and reopen behavior share ordering invariants.',
+    },
+  ],
+])
 
 test('workbench and runtime modules stay within documented size budgets', async () => {
   const files = [

@@ -22,6 +22,10 @@ export function validateReleaseWorkflow(repoRoot = process.cwd()) {
   requireMatch(text, /^\s*workflow_dispatch:\s*$/m, 'release.yml must use workflow_dispatch')
   requireMatch(text, /^\s*version:\s*$/m, 'release.yml must define a version input')
   requireMatch(text, /^\s*required:\s*true\s*$/m, 'release version input must be required')
+  requireMatch(text, /^\s*macos_signing:\s*$/m, 'release.yml must define a macos_signing input')
+  requireMatch(text, /^\s*default:\s*auto\s*$/m, 'macOS signing input must default to auto')
+  requireMatch(text, /^\s*-\s*disabled\s*$/m, 'macOS signing input must support unsigned builds')
+  requireMatch(text, /^\s*-\s*required\s*$/m, 'macOS signing input must support required signing')
   requireMatch(text, /^\s*contents:\s*write\s*$/m, 'release workflow must grant contents: write')
   requireMatch(
     text,
@@ -59,6 +63,51 @@ export function validateReleaseWorkflow(repoRoot = process.cwd()) {
     text,
     /ref:\s*\$\{\{\s*needs\.validate\.outputs\.release-sha\s*\}\}/,
     'release workflow publish jobs must check out the committed release SHA'
+  )
+  requireMatch(
+    text,
+    /name:\s*Validate macOS signing secrets/,
+    'release workflow must validate macOS signing secrets before building'
+  )
+  requireMatch(
+    text,
+    /Invalid macOS signing certificate/,
+    'release workflow must fail early with a clear macOS certificate message'
+  )
+  requireMatch(
+    text,
+    /if:\s*runner\.os\s*!=\s*'macOS'\s*\|\|\s*steps\.mac_signing\.outputs\.enabled\s*!=\s*'true'/,
+    'release workflow must keep Apple signing secrets out of unsigned builds'
+  )
+  requireMatch(
+    text,
+    /name:\s*Build and publish signed macOS Tauri release/,
+    'release workflow must have a separate signed macOS build step'
+  )
+  requireMatch(
+    text,
+    /args:\s*'--bundles nsis,msi'/,
+    'release workflow must build Windows NSIS and MSI installers'
+  )
+  requireMatch(
+    text,
+    /args:\s*'--bundles deb,rpm,appimage'/,
+    'release workflow must build Linux deb, rpm, and AppImage bundles'
+  )
+  requireMatch(
+    text,
+    /--bundles app,dmg/,
+    'release workflow must build macOS app and DMG bundles'
+  )
+  requireMatch(
+    text,
+    /name:\s*Package raw executable/,
+    'release workflow must package raw executables'
+  )
+  requireMatch(
+    text,
+    /gh release upload \$env:TAG_NAME \$asset --clobber/,
+    'release workflow must upload raw executable archives to the draft release'
   )
 
   for (const platform of REQUIRED_PLATFORMS) {

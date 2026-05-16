@@ -78,7 +78,6 @@ pub fn run() {
             Ok(())
         })
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             commands::app::bootstrap_app,
             commands::app::create_diagnostics_report,
@@ -107,7 +106,6 @@ pub fn run() {
             commands::workspace::list_datastore_operations,
             commands::workspace::list_datastore_experiences,
             commands::workspace::load_structure_map,
-            commands::workspace::lock_app,
             commands::workspace::move_library_node,
             commands::workspace::open_library_item,
             commands::workspace::open_saved_work_item,
