@@ -92,6 +92,12 @@ function chooseDatabaseType(drawer: HTMLElement, datastoreLabel: string) {
   fireEvent.click(within(drawer).getByRole('option', { name: datastoreLabel }))
 }
 
+function setConnectionDatabase(drawer: HTMLElement, database: string) {
+  fireEvent.change(within(drawer).getByLabelText('Database'), {
+    target: { value: database },
+  })
+}
+
 function createFieldDataTransfer(
   field = '',
   options: { includeCustomPayload?: boolean } = {},
@@ -131,6 +137,7 @@ async function createCatalogMongoWithBuilderTab() {
     target: { value: 'Catalog Mongo' },
   })
   chooseDatabaseType(mongoDrawer, 'MongoDB')
+  setConnectionDatabase(mongoDrawer, 'catalog')
   fireEvent.click(within(mongoDrawer).getByRole('button', { name: 'Save Connection' }))
 
   await waitFor(() => {
@@ -141,9 +148,15 @@ async function createCatalogMongoWithBuilderTab() {
   fireEvent.click(within(sidebar).getByLabelText('Expand connection Catalog Mongo'))
 
   const mongoTree = within(sidebar).getByRole('tree', { name: 'Catalog Mongo objects' })
+  await waitFor(() => {
+    expect(within(mongoTree).getByText('Databases')).toBeInTheDocument()
+  })
   fireEvent.click(within(mongoTree).getByLabelText('Expand Databases'))
-  fireEvent.click(within(mongoTree).getByLabelText('Expand admin'))
+  fireEvent.click(within(mongoTree).getByLabelText('Expand catalog'))
   fireEvent.click(within(mongoTree).getByLabelText('Expand Collections'))
+  await waitFor(() => {
+    expect(within(mongoTree).getByRole('treeitem', { name: /products/i })).toBeInTheDocument()
+  })
 
   const productsCollection = within(mongoTree).getByRole('treeitem', { name: /products/i })
   fireEvent.dblClick(productsCollection)
@@ -186,7 +199,8 @@ describe('App', () => {
     expect(screen.queryByRole('button', { name: 'Cancel query' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Explain query' })).not.toBeInTheDocument()
     expect(screen.getByLabelText('Toggle theme')).toBeInTheDocument()
-    expect(screen.getByLabelText('Lock workspace')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Lock workspace')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Unlock workspace')).not.toBeInTheDocument()
     expect(screen.getByLabelText('Open diagnostics drawer')).toBeInTheDocument()
 
     await createFirstConnection()
@@ -253,6 +267,86 @@ describe('App', () => {
     ).not.toBeInTheDocument()
   })
 
+  it('lets connection-string capable datastores switch connection methods', async () => {
+    const testConnectionSpy = vi.spyOn(desktopClient, 'testConnection').mockResolvedValueOnce({
+      ok: true,
+      engine: 'postgresql',
+      message: 'Connection string accepted.',
+      warnings: [],
+      resolvedHost: '',
+      resolvedDatabase: undefined,
+      durationMs: 1,
+    })
+    render(<App />)
+
+    const drawer = await openConnectionDraft()
+    const methods = within(drawer).getByRole('tablist', { name: 'Connection methods' })
+
+    expect(within(methods).getByRole('tab', { name: /Fields/i })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+    expect(within(methods).getByRole('tab', { name: /Connection String/i })).toBeInTheDocument()
+
+    fireEvent.click(within(methods).getByRole('tab', { name: /Connection String/i }))
+
+    expect(within(drawer).getByLabelText('Connection string')).toBeInTheDocument()
+    expect(within(drawer).queryByLabelText('Server')).not.toBeInTheDocument()
+
+    fireEvent.change(within(drawer).getByLabelText('Connection string'), {
+      target: {
+        value:
+          'postgresql://datapadplusplus:${DB_PASSWORD}@localhost:54329/datapadplusplus',
+      },
+    })
+    fireEvent.click(within(drawer).getByRole('button', { name: 'Test Connection' }))
+
+    await waitFor(() => {
+      expect(testConnectionSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          profile: expect.objectContaining({
+            connectionMode: 'connection-string',
+            connectionString:
+              'postgresql://datapadplusplus:${DB_PASSWORD}@localhost:54329/datapadplusplus',
+            host: '',
+            port: undefined,
+          }),
+        }),
+      )
+    })
+  })
+
+  it('shows local-file and cloud-specific connection method tabs where supported', async () => {
+    render(<App />)
+
+    const drawer = await openConnectionDraft()
+    chooseDatabaseType(drawer, 'SQLite')
+
+    let methods = within(drawer).getByRole('tablist', { name: 'Connection methods' })
+    expect(within(methods).getByRole('tab', { name: /Local File/i })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+    expect(within(methods).getByRole('tab', { name: /Connection String/i })).toBeInTheDocument()
+
+    fireEvent.click(within(methods).getByRole('tab', { name: /Connection String/i }))
+    expect(within(drawer).getByLabelText('Connection string')).toBeInTheDocument()
+    expect(within(drawer).queryByRole('button', { name: 'Open Existing' })).not.toBeInTheDocument()
+
+    chooseDatabaseType(drawer, 'DynamoDB')
+    methods = within(drawer).getByRole('tablist', { name: 'Connection methods' })
+    expect(within(methods).getByRole('tab', { name: /Cloud IAM/i })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+    expect(within(methods).getByRole('tab', { name: /Cloud SDK/i })).toBeInTheDocument()
+    expect(within(methods).queryByRole('tab', { name: /Fields/i })).not.toBeInTheDocument()
+
+    fireEvent.click(within(methods).getByRole('tab', { name: /Cloud SDK/i }))
+    expect(within(drawer).getByLabelText('SDK endpoint / host')).toBeInTheDocument()
+    expect(within(drawer).getByLabelText('SDK profile / principal')).toBeInTheDocument()
+  })
+
   it('switches sidebar activities without losing the active editor tab', async () => {
     render(<App />)
 
@@ -261,8 +355,13 @@ describe('App', () => {
     await openExplorerFromConnection()
 
     await waitFor(() => {
-      expect(screen.getByRole('heading', { level: 1, name: 'Explorer' })).toBeInTheDocument()
+      expect(
+        screen.getByRole('tab', { name: /Explorer - PostgreSQL connection/i }),
+      ).toBeInTheDocument()
     })
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'PostgreSQL connection' }),
+    ).toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'Visual database structure' })).toBeInTheDocument()
 
     fireEvent.click(screen.getByLabelText('Connections view'))
@@ -301,28 +400,69 @@ describe('App', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByRole('heading', { level: 1, name: 'Explorer' })).toBeInTheDocument()
+      expect(
+        screen.getByRole('tab', { name: /Explorer - PostgreSQL connection/i }),
+      ).toBeInTheDocument()
     })
-    expect(screen.getByLabelText('explorer sidebar')).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Visual database structure' })).toBeInTheDocument()
+    expect(
+      screen.queryByRole('menuitem', {
+        name: 'Save tab Explorer - PostgreSQL connection',
+      }),
+    ).not.toBeInTheDocument()
     expect(screen.getAllByText('PostgreSQL connection').length).toBeGreaterThan(0)
   })
 
+  it('opens Explorer when a connection row is double-clicked', async () => {
+    render(<App />)
+
+    await createFirstConnection()
+
+    fireEvent.doubleClick(getConnectionRow('PostgreSQL connection'))
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('tab', { name: /Explorer - PostgreSQL connection/i }),
+      ).toBeInTheDocument()
+    })
+    expect(screen.getByRole('region', { name: 'Visual database structure' })).toBeInTheDocument()
+  })
+
+  it('inspects Explorer objects in the bottom Details panel without opening the right drawer', async () => {
+    render(<App />)
+
+    await createFirstConnection()
+    await openExplorerFromConnection()
+
+    const inspectButton = await screen.findByRole('button', { name: 'Inspect accounts' })
+
+    fireEvent.click(inspectButton)
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Bottom panel')).toBeInTheDocument()
+      expect(screen.getByRole('tab', { name: 'details' })).toHaveAttribute(
+        'aria-selected',
+        'true',
+      )
+      expect(
+        screen.getByText('Inspection ready for public.accounts on PostgreSQL connection.'),
+      ).toBeInTheDocument()
+    })
+    expect(screen.queryByLabelText('inspection drawer')).not.toBeInTheDocument()
+  })
+
   it('treats empty Explorer metadata as loaded instead of reloading forever', async () => {
-    const loadExplorerSpy = vi
-      .spyOn(desktopClient, 'loadExplorer')
+    const loadStructureSpy = vi
+      .spyOn(desktopClient, 'loadStructureMap')
       .mockImplementation(async (request) => ({
         connectionId: request.connectionId,
         environmentId: request.environmentId,
-        scope: request.scope,
-        summary: 'Loaded 0 explorer node(s) for Empty SQLite.',
-        capabilities: {
-          canCancel: false,
-          canExplain: false,
-          supportsLiveMetadata: true,
-          editorLanguage: 'sql',
-          defaultRowLimit: 100,
-        },
+        engine: 'postgresql',
+        summary: 'Loaded 0 structure node(s).',
+        groups: [],
         nodes: [],
+        edges: [],
+        metrics: [],
       }))
 
     render(<App />)
@@ -330,15 +470,12 @@ describe('App', () => {
     await createFirstConnection()
     await openExplorerFromConnection()
 
-    const explorerSidebar = await screen.findByLabelText('explorer sidebar')
     await waitFor(() => {
-      expect(
-        within(explorerSidebar).getByText('Loaded 0 explorer node(s) for Empty SQLite.'),
-      ).toBeInTheDocument()
+      expect(screen.getByText('No structure objects found')).toBeInTheDocument()
     })
     await waitFor(() => {
-      expect(within(explorerSidebar).queryByText('Loading')).not.toBeInTheDocument()
-      expect(loadExplorerSpy).toHaveBeenCalledTimes(1)
+      expect(screen.queryByText('Loading structure...')).not.toBeInTheDocument()
+      expect(loadStructureSpy).toHaveBeenCalledTimes(1)
     })
   })
 
@@ -414,32 +551,22 @@ describe('App', () => {
     })
   })
 
-  it('opens operations from the connection context menu and previews a live-safe operation', async () => {
+  it('does not expose dead operations from the connection context menu', async () => {
     render(<App />)
 
     await createFirstConnection()
 
     fireEvent.contextMenu(getConnectionRow('PostgreSQL connection'))
-    fireEvent.click(
-      await screen.findByRole('menuitem', {
+
+    const menu = await screen.findByRole('menu', {
+      name: 'Connection options for PostgreSQL connection',
+    })
+    expect(within(menu).queryByText('Operations')).not.toBeInTheDocument()
+    expect(
+      within(menu).queryByRole('menuitem', {
         name: 'Open operations for PostgreSQL connection',
       }),
-    )
-
-    const operationsDrawer = await screen.findByLabelText('operations drawer')
-    expect(
-      within(operationsDrawer).getByRole('heading', { level: 2, name: 'Operations' }),
-    ).toBeInTheDocument()
-
-    await waitFor(() => {
-      expect(within(operationsDrawer).getByText('Refresh Metadata')).toBeInTheDocument()
-    })
-
-    fireEvent.click(within(operationsDrawer).getByRole('button', { name: 'Execute' }))
-
-    await waitFor(() => {
-      expect(within(operationsDrawer).getByText('Preview operation completed.')).toBeInTheDocument()
-    })
+    ).not.toBeInTheDocument()
   })
 
   it('does not create a new query tab when selecting a connection that has no active tab', async () => {
@@ -597,14 +724,23 @@ describe('App', () => {
     expect(within(sqlTree).queryByText('Tables')).not.toBeInTheDocument()
 
     fireEvent.click(within(sqlTree).getByLabelText('Expand Schemas'))
+    await waitFor(() => {
+      expect(within(sqlTree).getByText('public')).toBeInTheDocument()
+    })
+
     fireEvent.click(within(sqlTree).getByLabelText('Expand public'))
 
-    expect(within(sqlTree).getByText('Tables')).toBeInTheDocument()
-    expect(within(sqlTree).getByText('Stored Procedures')).toBeInTheDocument()
-    expect(within(sqlTree).queryByText('accounts')).not.toBeInTheDocument()
+    await waitFor(() => {
+      expect(within(sqlTree).getByText('Tables')).toBeInTheDocument()
+    })
 
+    expect(within(sqlTree).queryByText('accounts')).not.toBeInTheDocument()
     fireEvent.click(within(sqlTree).getByLabelText('Expand Tables'))
-    expect(within(sqlTree).getByText('accounts')).toBeInTheDocument()
+
+    await waitFor(() => {
+      expect(within(sqlTree).getByText('accounts')).toBeInTheDocument()
+      expect(within(sqlTree).getByText('transactions')).toBeInTheDocument()
+    })
 
     fireEvent.click(within(sqlTree).getByLabelText('Collapse Tables'))
     expect(within(sqlTree).queryByText('accounts')).not.toBeInTheDocument()
@@ -615,6 +751,7 @@ describe('App', () => {
       target: { value: 'Catalog Mongo' },
     })
     chooseDatabaseType(mongoDrawer, 'MongoDB')
+    setConnectionDatabase(mongoDrawer, 'catalog')
     fireEvent.click(within(mongoDrawer).getByRole('button', { name: 'Save Connection' }))
 
     await waitFor(() => {
@@ -625,15 +762,26 @@ describe('App', () => {
 
     const mongoTree = within(sidebar).getByRole('tree', { name: 'Catalog Mongo objects' })
     expect(mongoTree).toBeInTheDocument()
-    expect(within(mongoTree).getByText('Databases')).toBeInTheDocument()
-    expect(within(mongoTree).queryByText('Collections')).not.toBeInTheDocument()
-
+    await waitFor(() => {
+      expect(within(mongoTree).getByText('Databases')).toBeInTheDocument()
+    })
     fireEvent.click(within(mongoTree).getByLabelText('Expand Databases'))
-    fireEvent.click(within(mongoTree).getByLabelText('Expand admin'))
+    fireEvent.click(within(mongoTree).getByLabelText('Expand catalog'))
     fireEvent.click(within(mongoTree).getByLabelText('Expand Collections'))
 
+    await waitFor(() => {
+      expect(within(mongoTree).getByText('products')).toBeInTheDocument()
+      expect(within(mongoTree).getByText('inventory')).toBeInTheDocument()
+    })
     expect(within(mongoTree).getByText('Collections')).toBeInTheDocument()
-    expect(within(mongoTree).getByText('products')).toBeInTheDocument()
+    expect(within(mongoTree).queryByText('orders')).not.toBeInTheDocument()
+
+    fireEvent.click(within(mongoTree).getByLabelText('Expand products'))
+
+    await waitFor(() => {
+      expect(within(mongoTree).getByText('Indexes')).toBeInTheDocument()
+      expect(within(mongoTree).getByText('Sample documents')).toBeInTheDocument()
+    })
   })
 
   it('edits environments separately with color picking and secret variables', async () => {
@@ -870,27 +1018,37 @@ describe('App', () => {
     })
   })
 
-  it('opens the command palette and runs blank-safe commands', async () => {
+  it('does not render the removed search command palette entry points', async () => {
     render(<App />)
 
     await screen.findByLabelText('connections sidebar')
+    expect(screen.queryByLabelText('Search view')).not.toBeInTheDocument()
+
     fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
 
-    const palette = await screen.findByRole('dialog', { name: 'Command palette' })
-    fireEvent.change(within(palette).getByLabelText('Search commands'), {
-      target: { value: 'new connection' },
-    })
-
-    await waitFor(() => {
-      expect(within(palette).getByRole('option', { name: /New connection/i })).toBeInTheDocument()
-    })
-
-    fireEvent.click(within(palette).getByRole('option', { name: /New connection/i }))
-
-    await waitFor(() => {
-      expect(screen.getByRole('heading', { level: 2, name: 'Connection' })).toBeInTheDocument()
-    })
     expect(screen.queryByRole('dialog', { name: 'Command palette' })).not.toBeInTheDocument()
+  })
+
+  it('uses the collapsed workbench layout when the active activity is clicked again', async () => {
+    render(<App />)
+
+    await screen.findByLabelText('connections sidebar')
+    const workbench = document.querySelector('.ads-workbench')
+    expect(workbench).not.toHaveClass('is-sidebar-collapsed')
+
+    fireEvent.click(screen.getByLabelText('Connections view'))
+
+    await waitFor(() => {
+      expect(screen.queryByLabelText('connections sidebar')).not.toBeInTheDocument()
+    })
+    expect(workbench).toHaveClass('is-sidebar-collapsed')
+
+    fireEvent.click(screen.getByLabelText('Connections view'))
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('connections sidebar')).toBeInTheDocument()
+    })
+    expect(workbench).not.toHaveClass('is-sidebar-collapsed')
   })
 
   it('supports workbench keyboard shortcuts once a tab exists', async () => {
@@ -926,6 +1084,33 @@ describe('App', () => {
     await waitFor(() => {
       expect(screen.getByText('3 rows returned from SQL adapter preview.')).toBeInTheDocument()
     })
+
+    executeSpy.mockClear()
+    const f5Event = new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      key: 'F5',
+    })
+    window.dispatchEvent(f5Event)
+
+    expect(f5Event.defaultPrevented).toBe(true)
+    await waitFor(() => {
+      expect(executeSpy).toHaveBeenCalled()
+    })
+  })
+
+  it('prevents the browser context menu so the workbench feels native', async () => {
+    render(<App />)
+
+    await screen.findByLabelText('connections sidebar')
+
+    const contextMenuEvent = new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+    })
+    document.dispatchEvent(contextMenuEvent)
+
+    expect(contextMenuEvent.defaultPrevented).toBe(true)
   })
 
   it('shows keyboard shortcut help in diagnostics without a connection', async () => {
@@ -938,41 +1123,46 @@ describe('App', () => {
       expect(screen.getByRole('heading', { level: 2, name: 'Diagnostics' })).toBeInTheDocument()
     })
     expect(screen.getByText('Shortcuts')).toBeInTheDocument()
-    expect(screen.getByText('Ctrl K')).toBeInTheDocument()
+    expect(screen.queryByText('Ctrl K')).not.toBeInTheDocument()
   })
 
-  it('saves, opens, and deletes saved query work from a real tab', async () => {
+  it('saves, opens, and deletes library query work from a real tab', async () => {
     render(<App />)
 
     await createFirstConnection()
-    fireEvent.click(screen.getByLabelText('Saved Work view'))
+    fireEvent.click(screen.getByLabelText('Library view'))
 
     await waitFor(() => {
-      expect(screen.getByRole('heading', { level: 1, name: 'Saved Work' })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { level: 1, name: 'Library' })).toBeInTheDocument()
     })
 
-    fireEvent.click(screen.getByLabelText('Save current query'))
+    fireEvent.click(screen.getByLabelText('Save current query to library'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Save' }))
 
+    const librarySidebar = screen.getByLabelText('library sidebar')
     await waitFor(() => {
-      expect(screen.getByText('Saved Queries')).toBeInTheDocument()
+      expect(within(librarySidebar).getByText('Queries')).toBeInTheDocument()
+      expect(within(librarySidebar).getByText('Query 1')).toBeInTheDocument()
     })
 
-    fireEvent.click(screen.getByRole('button', { name: /Open saved work Query 1/i }))
+    fireEvent.click(within(librarySidebar).getByRole('button', { name: /^Query 1$/i }))
 
     await waitFor(() => {
-      expect(screen.getAllByRole('tab', { name: /Query 1/i }).length).toBeGreaterThan(1)
+      expect(screen.getAllByRole('tab', { name: /Query 1/i })).toHaveLength(1)
     })
 
-    fireEvent.click(screen.getByLabelText('Saved Work view'))
-    const savedWorkSidebar = screen.getByLabelText('saved-work sidebar')
-    fireEvent.click(screen.getByRole('button', { name: /Delete saved work Query 1/i }))
+    fireEvent.click(screen.getByLabelText('Library view'))
+    vi.spyOn(window, 'confirm').mockReturnValueOnce(true)
+    fireEvent.click(screen.getByRole('button', { name: /Delete Query 1/i }))
 
     await waitFor(() => {
-      expect(within(savedWorkSidebar).queryByText('Query 1')).not.toBeInTheDocument()
+      expect(
+        within(librarySidebar).queryByRole('button', { name: /^Query 1$/i }),
+      ).not.toBeInTheDocument()
     })
   })
 
-  it('renames query tabs and saves the renamed title into saved work', async () => {
+  it('renames query tabs and saves the renamed title into the library', async () => {
     render(<App />)
 
     await createFirstConnection()
@@ -989,11 +1179,29 @@ describe('App', () => {
 
     fireEvent.contextMenu(screen.getByRole('tab', { name: /Customer lookup/i }))
     fireEvent.click(screen.getByRole('menuitem', { name: /Save tab Customer lookup/i }))
-    fireEvent.click(screen.getByLabelText('Saved Work view'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Save' }))
+    fireEvent.click(screen.getByLabelText('Library view'))
 
     await waitFor(() => {
       expect(screen.getByText('Customer lookup')).toBeInTheDocument()
     })
+  })
+
+  it('opens the save flow with Ctrl+S for the active query tab', async () => {
+    render(<App />)
+
+    await createFirstConnection()
+    fireEvent.keyDown(window, { key: 's', ctrlKey: true })
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('dialog', { name: /Save Query 1/i }),
+      ).toBeInTheDocument()
+    })
+
+    expect(screen.getByRole('button', { name: 'Local File' })).toBeInTheDocument()
+    expect(screen.queryByLabelText(/Environment override/i)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/Type/i)).not.toBeInTheDocument()
   })
 
   it('keeps query tab headers clean, scrollable, and reorderable', async () => {
@@ -1068,14 +1276,20 @@ describe('App', () => {
       ).not.toBeInTheDocument()
     })
 
-    fireEvent.click(screen.getByLabelText('Saved Work view'))
+    fireEvent.click(screen.getByLabelText('Library view'))
 
     await waitFor(() => {
-      expect(screen.getByText('Closed Tabs')).toBeInTheDocument()
+      expect(screen.getByText('Recents')).toBeInTheDocument()
     })
+    const expandClosedTabs = screen.queryByRole('button', {
+      name: /Expand Recents section/i,
+    })
+    if (expandClosedTabs) {
+      fireEvent.click(expandClosedTabs)
+    }
 
     fireEvent.click(
-      screen.getByRole('button', {
+      await screen.findByRole('button', {
         name: /Reopen closed tab Query 1/i,
       }),
     )
@@ -1087,32 +1301,31 @@ describe('App', () => {
     })
   })
 
-  it('asks before closing a dirty saved query tab', async () => {
+  it('asks before closing a dirty library query tab', async () => {
     const { container } = render(<App />)
 
     await createFirstConnection()
-    fireEvent.click(screen.getByLabelText('Saved Work view'))
+    fireEvent.click(screen.getByLabelText('Library view'))
 
     await waitFor(() => {
-      expect(screen.getByRole('heading', { level: 1, name: 'Saved Work' })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { level: 1, name: 'Library' })).toBeInTheDocument()
     })
 
-    fireEvent.click(screen.getByLabelText('Save current query'))
+    fireEvent.click(screen.getByLabelText('Save current query to library'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Save' }))
 
+    const librarySidebar = screen.getByLabelText('library sidebar')
     await waitFor(() => {
-      expect(screen.getByText('Saved Queries')).toBeInTheDocument()
+      expect(within(librarySidebar).getByText('Queries')).toBeInTheDocument()
+      expect(within(librarySidebar).getByText('Query 1')).toBeInTheDocument()
     })
 
-    fireEvent.click(
-      screen.getByRole('button', {
-        name: /Open saved work Query 1/i,
-      }),
-    )
+    fireEvent.click(within(librarySidebar).getByRole('button', { name: /^Query 1$/i }))
 
     await waitFor(() => {
       expect(
         screen.getAllByRole('tab', { name: /Query 1/i }),
-      ).toHaveLength(2)
+      ).toHaveLength(1)
     })
 
     const editor = await screen.findByLabelText('Query editor')
@@ -1155,32 +1368,20 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save and Close' }))
 
     await waitFor(() => {
-      expect(screen.getByText('Closed Tabs')).toBeInTheDocument()
+      expect(screen.getByText('Recents')).toBeInTheDocument()
     })
   })
 
-  it('blocks privileged commands while the workspace is locked', async () => {
+  it('does not expose workspace locking in the workbench shell', async () => {
     render(<App />)
 
     await createFirstConnection()
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Run query' })).toBeInTheDocument()
     })
-    fireEvent.click(screen.getByLabelText('Lock workspace'))
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Unlock Workspace' })).toBeInTheDocument()
-    })
-
-    fireEvent.keyDown(window, { key: 'Enter', ctrlKey: true })
-
-    await waitFor(() => {
-      expect(screen.getByLabelText('Bottom panel')).toBeInTheDocument()
-    })
-    expect(
-      screen.getByText('Unlock the workspace before using privileged desktop commands.'),
-    ).toBeInTheDocument()
-    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Lock workspace')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Unlock workspace')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Unlock Workspace' })).not.toBeInTheDocument()
   })
 
   it('shows raw editor controls only for non-builder tabs', async () => {
@@ -1254,6 +1455,43 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Show builder and raw' }))
     expect(screen.getByLabelText('MongoDB query builder')).toBeInTheDocument()
     expect(screen.getByLabelText('Query editor')).toBeInTheDocument()
+  })
+
+  it('opens scoped SQL queries in raw-only mode by default', async () => {
+    render(<App />)
+
+    await createFirstConnection()
+
+    const sidebar = screen.getByLabelText('connections sidebar')
+    fireEvent.click(within(sidebar).getByLabelText('Expand connection PostgreSQL connection'))
+    const sqlTree = within(sidebar).getByRole('tree', { name: 'PostgreSQL connection objects' })
+    fireEvent.click(within(sqlTree).getByLabelText('Expand Schemas'))
+    await waitFor(() => {
+      expect(within(sqlTree).getByText('public')).toBeInTheDocument()
+    })
+    fireEvent.click(within(sqlTree).getByLabelText('Expand public'))
+    await waitFor(() => {
+      expect(within(sqlTree).getByText('Tables')).toBeInTheDocument()
+    })
+    fireEvent.click(within(sqlTree).getByLabelText('Expand Tables'))
+    await waitFor(() => {
+      expect(within(sqlTree).getByRole('treeitem', { name: /accounts/i })).toBeInTheDocument()
+    })
+    fireEvent.dblClick(within(sqlTree).getByRole('treeitem', { name: /accounts/i }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: /accounts/i })).toBeInTheDocument()
+    })
+
+    expect(screen.getByRole('button', { name: 'Show builder and raw' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Show raw query only' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    expect(screen.queryByRole('region', { name: 'SQL SELECT builder' })).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Query editor')).toHaveValue(
+      'select * from public.accounts limit 100;',
+    )
   })
 
   it('applies generated Mongo builder query before execution', async () => {
@@ -1521,7 +1759,7 @@ describe('App', () => {
   })
 
   it('keeps explorer load failures local to the explorer pane', async () => {
-    vi.spyOn(desktopClient, 'loadExplorer').mockRejectedValueOnce(
+    vi.spyOn(desktopClient, 'loadStructureMap').mockRejectedValueOnce(
       new Error('Explorer fixture unavailable'),
     )
 
@@ -1531,12 +1769,8 @@ describe('App', () => {
 
     await openExplorerFromConnection()
 
-    const explorerSidebar = await screen.findByLabelText('explorer sidebar')
-
     await waitFor(() => {
-      expect(
-        within(explorerSidebar).getByText('Explorer fixture unavailable'),
-      ).toBeInTheDocument()
+      expect(screen.getByText('Explorer fixture unavailable')).toBeInTheDocument()
     })
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })

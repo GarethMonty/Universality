@@ -79,7 +79,7 @@ describe('migrateWorkspaceSnapshot', () => {
 
     const migrated = migrateWorkspaceSnapshot(legacy)
 
-    expect(migrated.schemaVersion).toBe(6)
+    expect(migrated.schemaVersion).toBe(7)
     expect(migrated.ui.activeActivity).toBe('connections')
     expect(migrated.ui.activeSidebarPane).toBe('connections')
     expect(migrated.ui.sidebarWidth).toBe(280)
@@ -90,6 +90,70 @@ describe('migrateWorkspaceSnapshot', () => {
     expect(migrated.ui.explorerFilter).toBe('orders')
     expect(migrated.ui.connectionGroupMode).toBe('none')
     expect(migrated.ui.sidebarSectionStates).toEqual({})
+  })
+
+  it('migrates legacy saved work into Library nodes and maps saved-work UI state', () => {
+    const snapshot = createSeedSnapshot()
+    const migrated = migrateWorkspaceSnapshot({
+      ...snapshot,
+      connections: [],
+      environments: snapshot.environments,
+      tabs: [
+        {
+          ...snapshot.tabs[0]!,
+          id: 'tab-custom',
+          savedQueryId: 'saved-query',
+          saveTarget: undefined,
+        },
+      ],
+      savedWork: [
+        {
+          id: 'saved-query',
+          kind: 'query',
+          name: 'Daily orders',
+          summary: 'Orders by day',
+          tags: ['orders'],
+          updatedAt: '2026-05-14T00:00:00.000Z',
+          folder: 'Reports/Daily',
+          environmentId: 'env-prod',
+          language: 'sql',
+          queryText: 'select 1;',
+        },
+      ],
+      ui: {
+        ...snapshot.ui,
+        activeActivity: 'saved-work',
+        activeSidebarPane: 'saved-work',
+      },
+    } as unknown as typeof snapshot)
+
+    expect(migrated.ui.activeActivity).toBe('library')
+    expect(migrated.ui.activeSidebarPane).toBe('library')
+    expect(migrated.libraryNodes.some((node) => node.name === 'Reports')).toBe(true)
+    expect(migrated.libraryNodes.some((node) => node.name === 'Daily orders')).toBe(true)
+    expect(migrated.tabs[0]?.saveTarget).toEqual({
+      kind: 'library',
+      libraryItemId: migrated.tabs[0]?.savedQueryId,
+    })
+  })
+
+  it('migrates connection strings into the connection-string method', () => {
+    const snapshot = createSeedSnapshot()
+    const migrated = migrateWorkspaceSnapshot({
+      ...snapshot,
+      connections: [
+        {
+          ...snapshot.connections[0]!,
+          id: 'conn-string-profile',
+          connectionString: 'postgresql://user:${PASSWORD}@localhost:5432/app',
+          connectionMode: undefined,
+        },
+      ],
+      tabs: [],
+      closedTabs: [],
+    } as unknown as typeof snapshot)
+
+    expect(migrated.connections[0]?.connectionMode).toBe('connection-string')
   })
 
   it('preserves persisted sidebar display state when migrating workspace state', () => {
@@ -113,6 +177,19 @@ describe('migrateWorkspaceSnapshot', () => {
     })
   })
 
+  it('unlocks legacy snapshots so the removed lock UI cannot strand the workspace', () => {
+    const snapshot = createSeedSnapshot()
+    const migrated = migrateWorkspaceSnapshot({
+      ...snapshot,
+      lockState: {
+        isLocked: true,
+        lockedAt: '2026-05-16T10:00:00.000Z',
+      },
+    })
+
+    expect(migrated.lockState).toEqual({ isLocked: false, lockedAt: undefined })
+  })
+
   it('strips known demo records from untouched seeded snapshots', () => {
     const migrated = migrateWorkspaceSnapshot(createSeedSnapshot())
 
@@ -121,6 +198,7 @@ describe('migrateWorkspaceSnapshot', () => {
     expect(migrated.tabs).toHaveLength(0)
     expect(migrated.closedTabs).toHaveLength(0)
     expect(migrated.savedWork).toHaveLength(0)
+    expect(migrated.libraryNodes).toHaveLength(4)
     expect(migrated.explorerNodes).toHaveLength(0)
     expect(migrated.guardrails).toHaveLength(0)
     expect(migrated.ui.activeConnectionId).toBe('')

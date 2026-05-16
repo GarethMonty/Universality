@@ -1,7 +1,7 @@
 use sqlx::{Column, Row};
 
 use super::super::super::*;
-use super::connection::{sqlite_dsn, stringify_sqlite_cell};
+use super::connection::{sqlite_pool, stringify_sqlite_cell};
 
 pub(crate) async fn fetch_sqlite_page(
     connection: &ResolvedConnectionProfile,
@@ -10,10 +10,7 @@ pub(crate) async fn fetch_sqlite_page(
     let page_size = bounded_page_size(request.page_size);
     let page_index = request.page_index.unwrap_or(1);
     let query = paged_sql(selected_page_query(request), page_size, page_index)?;
-    let pool = sqlx::sqlite::SqlitePoolOptions::new()
-        .max_connections(1)
-        .connect(&sqlite_dsn(connection))
-        .await?;
+    let pool = sqlite_pool(connection).await?;
     let rows = sqlx::query(&query).fetch_all(&pool).await?;
     let columns = rows
         .first()

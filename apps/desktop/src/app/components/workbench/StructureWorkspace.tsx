@@ -1,11 +1,13 @@
 import { useMemo, useState } from 'react'
+import type { CSSProperties } from 'react'
 import type {
   ConnectionProfile,
   EnvironmentProfile,
   StructureNode,
   StructureResponse,
-  UiState,
 } from '@datapadplusplus/shared-types'
+import { DatastoreIcon } from './DatastoreIcon'
+import { environmentAccentVariables } from './SideBar.helpers'
 import {
   DatabaseIcon,
   ExplorerIcon,
@@ -19,11 +21,9 @@ import {
 interface StructureWorkspaceProps {
   activeConnection?: ConnectionProfile
   activeEnvironment?: EnvironmentProfile
-  explorerView: UiState['explorerView']
   status: 'idle' | 'loading' | 'ready'
   structure?: StructureResponse
   error?: string
-  onExplorerViewChange(view: UiState['explorerView']): void
   onRefresh(): void
   onInspectNode(node: StructureNode): void
 }
@@ -31,16 +31,15 @@ interface StructureWorkspaceProps {
 export function StructureWorkspace({
   activeConnection,
   activeEnvironment,
-  explorerView,
   status,
   structure,
   error,
-  onExplorerViewChange,
   onRefresh,
   onInspectNode,
 }: StructureWorkspaceProps) {
   const [filter, setFilter] = useState('')
   const [selectedNodeId, setSelectedNodeId] = useState<string | undefined>()
+  const environmentStyle = environmentAccentVariables(activeEnvironment)
   const filteredNodes = useMemo(() => {
     const needle = filter.trim().toLowerCase()
 
@@ -60,7 +59,11 @@ export function StructureWorkspace({
     filteredNodes.find((node) => node.id === selectedNodeId) ?? filteredNodes[0]
 
   return (
-    <section className="structure-workspace" aria-label="Visual database structure">
+    <section
+      className={`structure-workspace${activeEnvironment ? ' has-environment-accent' : ''}`}
+      style={environmentStyle as CSSProperties}
+      aria-label="Visual database structure"
+    >
       <header className="structure-header">
         <div>
           <p className="sidebar-eyebrow">Explorer</p>
@@ -73,28 +76,6 @@ export function StructureWorkspace({
         </div>
 
         <div className="structure-actions">
-          <div className="structure-toggle" role="tablist" aria-label="Explorer view">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={explorerView === 'tree'}
-              className={`structure-toggle-button${explorerView === 'tree' ? ' is-active' : ''}`}
-              title="Use the left Explorer sidebar tree for lazy object browsing."
-              onClick={() => onExplorerViewChange('tree')}
-            >
-              Tree
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={explorerView === 'structure'}
-              className={`structure-toggle-button${explorerView === 'structure' ? ' is-active' : ''}`}
-              title="Show the visual structure map for schemas, collections, prefixes, and relationships."
-              onClick={() => onExplorerViewChange('structure')}
-            >
-              Structure
-            </button>
-          </div>
           <button
             type="button"
             className="toolbar-action"
@@ -119,12 +100,6 @@ export function StructureWorkspace({
           <ExplorerIcon className="empty-icon" />
           <h2>Structure unavailable</h2>
           <p>{error}</p>
-        </div>
-      ) : explorerView === 'tree' ? (
-        <div className="structure-empty">
-          <ExplorerIcon className="empty-icon" />
-          <h2>Tree view is in the sidebar</h2>
-          <p>The central map stays ready here. Use the Explorer sidebar tree to drill into objects.</p>
         </div>
       ) : (
         <div className="structure-body">
@@ -189,12 +164,25 @@ export function StructureWorkspace({
                               title={`${node.label}: inspect fields, metrics, and sampled relationships.`}
                               onClick={() => {
                                 setSelectedNodeId(node.id)
-                                onInspectNode(node)
                               }}
                             >
                               <span className="structure-node-title">
-                                <StructureNodeIcon node={node} />
+                                <StructureNodeIcon connection={activeConnection} node={node} />
                                 <strong>{node.label}</strong>
+                                <button
+                                  type="button"
+                                  className="structure-node-inspect"
+                                  aria-label={`Inspect ${node.label}`}
+                                  title={`Inspect ${node.label} in the Details panel.`}
+                                  onClick={(event) => {
+                                    event.preventDefault()
+                                    event.stopPropagation()
+                                    setSelectedNodeId(node.id)
+                                    onInspectNode(node)
+                                  }}
+                                >
+                                  Inspect
+                                </button>
                               </span>
                               <span className="structure-node-kind">{node.kind}</span>
                               {(node.fields ?? []).slice(0, 5).map((field) => (
@@ -221,7 +209,7 @@ export function StructureWorkspace({
                 {selectedNode ? (
                   <>
                     <div className="structure-details-header">
-                      <StructureNodeIcon node={selectedNode} />
+                      <StructureNodeIcon connection={activeConnection} node={selectedNode} />
                       <div>
                         <strong>{selectedNode.label}</strong>
                         <span>{selectedNode.detail ?? selectedNode.kind}</span>
@@ -282,7 +270,26 @@ export function StructureWorkspace({
   )
 }
 
-function StructureNodeIcon({ node }: { node: StructureNode }) {
+function StructureNodeIcon({
+  connection,
+  node,
+}: {
+  connection?: ConnectionProfile
+  node: StructureNode
+}) {
+  if (
+    connection &&
+    ['bucket', 'database', 'dataset', 'graph', 'keyspace', 'schema'].includes(node.kind)
+  ) {
+    return (
+      <DatastoreIcon
+        className="structure-datastore-icon"
+        decorative
+        engine={connection.engine}
+      />
+    )
+  }
+
   if (node.family === 'document') {
     return <JsonIcon className="structure-icon" />
   }

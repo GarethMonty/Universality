@@ -4,17 +4,14 @@ use serde_json::json;
 
 use super::super::super::*;
 use super::catalog::mongodb_execution_capabilities;
-use super::connection::mongodb_client;
+use super::connection::{mongodb_client, mongodb_database_name};
 
 pub(super) async fn list_mongodb_explorer_nodes(
     connection: &ResolvedConnectionProfile,
     request: &ExplorerRequest,
 ) -> Result<ExplorerResponse, CommandError> {
     let client = mongodb_client(connection).await?;
-    let database_name = connection
-        .database
-        .clone()
-        .unwrap_or_else(|| "admin".into());
+    let database_name = mongodb_database_name(connection);
     let database = client.database(&database_name);
     let limit = bounded_page_size(request.limit.or(Some(100))) as usize;
     let nodes = if let Some(scope) = &request.scope {
@@ -31,8 +28,10 @@ pub(super) async fn list_mongodb_explorer_nodes(
                     detail: format!("{} index(es)", index_names.len()),
                     scope: None,
                     path: Some(vec![connection.name.clone(), collection_name.to_string()]),
-                    query_template: Some(format!(
-                        "{{\n  \"collection\": \"{collection_name}\",\n  \"filter\": {{}},\n  \"limit\": 50\n}}"
+                    query_template: Some(mongodb_find_query_template(
+                        connection,
+                        collection_name,
+                        50,
                     )),
                     expandable: Some(false),
                 },
@@ -82,10 +81,7 @@ pub(super) async fn inspect_mongodb_explorer_node(
     request: &ExplorerInspectRequest,
 ) -> Result<ExplorerInspectResponse, CommandError> {
     let client = mongodb_client(connection).await?;
-    let database_name = connection
-        .database
-        .clone()
-        .unwrap_or_else(|| "admin".into());
+    let database_name = mongodb_database_name(connection);
     let database = client.database(&database_name);
     let collection_name = request
         .node_id
@@ -107,9 +103,7 @@ pub(super) async fn inspect_mongodb_explorer_node(
             "Inspection ready for {} on {}.",
             request.node_id, connection.name
         ),
-        query_template: Some(format!(
-            "{{\n  \"collection\": \"{collection_name}\",\n  \"filter\": {{}},\n  \"limit\": 50\n}}"
-        )),
+        query_template: Some(mongodb_find_query_template(connection, collection_name, 50)),
         payload: Some(json!({
             "collection": collection_name,
             "indexes": index_names,
@@ -130,11 +124,32 @@ pub(crate) fn mongodb_collection_node(
         detail: "Documents, indexes, and samples".into(),
         scope: Some(format!("collection:{collection_name}")),
         path: Some(vec![connection.name.clone()]),
-        query_template: Some(format!(
-            "{{\n  \"collection\": \"{collection_name}\",\n  \"filter\": {{}},\n  \"limit\": 50\n}}"
-        )),
+        query_template: Some(mongodb_find_query_template(connection, collection_name, 50)),
         expandable: Some(true),
     }
+}
+
+fn mongodb_find_query_template(
+    connection: &ResolvedConnectionProfile,
+    collection_name: &str,
+    limit: u32,
+) -> String {
+    let mut query = json!({
+        "collection": collection_name,
+        "filter": {},
+        "limit": limit,
+    });
+    let database = mongodb_database_name(connection);
+
+    if !database.trim().is_empty() && database != "admin" {
+        query["database"] = json!(database);
+    }
+
+    serde_json::to_string_pretty(&query).unwrap_or_else(|_| {
+        format!(
+            "{{\n  \"collection\": \"{collection_name}\",\n  \"filter\": {{}},\n  \"limit\": {limit}\n}}"
+        )
+    })
 }
 
 #[cfg(test)]

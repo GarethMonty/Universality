@@ -73,6 +73,12 @@ fn scoped_mongodb_collection_tab_gets_builder_state() {
     assert_eq!(tab.environment_id, "env-dev");
     assert!(tab.query_text.contains("\"collection\": \"products\""));
     assert_eq!(
+        tab.scoped_target
+            .as_ref()
+            .map(|target| target.label.as_str()),
+        Some("products")
+    );
+    assert_eq!(
         tab.builder_state
             .as_ref()
             .and_then(|value| value.get("kind"))
@@ -105,6 +111,50 @@ fn scoped_raw_query_tab_uses_query_template_without_builder() {
     assert_eq!(tab.title, "accounts.sql");
     assert_eq!(tab.query_text, "select * from public.accounts limit 100;");
     assert!(tab.builder_state.is_none());
+    assert_eq!(
+        tab.scoped_target
+            .as_ref()
+            .map(|target| target.scope.as_deref()),
+        Some(Some("table:public.accounts"))
+    );
+}
+
+#[test]
+fn scoped_target_match_reuses_same_connection_object_identity() {
+    let base = crate::domain::models::ScopedQueryTarget {
+        kind: "collection".into(),
+        label: "products".into(),
+        path: vec!["Mongo".into(), "Collections".into()],
+        scope: Some("collection:products".into()),
+        query_template: Some("{ \"collection\": \"products\" }".into()),
+        preferred_builder: Some("mongo-find".into()),
+    };
+    let mut changed_template = base.clone();
+    changed_template.query_template =
+        Some("{ \"collection\": \"products\", \"limit\": 10 }".into());
+    let mut different_scope = base.clone();
+    different_scope.scope = Some("collection:orders".into());
+
+    assert!(super::tabs::scoped_targets_match(&base, &changed_template));
+    assert!(!super::tabs::scoped_targets_match(&base, &different_scope));
+}
+
+#[test]
+fn legacy_scoped_title_candidate_matches_old_collection_tab_titles() {
+    let connection = test_connection("conn-mongo", "Mongo", "mongodb", "document");
+    let target = crate::domain::models::ScopedQueryTarget {
+        kind: "collection".into(),
+        label: "products".into(),
+        path: vec!["Mongo".into(), "Collections".into()],
+        scope: Some("collection:products".into()),
+        query_template: None,
+        preferred_builder: Some("mongo-find".into()),
+    };
+
+    assert_eq!(
+        super::tabs::legacy_scoped_title_candidate(&connection, &target),
+        "products.find.json"
+    );
 }
 
 fn test_connection(id: &str, name: &str, engine: &str, family: &str) -> ConnectionProfile {

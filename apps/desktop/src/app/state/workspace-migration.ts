@@ -1,5 +1,15 @@
-import type { UiState, WorkspaceSnapshot } from '@datapadplusplus/shared-types'
-import { DATAPADPLUSPLUS_ADAPTER_MANIFESTS } from '@datapadplusplus/shared-types'
+import type {
+  ConnectionProfile,
+  LibraryNode,
+  QueryTabState,
+  SavedWorkItem,
+  UiState,
+  WorkspaceSnapshot,
+} from '@datapadplusplus/shared-types'
+import {
+  DATAPADPLUSPLUS_ADAPTER_MANIFESTS,
+  datastoreBacklogByEngine,
+} from '@datapadplusplus/shared-types'
 
 const MIN_BOTTOM_PANEL_HEIGHT = 120
 const DEFAULT_BOTTOM_PANEL_HEIGHT = 260
@@ -10,7 +20,13 @@ const MAX_SIDEBAR_WIDTH = 420
 const MIN_RIGHT_DRAWER_WIDTH = 320
 const DEFAULT_RIGHT_DRAWER_WIDTH = 360
 const MAX_RIGHT_DRAWER_WIDTH = 560
-const WORKSPACE_SCHEMA_VERSION = 6
+const WORKSPACE_SCHEMA_VERSION = 7
+const DEFAULT_LIBRARY_ROOTS = [
+  ['library-root-queries', 'Queries'],
+  ['library-root-scripts', 'Scripts'],
+  ['library-root-snippets', 'Snippets'],
+  ['library-root-notes', 'Notes'],
+] as const
 
 const DEMO_CONNECTION_IDS = new Set([
   'conn-analytics',
@@ -69,8 +85,7 @@ function isSidebarPane(value: unknown): value is UiState['activeSidebarPane'] {
     value === 'connections' ||
     value === 'environments' ||
     value === 'explorer' ||
-    value === 'saved-work' ||
-    value === 'search'
+    value === 'library'
   )
 }
 
@@ -87,8 +102,7 @@ function isRightDrawer(value: unknown): value is UiState['rightDrawer'] {
     value === 'none' ||
     value === 'connection' ||
     value === 'inspection' ||
-    value === 'diagnostics' ||
-    value === 'operations'
+    value === 'diagnostics'
   )
 }
 
@@ -132,17 +146,35 @@ export function normalizeUiState(snapshot: WorkspaceSnapshot): UiState {
       ? snapshot.environments.find((item) => item.id === activeTab.environmentId)
       : undefined) ??
     firstEnvironment
-  const activeActivity = isActivity(legacyUi?.activeActivity)
-    ? legacyUi.activeActivity
-    : 'connections'
-  const activeSidebarPane = isSidebarPane(legacyUi?.activeSidebarPane)
-    ? legacyUi.activeSidebarPane
-    : activeActivity === 'settings'
-      ? 'connections'
-      : activeActivity
+  const legacyActiveActivity = legacyUi?.activeActivity as string | undefined
+  const legacyActiveSidebarPane = legacyUi?.activeSidebarPane as string | undefined
+  const activeActivity =
+    legacyActiveActivity === 'saved-work'
+      ? 'library'
+      : legacyActiveActivity === 'search'
+        ? 'library'
+      : isActivity(legacyActiveActivity)
+        ? legacyActiveActivity
+        : 'connections'
+  const activeSidebarPane =
+    legacyActiveSidebarPane === 'saved-work'
+      ? 'library'
+      : legacyActiveSidebarPane === 'search'
+        ? 'library'
+      : isSidebarPane(legacyActiveSidebarPane)
+        ? legacyActiveSidebarPane
+        : activeActivity === 'settings'
+          ? 'connections'
+          : activeActivity
   const activeBottomPanelTab = isBottomPanelTab(legacyUi?.activeBottomPanelTab)
     ? legacyUi.activeBottomPanelTab
     : 'results'
+  const rightDrawer =
+    legacyUi?.rightDrawer === 'inspection'
+      ? 'none'
+      : isRightDrawer(legacyUi?.rightDrawer)
+        ? legacyUi.rightDrawer
+        : 'none'
 
   return {
     activeConnectionId: activeConnection?.id ?? '',
@@ -164,16 +196,27 @@ export function normalizeUiState(snapshot: WorkspaceSnapshot): UiState {
       (typeof legacyUi?.bottomPanelVisible === 'boolean' ? legacyUi.bottomPanelVisible : false),
     activeBottomPanelTab,
     bottomPanelHeight: clampBottomPanelHeight(legacyUi?.bottomPanelHeight),
-    rightDrawer: isRightDrawer(legacyUi?.rightDrawer) ? legacyUi.rightDrawer : 'none',
+    rightDrawer,
     rightDrawerWidth: clampRightDrawerWidth(legacyUi?.rightDrawerWidth),
   }
 }
 
 export function migrateWorkspaceSnapshot(snapshot: WorkspaceSnapshot): WorkspaceSnapshot {
   const next = JSON.parse(JSON.stringify(snapshot)) as WorkspaceSnapshot
+  next.lockState ??= { isLocked: false }
+  next.lockState.isLocked = false
+  next.lockState.lockedAt = undefined
   next.closedTabs ??= []
+  next.savedWork ??= []
+  next.libraryNodes ??= []
   next.adapterManifests = DATAPADPLUSPLUS_ADAPTER_MANIFESTS
   stripDemoRecords(next)
+  migrateConnectionModes(next.connections)
+  next.libraryNodes = migrateLibraryNodes(next.libraryNodes, next.savedWork)
+  migrateTabKinds(next.tabs)
+  migrateTabKinds(next.closedTabs)
+  migrateTabSaveTargets(next.tabs)
+  migrateTabSaveTargets(next.closedTabs)
   next.schemaVersion = WORKSPACE_SCHEMA_VERSION
   next.ui = normalizeUiState(next)
 
@@ -188,6 +231,155 @@ export function migrateWorkspaceSnapshot(snapshot: WorkspaceSnapshot): Workspace
   return next
 }
 
+function migrateTabKinds(tabs: QueryTabState[]) {
+  tabs.forEach((tab) => {
+    if (!tab.tabKind) {
+      tab.tabKind = 'query'
+    }
+  })
+}
+
+function migrateConnectionModes(connections: ConnectionProfile[]) {
+  connections.forEach((connection) => {
+    const supportedModes =
+      datastoreBacklogByEngine(connection.engine)?.connectionModes ?? ['native']
+    const persistedMode = connection.connectionMode as string | undefined
+    const legacyMode = persistedMode === 'file'
+      ? 'local-file'
+      : connection.connectionMode
+
+    if (legacyMode && supportedModes.includes(legacyMode)) {
+      connection.connectionMode = legacyMode
+      return
+    }
+
+    if (
+      connection.connectionString?.trim() &&
+      supportedModes.includes('connection-string')
+    ) {
+      connection.connectionMode = 'connection-string'
+      return
+    }
+
+    connection.connectionMode = supportedModes[0] ?? 'native'
+  })
+}
+
+function migrateTabSaveTargets(tabs: QueryTabState[]) {
+  tabs.forEach((tab) => {
+    if (!tab.saveTarget && tab.savedQueryId) {
+      tab.saveTarget = {
+        kind: 'library',
+        libraryItemId: tab.savedQueryId,
+      }
+    }
+  })
+}
+
+function migrateLibraryNodes(
+  libraryNodes: LibraryNode[],
+  savedWork: SavedWorkItem[],
+): LibraryNode[] {
+  const timestamp = new Date().toISOString()
+  const nodes = [...libraryNodes]
+  ensureDefaultLibraryFolders(nodes, timestamp)
+
+  savedWork.forEach((item) => {
+    if (nodes.some((node) => node.id === item.id)) {
+      return
+    }
+
+    const parentId = ensureLegacyFolder(nodes, item.folder, timestamp)
+    nodes.push({
+      id: item.id,
+      kind: item.kind,
+      parentId,
+      name: item.name,
+      summary: item.summary,
+      tags: item.tags ?? [],
+      favorite: item.favorite,
+      createdAt: item.updatedAt || timestamp,
+      updatedAt: item.updatedAt || timestamp,
+      connectionId: item.connectionId,
+      environmentId: item.environmentId,
+      language: item.language,
+      queryText: item.queryText,
+      snapshotResultId: item.snapshotResultId,
+    })
+  })
+
+  return nodes
+}
+
+function ensureDefaultLibraryFolders(nodes: LibraryNode[], timestamp: string) {
+  DEFAULT_LIBRARY_ROOTS.forEach(([id, name]) => {
+    if (!nodes.some((node) => node.id === id)) {
+      nodes.push({
+        id,
+        kind: 'folder',
+        name,
+        tags: [],
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        summary: 'Workspace library folder.',
+      })
+    }
+  })
+}
+
+function ensureLegacyFolder(
+  nodes: LibraryNode[],
+  folder: string | undefined,
+  timestamp: string,
+) {
+  const normalized =
+    !folder?.trim() || folder.trim().toLowerCase() === 'saved queries'
+      ? 'Queries'
+      : folder.trim()
+  const segments = normalized
+    .split(/[\\/]/)
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+  const path = segments.length > 0 ? segments : ['Queries']
+  let parentId: string | undefined
+  const accumulated: string[] = []
+
+  for (const segment of path) {
+    accumulated.push(segment)
+    const existing = nodes.find(
+      (node) =>
+        node.kind === 'folder' && node.parentId === parentId && node.name === segment,
+    )
+    if (existing) {
+      parentId = existing.id
+      continue
+    }
+
+    const id = `library-folder-${slugifyLibraryPath(accumulated)}`
+    nodes.push({
+      id,
+      kind: 'folder',
+      parentId,
+      name: segment,
+      tags: [],
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      summary: 'Migrated Library folder.',
+    })
+    parentId = id
+  }
+
+  return parentId ?? 'library-root-queries'
+}
+
+function slugifyLibraryPath(path: string[]) {
+  return path
+    .join('-')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
 function stripDemoRecords(snapshot: WorkspaceSnapshot) {
   snapshot.connections = snapshot.connections.filter(
     (connection) => !DEMO_CONNECTION_IDS.has(connection.id),
@@ -197,6 +389,9 @@ function stripDemoRecords(snapshot: WorkspaceSnapshot) {
     (tab) => !DEMO_TAB_IDS.has(tab.id),
   )
   snapshot.savedWork = snapshot.savedWork.filter(
+    (item) => !DEMO_SAVED_WORK_IDS.has(item.id),
+  )
+  snapshot.libraryNodes = snapshot.libraryNodes.filter(
     (item) => !DEMO_SAVED_WORK_IDS.has(item.id),
   )
   snapshot.explorerNodes = snapshot.explorerNodes.filter(
@@ -213,6 +408,11 @@ function stripDemoRecords(snapshot: WorkspaceSnapshot) {
   snapshot.tabs.forEach((tab) => referencedEnvironmentIds.add(tab.environmentId))
   snapshot.closedTabs.forEach((tab) => referencedEnvironmentIds.add(tab.environmentId))
   snapshot.savedWork.forEach((item) => {
+    if (item.environmentId) {
+      referencedEnvironmentIds.add(item.environmentId)
+    }
+  })
+  snapshot.libraryNodes.forEach((item) => {
     if (item.environmentId) {
       referencedEnvironmentIds.add(item.environmentId)
     }

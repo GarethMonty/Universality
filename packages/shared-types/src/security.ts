@@ -39,7 +39,6 @@ export interface AppPreferences {
   telemetry: TelemetryMode
   lockAfterMinutes: number
   safeModeEnabled: boolean
-  commandPaletteEnabled: boolean
 }
 
 export interface LockState {

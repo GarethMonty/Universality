@@ -72,6 +72,7 @@ export type QuerySaveTarget =
 export interface QueryTabDefinition {
   id: string
   title: string
+  tabKind?: 'query' | 'explorer'
   connectionId: string
   environmentId: string
   family: DatastoreFamily
@@ -87,6 +88,15 @@ export type QueryBuilderKind =
   | 'dynamodb-key-condition'
   | 'cql-partition'
   | 'search-dsl'
+
+export interface ScopedQueryTarget {
+  kind: string
+  label: string
+  path?: string[]
+  scope?: string
+  queryTemplate?: string
+  preferredBuilder?: QueryBuilderKind
+}
 
 export type MongoFilterOperator =
   | 'eq'
@@ -527,6 +537,7 @@ export interface UserFacingError {
 export interface QueryTabState extends QueryTabDefinition {
   editorLabel: string
   queryText: string
+  scopedTarget?: ScopedQueryTarget
   builderState?: QueryBuilderState
   status: QueryExecutionState
   dirty: boolean
@@ -569,6 +580,7 @@ export interface LibraryNode {
   favorite?: boolean
   createdAt: string
   updatedAt: string
+  lastOpenedAt?: string
   connectionId?: string
   environmentId?: string
   language?: QueryLanguage
@@ -595,6 +607,11 @@ export interface LibraryDeleteNodeRequest {
 export interface LibraryMoveNodeRequest {
   nodeId: string
   parentId?: string
+}
+
+export interface LibrarySetEnvironmentRequest {
+  nodeId: string
+  environmentId?: string
 }
 
 export interface SaveQueryTabToLibraryRequest {

@@ -1,7 +1,6 @@
 interface DataGridContextMenuProps {
   canDelete: boolean
   onClose(): void
-  onCopyRow(): void
   onDeleteRow(): void
   x: number
   y: number
@@ -10,7 +9,6 @@ interface DataGridContextMenuProps {
 export function DataGridContextMenu({
   canDelete,
   onClose,
-  onCopyRow,
   onDeleteRow,
   x,
   y,
@@ -22,9 +20,6 @@ export function DataGridContextMenu({
       style={{ left: x, top: y }}
       onPointerDown={(event) => event.stopPropagation()}
     >
-      <button type="button" role="menuitem" onClick={() => { onCopyRow(); onClose() }}>
-        Copy Row
-      </button>
       {canDelete ? (
         <button
           type="button"

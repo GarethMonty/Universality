@@ -9,33 +9,13 @@ import { EditorTabItem } from './EditorTabItem'
 
 describe('EditorTabItem', () => {
   it('shows the query title without the legacy connection monogram', () => {
-    render(
-      <EditorTabItem
-        active
-        connection={connection}
-        draftTitle=""
-        editing={false}
-        environment={environment}
-        tab={tab}
-        tabRef={vi.fn()}
-        onBeginRename={vi.fn()}
-        onCancelRename={vi.fn()}
-        onCloseTab={vi.fn()}
-        onCommitRename={vi.fn()}
-        onContextMenu={vi.fn()}
-        onDraftTitleChange={vi.fn()}
-        onDragEnd={vi.fn()}
-        onDragLeave={vi.fn()}
-        onDragOver={vi.fn()}
-        onDragStart={vi.fn()}
-        onDrop={vi.fn()}
-        onKeyDown={vi.fn()}
-        onSelectTab={vi.fn()}
-      />,
-    )
+    renderEditorTabItem()
 
     const renderedTab = screen.getByRole('tab')
 
+    expect(
+      within(renderedTab).getByRole('img', { name: 'Primary Orders datastore icon' }),
+    ).toBeInTheDocument()
     expect(within(renderedTab).getByText('Query 1')).toBeInTheDocument()
     expect(screen.queryByText('PO')).not.toBeInTheDocument()
     expect(renderedTab).toHaveAttribute(
@@ -43,7 +23,88 @@ describe('EditorTabItem', () => {
       expect.stringContaining('Connection: Primary Orders'),
     )
   })
+
+  it('shows an unsaved marker for dirty saveable query tabs', () => {
+    renderEditorTabItem({ tab: { ...tab, dirty: true } })
+
+    expect(screen.getByTitle('Unsaved changes')).toBeInTheDocument()
+    expect(screen.getByRole('tab')).toHaveAttribute(
+      'title',
+      expect.stringContaining('Unsaved changes'),
+    )
+  })
+
+  it('shows running and error state icons without replacing the dirty marker', () => {
+    const { unmount } = renderEditorTabItem({
+      tab: { ...tab, dirty: true, status: 'running' },
+    })
+
+    expect(screen.getByRole('img', { name: 'Query running' })).toBeInTheDocument()
+    expect(screen.getByTitle('Unsaved changes')).toBeInTheDocument()
+
+    unmount()
+
+    renderEditorTabItem({
+      tab: {
+        ...tab,
+        id: 'tab-2',
+        status: 'error',
+        error: { code: 'QUERY_ERROR', message: 'Syntax error near from.' },
+      },
+    })
+
+    expect(screen.getByRole('img', { name: 'Query error' })).toBeInTheDocument()
+    expect(screen.getByRole('tab')).toHaveAttribute(
+      'title',
+      expect.stringContaining('Syntax error near from.'),
+    )
+  })
+
+  it('does not show an unsaved marker for dirty unsaveable explorer tabs', () => {
+    renderEditorTabItem({
+      tab: {
+        ...tab,
+        title: 'Explore Primary Orders',
+        tabKind: 'explorer',
+        dirty: true,
+      },
+    })
+
+    expect(screen.queryByTitle('Unsaved changes')).not.toBeInTheDocument()
+    expect(screen.getByRole('tab')).not.toHaveAttribute(
+      'title',
+      expect.stringContaining('Unsaved changes'),
+    )
+  })
 })
+
+function renderEditorTabItem(overrides: Partial<Parameters<typeof EditorTabItem>[0]> = {}) {
+  const props: Parameters<typeof EditorTabItem>[0] = {
+    active: true,
+    connection,
+    draftTitle: '',
+    editing: false,
+    environment,
+    tab,
+    tabRef: vi.fn(),
+    onBeginRename: vi.fn(),
+    onCancelRename: vi.fn(),
+    onCloseTab: vi.fn(),
+    onCommitRename: vi.fn(),
+    onContextMenu: vi.fn(),
+    onDraftTitleChange: vi.fn(),
+    onDragEnd: vi.fn(),
+    onDragLeave: vi.fn(),
+    onDragOver: vi.fn(),
+    onDragStart: vi.fn(),
+    onDrop: vi.fn(),
+    onKeyDown: vi.fn(),
+    onSelectTab: vi.fn(),
+    ...overrides,
+  }
+
+  return render(<EditorTabItem {...props} />)
+}
 
 const tab: QueryTabState = {
   id: 'tab-1',

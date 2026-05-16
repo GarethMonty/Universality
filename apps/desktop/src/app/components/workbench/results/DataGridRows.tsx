@@ -28,6 +28,7 @@ interface DataGridRowsProps {
   onCancelEdit(): void
   onCommitEdit(): void
   onOpenRowMenu(sourceIndex: number, visibleIndex: number, x: number, y: number): void
+  onSelectRow(row: number): void
   onUpdateEditingValue(value: string): void
   onUpdateSelection(row: number, column: number): void
 }
@@ -46,6 +47,7 @@ export function DataGridRows({
   onCancelEdit,
   onCommitEdit,
   onOpenRowMenu,
+  onSelectRow,
   onUpdateEditingValue,
   onUpdateSelection,
 }: DataGridRowsProps) {
@@ -54,6 +56,10 @@ export function DataGridRows({
       {renderedRows.map((virtualRow) => {
         const rowItem = visibleRows[virtualRow.index]
         const row = rowItem?.row ?? []
+        const rowSelected =
+          columns.length > 0 &&
+          isSelected(virtualRow.index, 0, selection) &&
+          isSelected(virtualRow.index, columns.length - 1, selection)
 
         return (
           <div
@@ -69,9 +75,22 @@ export function DataGridRows({
               onOpenRowMenu(rowItem.sourceIndex, virtualRow.index, event.clientX, event.clientY)
             }}
           >
-            <div className="data-grid-cell data-grid-cell--row-number">
+            <button
+              type="button"
+              className={`data-grid-cell data-grid-cell--row-number${rowSelected ? ' is-selected' : ''}`}
+              aria-label={
+                rowItem ? `Select row ${rowItem.sourceIndex + 1}` : 'Select empty row'
+              }
+              onPointerDown={(event) => {
+                event.preventDefault()
+
+                if (rowItem) {
+                  onSelectRow(virtualRow.index)
+                }
+              }}
+            >
               {rowItem ? rowItem.sourceIndex + 1 : ''}
-            </div>
+            </button>
             {columns.map((column, columnIndex) => {
               const cell = row[columnIndex] ?? ''
               const selected = isSelected(virtualRow.index, columnIndex, selection)

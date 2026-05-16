@@ -12,6 +12,8 @@ export const ENGINE_OPTIONS = DATASTORE_FEATURE_BACKLOG.map((entry) => ({
   maturity: entry.maturity,
   defaultPort: entry.defaultPort,
   connectionMode: entry.connectionModes[0],
+  connectionModes: entry.connectionModes,
+  primaryConnectionMechanisms: entry.primaryConnectionMechanisms,
   localDatabase: entry.localDatabase,
 }))
 
@@ -33,9 +35,9 @@ export const ENGINE_GROUPS = DATASTORE_FAMILIES.map((family) => ({
 })).filter((group) => group.options.length > 0)
 
 export const SHORTCUTS = [
+  ['Save query', 'Ctrl S'],
   ['Run query', 'Ctrl Enter'],
   ['Explain query', 'Ctrl Shift E'],
-  ['Command palette', 'Ctrl K'],
   ['Toggle panel', 'Ctrl J'],
   ['Toggle sidebar', 'Ctrl B'],
 ] as const

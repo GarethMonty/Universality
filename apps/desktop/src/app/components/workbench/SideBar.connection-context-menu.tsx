@@ -4,7 +4,6 @@ import {
   ExplorerIcon,
   PlayIcon,
   RenameIcon,
-  SettingsIcon,
   TrashIcon,
 } from './icons'
 
@@ -23,7 +22,6 @@ export function ConnectionContextMenu({
   onDuplicateConnection,
   onOpenConnectionDrawer,
   onOpenConnectionExplorer,
-  onOpenConnectionOperations,
 }: {
   connection: ConnectionProfile
   position: Pick<ConnectionContextMenuState, 'x' | 'y'>
@@ -33,7 +31,6 @@ export function ConnectionContextMenu({
   onDuplicateConnection(connectionId: string): void
   onOpenConnectionDrawer(connectionId: string): void
   onOpenConnectionExplorer(connectionId: string): void
-  onOpenConnectionOperations(connectionId: string): void
 }) {
   const runAndClose = (action: () => void) => {
     onClose()
@@ -91,16 +88,6 @@ export function ConnectionContextMenu({
       >
         <CopyIcon className="connection-context-menu-icon" />
         <span>Duplicate</span>
-      </button>
-      <button
-        type="button"
-        role="menuitem"
-        className="connection-context-menu-item"
-        aria-label={`Open operations for ${connection.name}`}
-        onClick={() => runAndClose(() => onOpenConnectionOperations(connection.id))}
-      >
-        <SettingsIcon className="connection-context-menu-icon" />
-        <span>Operations</span>
       </button>
       <div className="connection-context-menu-separator" role="separator" />
       <button

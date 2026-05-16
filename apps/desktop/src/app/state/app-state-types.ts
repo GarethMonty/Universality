@@ -16,6 +16,11 @@ import type {
   ExplorerInspectResponse,
   ExplorerRequest,
   ExplorerResponse,
+  LibraryCreateFolderRequest,
+  LibraryDeleteNodeRequest,
+  LibraryMoveNodeRequest,
+  LibraryRenameNodeRequest,
+  LibrarySetEnvironmentRequest,
   LocalDatabaseCreateRequest,
   LocalDatabaseCreateResult,
   LocalDatabasePickRequest,
@@ -27,6 +32,8 @@ import type {
   OperationPlanRequest,
   OperationPlanResponse,
   ResultPageResponse,
+  SaveQueryTabToLibraryRequest,
+  SaveQueryTabToLocalFileRequest,
   StructureRequest,
   StructureResponse,
   UpdateQueryBuilderStateRequest,
@@ -102,6 +109,7 @@ export interface Actions {
   createEnvironment(): Promise<void>
   saveEnvironment(profile: EnvironmentProfile): Promise<void>
   createTab(connectionId: string): Promise<void>
+  createExplorerTab(connectionId: string): Promise<void>
   createScopedTab(request: CreateScopedQueryTabRequest): Promise<void>
   closeTab(tabId: string): Promise<void>
   reopenClosedTab(closedTabId: string): Promise<void>
@@ -111,6 +119,14 @@ export interface Actions {
   renameTab(tabId: string, title: string): Promise<void>
   saveCurrentQuery(tabId: string): Promise<void>
   saveAndCloseTab(tabId: string): Promise<void>
+  createLibraryFolder(request: LibraryCreateFolderRequest): Promise<void>
+  renameLibraryNode(request: LibraryRenameNodeRequest): Promise<void>
+  moveLibraryNode(request: LibraryMoveNodeRequest): Promise<void>
+  setLibraryNodeEnvironment(request: LibrarySetEnvironmentRequest): Promise<void>
+  deleteLibraryNode(request: LibraryDeleteNodeRequest): Promise<void>
+  openLibraryItem(libraryItemId: string): Promise<void>
+  saveQueryTabToLibrary(request: SaveQueryTabToLibraryRequest): Promise<void>
+  saveQueryTabToLocalFile(request: SaveQueryTabToLocalFileRequest): Promise<void>
   openSavedWork(savedWorkId: string): Promise<void>
   deleteSavedWork(savedWorkId: string): Promise<void>
   testConnection(

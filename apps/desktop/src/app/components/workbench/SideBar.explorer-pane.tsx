@@ -1,5 +1,11 @@
-import type { CSSProperties } from 'react'
-import type { ConnectionProfile, ExplorerNode, ScopedQueryTarget } from '@datapadplusplus/shared-types'
+import { useEffect, useState } from 'react'
+import type { CSSProperties, MouseEvent } from 'react'
+import type {
+  ConnectionProfile,
+  EnvironmentProfile,
+  ExplorerNode,
+  ScopedQueryTarget,
+} from '@datapadplusplus/shared-types'
 import {
   ChevronDownIcon,
   ChevronRightIcon,
@@ -9,36 +15,79 @@ import {
 import { ExplorerNodeIcon } from './SideBar.node-icons'
 import {
   explorerNodeTarget,
+  environmentAccentVariables,
   isExplorerNodeQueryable,
 } from './SideBar.helpers'
 
 export function ExplorerPane({
   activeConnection,
+  activeEnvironment,
   explorerFilter,
   explorerItems,
   explorerStatus,
   explorerSummary,
   onExplorerFilterChange,
+  onInspectExplorerNode,
   onOpenScopedQuery,
   onRefreshExplorer,
   onSelectExplorerNode,
 }: {
   activeConnection?: ConnectionProfile
+  activeEnvironment?: EnvironmentProfile
   explorerFilter: string
   explorerItems: ExplorerNode[]
   explorerStatus: 'idle' | 'loading' | 'ready'
   explorerSummary?: string
   onExplorerFilterChange(value: string): void
+  onInspectExplorerNode(node: ExplorerNode): void
   onOpenScopedQuery(target: ScopedQueryTarget): void
   onRefreshExplorer(): void
   onSelectExplorerNode(node: ExplorerNode): void
 }) {
+  const [contextMenu, setContextMenu] = useState<ExplorerContextMenuState>()
+  const environmentStyle = environmentAccentVariables(activeEnvironment)
   const openNodeQuery = (item: ExplorerNode) => {
     if (!isExplorerNodeQueryable(item)) {
       return
     }
 
     onOpenScopedQuery(explorerNodeTarget(item, activeConnection))
+  }
+
+  useEffect(() => {
+    if (!contextMenu) {
+      return
+    }
+
+    const closeContextMenu = () => setContextMenu(undefined)
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        closeContextMenu()
+      }
+    }
+
+    window.addEventListener('pointerdown', closeContextMenu)
+    window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('resize', closeContextMenu)
+    return () => {
+      window.removeEventListener('pointerdown', closeContextMenu)
+      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('resize', closeContextMenu)
+    }
+  }, [contextMenu])
+
+  const openContextMenu = (event: MouseEvent<HTMLElement>, node: ExplorerNode) => {
+    event.preventDefault()
+    event.stopPropagation()
+    setContextMenu({
+      node,
+      x: event.clientX,
+      y: event.clientY,
+    })
+  }
+
+  const inspectNode = (node: ExplorerNode) => {
+    onInspectExplorerNode(node)
   }
 
   return (
@@ -88,8 +137,8 @@ export function ExplorerPane({
             <button
               key={item.id}
               type="button"
-              className="tree-item"
-              style={{ '--tree-depth': depth } as CSSProperties}
+              className={`tree-item explorer-tree-item${activeEnvironment ? ' has-environment-accent' : ''}`}
+              style={{ '--tree-depth': depth, ...environmentStyle } as CSSProperties}
               title={
                 item.expandable || item.scope
                   ? `${item.label}: inspect this ${item.kind} and load its child metadata.`
@@ -97,6 +146,7 @@ export function ExplorerPane({
               }
               onClick={() => onSelectExplorerNode(item)}
               onDoubleClick={() => openNodeQuery(item)}
+              onContextMenu={(event) => openContextMenu(event, item)}
             >
               <span className="tree-item-chevron">
                 {item.expandable ? (
@@ -106,7 +156,7 @@ export function ExplorerPane({
                 )}
               </span>
               <span className="tree-item-badge tree-item-badge--ghost">
-                <ExplorerNodeIcon kind={item.kind} />
+                <ExplorerNodeIcon connection={activeConnection} kind={item.kind} />
               </span>
               <span className="tree-item-content">
                 <strong>{item.label}</strong>
@@ -119,6 +169,76 @@ export function ExplorerPane({
           )
         })}
       </div>
+
+      {contextMenu ? (
+        <ExplorerContextMenu
+          activeConnection={activeConnection}
+          menu={contextMenu}
+          onClose={() => setContextMenu(undefined)}
+          onInspectNode={inspectNode}
+          onOpenQuery={openNodeQuery}
+        />
+      ) : null}
     </>
+  )
+}
+
+interface ExplorerContextMenuState {
+  node: ExplorerNode
+  x: number
+  y: number
+}
+
+function ExplorerContextMenu({
+  activeConnection,
+  menu,
+  onClose,
+  onInspectNode,
+  onOpenQuery,
+}: {
+  activeConnection?: ConnectionProfile
+  menu: ExplorerContextMenuState
+  onClose(): void
+  onInspectNode(node: ExplorerNode): void
+  onOpenQuery(node: ExplorerNode): void
+}) {
+  const queryable = isExplorerNodeQueryable(menu.node)
+  const run = (action: () => void) => {
+    onClose()
+    action()
+  }
+
+  return (
+    <div
+      className="connection-context-menu"
+      role="menu"
+      aria-label={`Explorer options for ${menu.node.label}`}
+      style={{ left: menu.x, top: menu.y }}
+      onClick={(event) => event.stopPropagation()}
+      onPointerDown={(event) => event.stopPropagation()}
+    >
+      <button
+        type="button"
+        role="menuitem"
+        className="connection-context-menu-item"
+        aria-label={`Inspect ${menu.node.label}`}
+        onClick={() => run(() => onInspectNode(menu.node))}
+      >
+        <ExplorerNodeIcon connection={activeConnection} kind={menu.node.kind} />
+        <span>Inspect</span>
+      </button>
+      {queryable ? (
+        <button
+          type="button"
+          role="menuitem"
+          className="connection-context-menu-item"
+          aria-label={`Open query for ${menu.node.label}`}
+          onClick={() => run(() => onOpenQuery(menu.node))}
+        >
+          <ExplorerNodeIcon connection={activeConnection} kind={menu.node.kind} />
+          <span>Open Query</span>
+        </button>
+      ) : null}
+    </div>
   )
 }

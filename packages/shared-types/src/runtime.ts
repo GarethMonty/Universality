@@ -14,6 +14,7 @@ import type {
   QueryBuilderKind,
   QueryBuilderState,
   QueryLanguage,
+  ScopedQueryTarget,
   QueryTabState,
   ResultPageInfo,
   ResultPayload,
@@ -436,15 +437,6 @@ export interface CancelExecutionResult {
 
 export interface QueryTabReorderRequest {
   orderedTabIds: string[]
-}
-
-export interface ScopedQueryTarget {
-  kind: string
-  label: string
-  path?: string[]
-  scope?: string
-  queryTemplate?: string
-  preferredBuilder?: QueryBuilderKind
 }
 
 export interface CreateScopedQueryTabRequest {

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import type {
   ConnectionProfile,
@@ -224,6 +225,26 @@ export function DataGridView({
     dragStartRef.current = null
   }
 
+  const selectRow = (row: number) => {
+    dragStartRef.current = null
+    setFocusedCell({ row, column: 0 })
+    setSelection({
+      startRow: row,
+      startColumn: 0,
+      endRow: row,
+      endColumn: Math.max(columns.length - 1, 0),
+    })
+  }
+
+  const handleGridKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (!isPlatformCopyShortcut(event) || isEditableKeyboardTarget(event.target)) {
+      return
+    }
+
+    event.preventDefault()
+    void copySelection('selection')
+  }
+
   const copySelection = async (mode: 'selection' | 'row' | 'all') => {
     const text = gridTextForMode(mode, columns, visibleRows.map((item) => item.row), selection)
 
@@ -233,17 +254,6 @@ export function DataGridView({
 
     await copyText(text)
     setCopyMessage(`Copied ${mode === 'all' ? 'all buffered rows' : mode}.`)
-  }
-
-  const copySourceRow = async (sourceIndex: number) => {
-    const row = draftRows[sourceIndex]
-
-    if (!row) {
-      return
-    }
-
-    await copyText(row.join('\t'))
-    setCopyMessage('Copied row.')
   }
 
   const promptDeleteRow = (sourceIndex: number) => {
@@ -270,18 +280,10 @@ export function DataGridView({
   return (
     <div className="data-grid-shell">
       <DataGridToolbar
-        canCopyRow={Boolean(focusedCell)}
-        canCopySelection={Boolean(selection)}
         filter={filter}
-        onCopyAll={() => void copySelection('all')}
-        onCopyRow={() => void copySelection('row')}
-        onCopySelection={() => void copySelection('selection')}
         onFilterChange={setFilter}
       />
-      <div className="data-grid-status">
-        {visibleRows.length} of {draftRows.length} buffered row(s)
-        {copyMessage ? ` / ${copyMessage}` : ''}
-      </div>
+      {copyMessage ? <div className="data-grid-status">{copyMessage}</div> : null}
       <DataGridInsertRow columns={columns} canInsert={canInsertRow()} onInsert={insertRow} />
       {pendingDelete ? (
         <DataGridDeleteConfirmation
@@ -304,6 +306,10 @@ export function DataGridView({
       <div
         className="data-grid"
         ref={parentRef}
+        role="grid"
+        tabIndex={0}
+        aria-label="Table results grid"
+        onKeyDown={handleGridKeyDown}
         onPointerMove={(event) => updateResize(event.clientX)}
         onPointerUp={() => {
           finishResize()
@@ -382,21 +388,53 @@ export function DataGridView({
               })
               setContextMenu({ sourceIndex, x, y })
             }}
+            onSelectRow={selectRow}
             onUpdateEditingValue={updateEditingValue}
             onUpdateSelection={updateSelection}
           />
         </div>
       </div>
-      {contextMenu ? (
+      {contextMenu && canDeleteRow(contextMenu.sourceIndex) ? (
         <DataGridContextMenu
           canDelete={canDeleteRow(contextMenu.sourceIndex)}
           x={contextMenu.x}
           y={contextMenu.y}
           onClose={() => setContextMenu(undefined)}
-          onCopyRow={() => void copySourceRow(contextMenu.sourceIndex)}
           onDeleteRow={() => promptDeleteRow(contextMenu.sourceIndex)}
         />
       ) : null}
     </div>
+  )
+}
+
+function isPlatformCopyShortcut(event: ReactKeyboardEvent) {
+  if (event.key.toLowerCase() !== 'c' || event.altKey || event.shiftKey) {
+    return false
+  }
+
+  const platform =
+    typeof navigator !== 'undefined'
+      ? (navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData
+          ?.platform ?? navigator.platform
+      : ''
+  const isApplePlatform = /\b(mac|iphone|ipad|ipod)\b/i.test(platform)
+
+  return isApplePlatform
+    ? event.metaKey && !event.ctrlKey
+    : event.ctrlKey && !event.metaKey
+}
+
+function isEditableKeyboardTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) {
+    return false
+  }
+
+  const tagName = target.tagName.toLowerCase()
+
+  return (
+    target.isContentEditable ||
+    tagName === 'input' ||
+    tagName === 'textarea' ||
+    tagName === 'select'
   )
 }

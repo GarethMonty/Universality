@@ -3,6 +3,7 @@ import type { ExplorerNode } from '@datapadplusplus/shared-types'
 import { createSeedSnapshot } from '../../../test/fixtures/seed-workspace'
 import {
   buildConnectionObjectTree,
+  buildConnectionObjectTreeFromExplorerNodes,
   connectionGroupLabel,
   connectionTreeNodeTarget,
   environmentAccentVariables,
@@ -39,6 +40,16 @@ describe('sidebar connection tree helpers', () => {
     const accounts = findNode(tree, 'table-accounts')
 
     expect(accounts?.queryTemplate).toBe('select top 100 * from dbo.accounts;')
+  })
+
+  it('builds SQLite table templates with the main schema', () => {
+    const snapshot = createSeedSnapshot()
+    const connection = snapshot.connections.find((item) => item.id === 'conn-local-sqlite')
+
+    const tree = buildConnectionObjectTree(connection!)
+    const accounts = findNode(tree, 'table-accounts')
+
+    expect(accounts?.queryTemplate).toBe('select * from [main].[accounts] limit 100;')
   })
 
   it('marks Mongo collection nodes as builder-capable scoped targets', () => {
@@ -106,6 +117,105 @@ describe('sidebar connection tree helpers', () => {
       label: 'products',
       preferredBuilder: 'mongo-find',
       scope: 'collection:products',
+    })
+  })
+
+  it('builds connection object nodes from live explorer metadata', () => {
+    const snapshot = createSeedSnapshot()
+    const connection = snapshot.connections.find((item) => item.id === 'conn-catalog')!
+    const tree = buildConnectionObjectTreeFromExplorerNodes(connection, [
+      {
+        id: 'products',
+        label: 'products',
+        kind: 'collection',
+        detail: 'Documents, indexes, and samples',
+        family: 'document',
+        path: [connection.name],
+        scope: 'collection:products',
+        queryTemplate: '{ "collection": "products", "filter": {} }',
+        expandable: true,
+      },
+      {
+        id: 'products:indexes',
+        label: 'Indexes',
+        kind: 'indexes',
+        detail: '2 index(es)',
+        family: 'document',
+        path: [connection.name, 'products'],
+      },
+    ])
+
+    expect(tree).toHaveLength(1)
+    expect(tree[0]).toMatchObject({
+      label: 'Databases',
+      kind: 'databases',
+    })
+
+    const products = findNode(tree, 'products')
+    expect(products).toMatchObject({
+      id: 'products',
+      label: 'products',
+      builderKind: 'mongo-find',
+      queryable: true,
+      expandable: true,
+    })
+    expect(findNode(tree, 'products:indexes')).toMatchObject({
+      id: 'products:indexes',
+      label: 'Indexes',
+    })
+  })
+
+  it('organizes live SQL metadata into expected schema object groups', () => {
+    const snapshot = createSeedSnapshot()
+    const connection = snapshot.connections.find((item) => item.id === 'conn-analytics')!
+    const tree = buildConnectionObjectTreeFromExplorerNodes(connection, [
+      {
+        id: 'schema-public',
+        label: 'public',
+        kind: 'schema',
+        family: 'sql',
+        path: [connection.name],
+        scope: 'schema:public',
+        detail: 'schema',
+        expandable: true,
+      },
+      {
+        id: 'public.accounts',
+        label: 'accounts',
+        kind: 'BASE TABLE',
+        family: 'sql',
+        path: [connection.name, 'public'],
+        scope: 'table:public.accounts',
+        detail: 'table',
+      },
+      {
+        id: 'public.active_accounts',
+        label: 'active_accounts',
+        kind: 'view',
+        family: 'sql',
+        path: [connection.name, 'public'],
+        scope: 'view:public.active_accounts',
+        detail: 'view',
+      },
+    ])
+
+    expect(tree[0]).toMatchObject({ label: 'Schemas' })
+    expect(findNode(tree, 'schema-public')).toMatchObject({
+      label: 'public',
+      kind: 'schema',
+      expandable: true,
+    })
+    expect(findNode(tree, 'category:conn-analytics:Schemas/public/Tables')).toMatchObject({
+      label: 'Tables',
+    })
+    expect(findNode(tree, 'public.accounts')).toMatchObject({
+      label: 'accounts',
+      kind: 'table',
+      queryTemplate: 'select * from public.accounts limit 100;',
+    })
+    expect(findNode(tree, 'public.active_accounts')).toMatchObject({
+      label: 'active_accounts',
+      kind: 'view',
     })
   })
 })

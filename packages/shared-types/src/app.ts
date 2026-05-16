@@ -27,7 +27,6 @@ export type UiActivity =
   | 'environments'
   | 'explorer'
   | 'library'
-  | 'search'
   | 'settings'
 
 export type SidebarPane =
@@ -35,7 +34,6 @@ export type SidebarPane =
   | 'environments'
   | 'explorer'
   | 'library'
-  | 'search'
 
 export type BottomPanelTab = 'results' | 'messages' | 'history' | 'details'
 
@@ -44,7 +42,6 @@ export type RightDrawerView =
   | 'connection'
   | 'inspection'
   | 'diagnostics'
-  | 'operations'
 
 export type ConnectionGroupMode = 'environment' | 'database-type' | 'none'
 

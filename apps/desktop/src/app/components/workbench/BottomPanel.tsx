@@ -46,6 +46,7 @@ interface BottomPanelProps {
   onResize(nextHeight: number): void
   onClose(): void
   onConfirmExecution(guardrailId: string, mode: ExecutionRequest['mode']): void
+  onApplyInspectionTemplate(queryTemplate?: string): void
   onRestoreHistory(queryText: string): void
   onExecuteDataEdit(
     request: DataEditExecutionRequest,
@@ -74,13 +75,20 @@ export function BottomPanel({
   onResize,
   onClose,
   onConfirmExecution,
+  onApplyInspectionTemplate,
   onRestoreHistory,
   onExecuteDataEdit,
   onDismissWorkbenchMessage,
   onClearWorkbenchMessages,
 }: BottomPanelProps) {
-  const hasQueryContext = Boolean(activeTab && activeConnection && activeEnvironment)
-  const safePanelTab = hasQueryContext ? activePanelTab : 'messages'
+  const hasPanelContext = Boolean(activeTab && activeConnection && activeEnvironment)
+  const hasQueryContext = Boolean(hasPanelContext && activeTab?.tabKind !== 'explorer')
+  const safePanelTab =
+    activePanelTab === 'details' && hasPanelContext
+      ? 'details'
+      : hasQueryContext
+        ? activePanelTab
+        : 'messages'
   const messages = activeTab ? buildMessages(activeTab.result, activeTab, lastExecution) : []
   const [isResizing, setIsResizing] = useState(false)
   const isResizingRef = useRef(false)
@@ -143,7 +151,12 @@ export function BottomPanel({
       <div className="bottom-panel-header">
         <div className="bottom-panel-tabs" role="tablist" aria-label="Bottom panel tabs">
           {(['results', 'messages', 'history', 'details'] as const).map((item) => {
-            const disabled = !hasQueryContext && item !== 'messages'
+            const disabled =
+              item === 'messages'
+                ? false
+                : item === 'details'
+                  ? !hasPanelContext
+                  : !hasQueryContext
 
             return (
               <button
@@ -239,6 +252,7 @@ export function BottomPanel({
             activeTab={activeTab}
             diagnostics={diagnostics}
             explorerInspection={explorerInspection}
+            onApplyInspectionTemplate={onApplyInspectionTemplate}
           />
         ) : null}
       </div>

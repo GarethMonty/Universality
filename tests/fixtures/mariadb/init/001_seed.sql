@@ -14,6 +14,15 @@ create table if not exists orders (
   index orders_account_status_idx (account_id, status)
 );
 
+create table if not exists products (
+  sku varchar(64) primary key,
+  name varchar(128) not null,
+  category varchar(64) not null,
+  inventory_available int not null,
+  price decimal(12,2) not null,
+  updated_at timestamp not null default current_timestamp
+);
+
 create table if not exists perf_order_events (
   id bigint primary key,
   account_id bigint not null,
@@ -46,6 +55,18 @@ on duplicate key update
   account_id = values(account_id),
   status = values(status),
   total_amount = values(total_amount),
+  updated_at = values(updated_at);
+
+insert into products (sku, name, category, inventory_available, price, updated_at)
+values
+  ('luna-lamp', 'Luna Lamp', 'lighting', 18, 49.99, now()),
+  ('aurora-desk', 'Aurora Desk', 'furniture', 8, 349.00, now()),
+  ('nova-chair', 'Nova Chair', 'furniture', 24, 129.50, now())
+on duplicate key update
+  name = values(name),
+  category = values(category),
+  inventory_available = values(inventory_available),
+  price = values(price),
   updated_at = values(updated_at);
 
 insert into perf_order_events (id, account_id, region, event_name, total_amount, updated_at)

@@ -18,7 +18,7 @@ Legacy `DATANAUT_*` and `UNIVERSALITY_*` environment variables are still read as
 
 The desktop app is organized around a VS Code-style workbench:
 
-- Activity bar for Connections, Saved Work, Search, Environments, Settings, theme, and lock controls.
+- Activity bar for Connections, Library, Search, Environments, Settings, theme, and lock controls.
 - Connections sidebar with search, compact persisted grouping, datastore icons, and persisted collapsible sections.
 - Explorer is opened from a connection or object context menu instead of a permanent activity-bar item.
 - Query editor area with tabs, context menus, simplified visible tab labels, dirty-state indicators, and query toolbar actions.

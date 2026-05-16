@@ -133,6 +133,7 @@ pub(super) fn build_query_tab(
     QueryTabState {
         id: generate_id("tab"),
         title,
+        tab_kind: Some("query".into()),
         connection_id: connection.id.clone(),
         environment_id: connection
             .environment_ids
@@ -142,12 +143,48 @@ pub(super) fn build_query_tab(
         family: connection.family.clone(),
         language: language_for_connection(connection),
         pinned: None,
+        save_target: None,
         saved_query_id: None,
         editor_label: editor_label_for_connection(connection),
         query_text: default_query_text(connection),
+        scoped_target: None,
         builder_state: None,
         status: "idle".into(),
         dirty,
+        last_run_at: None,
+        result: None,
+        history: Vec::new(),
+        error: None,
+    }
+}
+
+pub(super) fn build_explorer_tab(
+    snapshot: &WorkspaceSnapshot,
+    connection: &ConnectionProfile,
+) -> QueryTabState {
+    let title = unique_query_tab_title(snapshot, &format!("Explorer - {}", connection.name));
+
+    QueryTabState {
+        id: generate_id("tab"),
+        title,
+        tab_kind: Some("explorer".into()),
+        connection_id: connection.id.clone(),
+        environment_id: connection
+            .environment_ids
+            .first()
+            .cloned()
+            .unwrap_or_else(|| "env-dev".into()),
+        family: connection.family.clone(),
+        language: "text".into(),
+        pinned: None,
+        save_target: None,
+        saved_query_id: None,
+        editor_label: "Explorer".into(),
+        query_text: String::new(),
+        scoped_target: None,
+        builder_state: None,
+        status: "idle".into(),
+        dirty: false,
         last_run_at: None,
         result: None,
         history: Vec::new(),
@@ -164,7 +201,11 @@ pub(super) fn build_scoped_query_tab(
     let target_label = normalized_target_label(&request.target.label);
     let limit = 50;
     let query_text = if builder_kind.as_deref() == Some("mongo-find") {
-        mongo_find_query_text(&target_label, limit)
+        mongo_find_query_text(
+            &target_label,
+            limit,
+            connection.database.as_deref().map(str::trim),
+        )
     } else {
         request
             .target
@@ -185,14 +226,17 @@ pub(super) fn build_scoped_query_tab(
     QueryTabState {
         id: generate_id("tab"),
         title,
+        tab_kind: Some("query".into()),
         connection_id: connection.id.clone(),
         environment_id,
         family: connection.family.clone(),
         language: language_for_connection(connection),
         pinned: None,
+        save_target: None,
         saved_query_id: None,
         editor_label: editor_label_for_connection(connection),
         query_text,
+        scoped_target: Some(request.target),
         builder_state,
         status: "idle".into(),
         dirty: true,
@@ -269,13 +313,18 @@ fn normalized_target_label(label: &str) -> String {
     }
 }
 
-fn mongo_find_query_text(collection: &str, limit: u32) -> String {
-    serde_json::to_string_pretty(&json!({
+fn mongo_find_query_text(collection: &str, limit: u32, database: Option<&str>) -> String {
+    let mut query = json!({
         "collection": collection,
         "filter": {},
         "limit": limit,
-    }))
-    .unwrap_or_else(|_| {
+    });
+
+    if let Some(database) = database.filter(|value| !value.is_empty()) {
+        query["database"] = json!(database);
+    }
+
+    serde_json::to_string_pretty(&query).unwrap_or_else(|_| {
         format!(
             "{{\n  \"collection\": \"{collection}\",\n  \"filter\": {{}},\n  \"limit\": {limit}\n}}"
         )

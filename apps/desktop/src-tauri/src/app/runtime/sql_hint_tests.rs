@@ -89,6 +89,27 @@ fn relation_missing_hint_supports_sqlserver_invalid_object_name() {
 }
 
 #[test]
+fn relation_missing_hint_supports_sqlite_no_such_table() {
+    let connection = test_resolved_connection(
+        "conn-sqlite",
+        "sqlite",
+        Some("C:\\DataPad++\\catalog.sqlite"),
+    );
+
+    let base_error = CommandError::new(
+        "sql-execution-error",
+        "error returned from database: (code: 1) no such table: accounts",
+    );
+    let enriched = enrich_sql_execution_error(&connection, "select * from accounts", base_error);
+
+    assert!(enriched
+        .message
+        .contains("Detected missing relation `accounts`"));
+    assert!(enriched.message.contains("[main].[table]"));
+    assert!(enriched.message.contains("wrong or empty file"));
+}
+
+#[test]
 fn relation_missing_hint_retains_original_error_when_not_matching() {
     let connection = test_resolved_connection("conn-postgres", "postgresql", Some("observability"));
     let base_error = CommandError::new(

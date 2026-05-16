@@ -5,7 +5,7 @@ import type {
   ConnectionProfile,
   EnvironmentProfile,
   ExplorerNode,
-  SavedWorkItem,
+  LibraryNode,
   ScopedQueryTarget,
   UiState,
 } from '@datapadplusplus/shared-types'
@@ -13,26 +13,21 @@ import { ConnectionsPane } from './SideBar.connections-pane'
 import { connectionGroupLabel } from './SideBar.helpers'
 import { EnvironmentsPane } from './SideBar.environments-pane'
 import { ExplorerPane } from './SideBar.explorer-pane'
-import { SavedWorkPane } from './SideBar.saved-work-pane'
-import { SearchPane } from './SideBar.search-pane'
+import { LibraryPane } from './SideBar.library-pane'
 
 interface SideBarProps {
   ui: UiState
   width: number
   connections: ConnectionProfile[]
   environments: EnvironmentProfile[]
-  savedWork: SavedWorkItem[]
+  libraryNodes: LibraryNode[]
   closedTabs: ClosedQueryTabSnapshot[]
   explorerItems: ExplorerNode[]
+  connectionExplorerItems: ExplorerNode[]
   explorerSummary?: string
   explorerStatus: 'idle' | 'loading' | 'ready'
   activeConnectionId: string
   activeEnvironmentId: string
-  commandPaletteEnabled: boolean
-  commandQuery: string
-  commandItems: string[]
-  onCommandQueryChange(value: string): void
-  onRunCommand(command: string): void
   onSelectConnection(connectionId: string): void
   onSelectEnvironment(environmentId: string): void
   onCreateConnection(): void
@@ -41,18 +36,23 @@ interface SideBarProps {
   onSidebarSectionExpandedChange(sectionId: string, expanded: boolean): void
   onDuplicateConnection(connectionId: string): void
   onDeleteConnection(connectionId: string): void
-  onOpenConnectionOperations(connectionId: string): void
   onOpenConnectionExplorer(connectionId: string): void
   onOpenConnectionDrawer(connectionId: string): void
+  onLoadExplorerScope(connectionId: string, scope?: string): void
   onOpenScopedQuery(connectionId: string, target: ScopedQueryTarget): void
   onCreateTab(connectionId?: string): void
   onSaveCurrentQuery(): void
-  onOpenSavedWork(savedWorkId: string): void
-  onDeleteSavedWork(savedWorkId: string): void
+  onCreateLibraryFolder(parentId?: string): void
+  onDeleteLibraryNode(nodeId: string): void
+  onMoveLibraryNode(nodeId: string, parentId?: string): void
+  onOpenLibraryItem(nodeId: string): void
+  onRenameLibraryNode(nodeId: string, name: string): void
+  onSetLibraryNodeEnvironment(nodeId: string, environmentId?: string): void
   onReopenClosedTab(closedTabId: string): void
   onExplorerFilterChange(value: string): void
   onRefreshExplorer(): void
   onSelectExplorerNode(node: ExplorerNode): void
+  onInspectExplorerNode(node: ExplorerNode): void
   onResize(width: number): void
 }
 
@@ -61,18 +61,14 @@ export function SideBar({
   width,
   connections,
   environments,
-  savedWork,
+  libraryNodes,
   closedTabs,
   explorerItems,
+  connectionExplorerItems,
   explorerSummary,
   explorerStatus,
   activeConnectionId,
   activeEnvironmentId,
-  commandPaletteEnabled,
-  commandQuery,
-  commandItems,
-  onCommandQueryChange,
-  onRunCommand,
   onSelectConnection,
   onSelectEnvironment,
   onCreateConnection,
@@ -81,24 +77,29 @@ export function SideBar({
   onSidebarSectionExpandedChange,
   onDuplicateConnection,
   onDeleteConnection,
-  onOpenConnectionOperations,
   onOpenConnectionExplorer,
   onOpenConnectionDrawer,
+  onLoadExplorerScope,
   onOpenScopedQuery,
   onCreateTab,
   onSaveCurrentQuery,
-  onOpenSavedWork,
-  onDeleteSavedWork,
+  onCreateLibraryFolder,
+  onDeleteLibraryNode,
+  onMoveLibraryNode,
+  onOpenLibraryItem,
+  onRenameLibraryNode,
+  onSetLibraryNodeEnvironment,
   onReopenClosedTab,
   onExplorerFilterChange,
   onRefreshExplorer,
   onSelectExplorerNode,
+  onInspectExplorerNode,
   onResize,
 }: SideBarProps) {
   const [connectionFilter, setConnectionFilter] = useState('')
   const connectionGroupMode = ui.connectionGroupMode ?? 'none'
   const [environmentFilter, setEnvironmentFilter] = useState('')
-  const [savedWorkFilter, setSavedWorkFilter] = useState('')
+  const [libraryFilter, setLibraryFilter] = useState('')
   const [isResizing, setIsResizing] = useState(false)
   const lastPointerX = useRef(0)
   const sidebarSectionStates = ui.sidebarSectionStates ?? {}
@@ -115,19 +116,6 @@ export function SideBar({
       return accumulator
     }, {})
   }, [connectionFilter, connectionGroupMode, connections, environments])
-  const savedWorkGroups = useMemo(() => {
-    const filtered = savedWork.filter((item) => {
-      const haystack = `${item.name} ${item.kind} ${item.folder ?? ''} ${item.tags.join(' ')}`.toLowerCase()
-      return haystack.includes(savedWorkFilter.toLowerCase())
-    })
-
-    return filtered.reduce<Record<string, SavedWorkItem[]>>((accumulator, item) => {
-      const folder = item.folder ?? 'Workspace'
-      accumulator[folder] ??= []
-      accumulator[folder].push(item)
-      return accumulator
-    }, {})
-  }, [savedWork, savedWorkFilter])
   const filteredEnvironments = useMemo(() => {
     const filter = environmentFilter.toLowerCase()
 
@@ -185,16 +173,18 @@ export function SideBar({
           connectionGroupMode={connectionGroupMode}
           connectionGroups={connectionGroups}
           environments={environments}
+          explorerNodes={connectionExplorerItems}
+          explorerStatus={explorerStatus}
           sectionStates={sidebarSectionStates}
           onConnectionFilterChange={setConnectionFilter}
           onConnectionGroupModeChange={onConnectionGroupModeChange}
           onSidebarSectionExpandedChange={onSidebarSectionExpandedChange}
           onCreateConnection={onCreateConnection}
           onDeleteConnection={onDeleteConnection}
-          onOpenConnectionOperations={onOpenConnectionOperations}
           onDuplicateConnection={onDuplicateConnection}
           onOpenConnectionExplorer={onOpenConnectionExplorer}
           onOpenConnectionDrawer={onOpenConnectionDrawer}
+          onLoadExplorerScope={onLoadExplorerScope}
           onOpenScopedQuery={onOpenScopedQuery}
           onCreateTab={onCreateTab}
           onSelectConnection={onSelectConnection}
@@ -215,49 +205,36 @@ export function SideBar({
       {ui.activeSidebarPane === 'explorer' ? (
         <ExplorerPane
           activeConnection={connections.find((connection) => connection.id === activeConnectionId)}
+          activeEnvironment={environments.find((environment) => environment.id === activeEnvironmentId)}
           explorerFilter={ui.explorerFilter}
           explorerItems={explorerItems}
           explorerStatus={explorerStatus}
           explorerSummary={explorerSummary}
           onExplorerFilterChange={onExplorerFilterChange}
           onRefreshExplorer={onRefreshExplorer}
+          onInspectExplorerNode={onInspectExplorerNode}
           onSelectExplorerNode={onSelectExplorerNode}
           onOpenScopedQuery={(target) => onOpenScopedQuery(activeConnectionId, target)}
         />
       ) : null}
 
-      {ui.activeSidebarPane === 'saved-work' ? (
-        <SavedWorkPane
+      {ui.activeSidebarPane === 'library' ? (
+        <LibraryPane
           closedTabs={closedTabs}
-          savedWorkFilter={savedWorkFilter}
-          savedWorkGroups={savedWorkGroups}
+          environments={environments}
+          libraryFilter={libraryFilter}
+          libraryNodes={libraryNodes}
           sectionStates={sidebarSectionStates}
-          onDeleteSavedWork={onDeleteSavedWork}
-          onOpenSavedWork={onOpenSavedWork}
+          onCreateFolder={onCreateLibraryFolder}
+          onDeleteNode={onDeleteLibraryNode}
+          onMoveNode={onMoveLibraryNode}
+          onOpenLibraryItem={onOpenLibraryItem}
+          onRenameNode={onRenameLibraryNode}
+          onSetNodeEnvironment={onSetLibraryNodeEnvironment}
           onReopenClosedTab={onReopenClosedTab}
           onSidebarSectionExpandedChange={onSidebarSectionExpandedChange}
           onSaveCurrentQuery={onSaveCurrentQuery}
-          onSavedWorkFilterChange={setSavedWorkFilter}
-        />
-      ) : null}
-
-      {ui.activeSidebarPane === 'search' ? (
-        <SearchPane
-          commandPaletteEnabled={commandPaletteEnabled}
-          commandItems={commandItems}
-          commandQuery={commandQuery}
-          connections={connections}
-          environments={environments}
-          sectionStates={sidebarSectionStates}
-          savedWork={savedWork}
-          closedTabs={closedTabs}
-          onCommandQueryChange={onCommandQueryChange}
-          onRunCommand={onRunCommand}
-          onOpenSavedWork={onOpenSavedWork}
-          onReopenClosedTab={onReopenClosedTab}
-          onSidebarSectionExpandedChange={onSidebarSectionExpandedChange}
-          onSelectConnection={onSelectConnection}
-          onSelectEnvironment={onSelectEnvironment}
+          onLibraryFilterChange={setLibraryFilter}
         />
       ) : null}
     </aside>

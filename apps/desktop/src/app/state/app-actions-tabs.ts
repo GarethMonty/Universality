@@ -1,13 +1,18 @@
 import { useCallback, useMemo } from 'react'
+import type {
+  LibraryItemKind,
+  QueryTabState,
+  WorkspaceSnapshot,
+} from '@datapadplusplus/shared-types'
 import { desktopClient } from '../../services/runtime/client'
 import { ensureWorkspaceUnlocked } from './app-state-factories'
-import { savedWorkItemForTab } from './app-state-selectors'
 import type { Actions, AppActionContext } from './app-state-types'
 
 type QueryTabActions = Pick<
   Actions,
   | 'selectTab'
   | 'createTab'
+  | 'createExplorerTab'
   | 'createScopedTab'
   | 'closeTab'
   | 'reopenClosedTab'
@@ -17,6 +22,14 @@ type QueryTabActions = Pick<
   | 'renameTab'
   | 'saveCurrentQuery'
   | 'saveAndCloseTab'
+  | 'createLibraryFolder'
+  | 'renameLibraryNode'
+  | 'moveLibraryNode'
+  | 'setLibraryNodeEnvironment'
+  | 'deleteLibraryNode'
+  | 'openLibraryItem'
+  | 'saveQueryTabToLibrary'
+  | 'saveQueryTabToLocalFile'
   | 'openSavedWork'
   | 'deleteSavedWork'
 >
@@ -41,6 +54,17 @@ export function useQueryTabActions({
     async (connectionId) => {
       try {
         applyPayload(await desktopClient.createQueryTab(connectionId))
+      } catch (error) {
+        handleError(error)
+      }
+    },
+    [applyPayload, handleError],
+  )
+
+  const createExplorerTab = useCallback<Actions['createExplorerTab']>(
+    async (connectionId) => {
+      try {
+        applyPayload(await desktopClient.createExplorerTab(connectionId))
       } catch (error) {
         handleError(error)
       }
@@ -129,13 +153,40 @@ export function useQueryTabActions({
     async (tabId) => {
       try {
         if (!state.payload) {
-          throw new Error('Workspace is not ready for saved work.')
+          throw new Error('Workspace is not ready for Library saves.')
         }
         ensureWorkspaceUnlocked(state.payload)
 
-        const savedWorkItem = savedWorkItemForTab(state.payload.snapshot, tabId)
+        const tab = state.payload.snapshot.tabs.find((item) => item.id === tabId)
+        if (!tab) {
+          throw new Error('The active query tab cannot be saved yet.')
+        }
+        if (tab.tabKind === 'explorer') {
+          return
+        }
+        if (tab.saveTarget?.kind === 'local-file') {
+          applyPayload(
+            await desktopClient.saveQueryTabToLocalFile({
+              tabId,
+              path: tab.saveTarget.path,
+            }),
+          )
+          return
+        }
 
-        applyPayload(await desktopClient.saveQueryTab(tabId, savedWorkItem))
+        applyPayload(
+          await desktopClient.saveQueryTabToLibrary({
+            tabId,
+            itemId:
+              tab.saveTarget?.kind === 'library'
+                ? tab.saveTarget.libraryItemId
+                : tab.savedQueryId,
+            folderId: 'library-root-queries',
+            name: tab.title,
+            kind: inferLibraryItemKind(state.payload.snapshot, tab),
+            tags: [],
+          }),
+        )
       } catch (error) {
         handleError(error)
       }
@@ -147,13 +198,133 @@ export function useQueryTabActions({
     async (tabId) => {
       try {
         if (!state.payload) {
-          throw new Error('Workspace is not ready for saved work.')
+          throw new Error('Workspace is not ready for Library saves.')
         }
         ensureWorkspaceUnlocked(state.payload)
 
-        const savedWorkItem = savedWorkItemForTab(state.payload.snapshot, tabId)
-        await desktopClient.saveQueryTab(tabId, savedWorkItem)
+        const tab = state.payload.snapshot.tabs.find((item) => item.id === tabId)
+        if (!tab) {
+          throw new Error('The active query tab cannot be saved yet.')
+        }
+        if (tab.tabKind === 'explorer') {
+          applyPayload(await desktopClient.closeQueryTab(tabId))
+          return
+        }
+        if (tab.saveTarget?.kind === 'local-file') {
+          await desktopClient.saveQueryTabToLocalFile({
+            tabId,
+            path: tab.saveTarget.path,
+          })
+        } else {
+          await desktopClient.saveQueryTabToLibrary({
+            tabId,
+            itemId:
+              tab.saveTarget?.kind === 'library'
+                ? tab.saveTarget.libraryItemId
+                : tab.savedQueryId,
+            folderId: 'library-root-queries',
+            name: tab.title,
+            kind: inferLibraryItemKind(state.payload.snapshot, tab),
+            tags: [],
+          })
+        }
         applyPayload(await desktopClient.closeQueryTab(tabId))
+      } catch (error) {
+        handleError(error)
+      }
+    },
+    [applyPayload, handleError, state.payload],
+  )
+
+  const createLibraryFolder = useCallback<Actions['createLibraryFolder']>(
+    async (request) => {
+      try {
+        ensureWorkspaceUnlocked(state.payload)
+        applyPayload(await desktopClient.createLibraryFolder(request))
+      } catch (error) {
+        handleError(error)
+      }
+    },
+    [applyPayload, handleError, state.payload],
+  )
+
+  const renameLibraryNode = useCallback<Actions['renameLibraryNode']>(
+    async (request) => {
+      try {
+        ensureWorkspaceUnlocked(state.payload)
+        applyPayload(await desktopClient.renameLibraryNode(request))
+      } catch (error) {
+        handleError(error)
+      }
+    },
+    [applyPayload, handleError, state.payload],
+  )
+
+  const moveLibraryNode = useCallback<Actions['moveLibraryNode']>(
+    async (request) => {
+      try {
+        ensureWorkspaceUnlocked(state.payload)
+        applyPayload(await desktopClient.moveLibraryNode(request))
+      } catch (error) {
+        handleError(error)
+      }
+    },
+    [applyPayload, handleError, state.payload],
+  )
+
+  const setLibraryNodeEnvironment = useCallback<Actions['setLibraryNodeEnvironment']>(
+    async (request) => {
+      try {
+        ensureWorkspaceUnlocked(state.payload)
+        applyPayload(await desktopClient.setLibraryNodeEnvironment(request))
+      } catch (error) {
+        handleError(error)
+      }
+    },
+    [applyPayload, handleError, state.payload],
+  )
+
+  const deleteLibraryNode = useCallback<Actions['deleteLibraryNode']>(
+    async (request) => {
+      try {
+        ensureWorkspaceUnlocked(state.payload)
+        applyPayload(await desktopClient.deleteLibraryNode(request))
+      } catch (error) {
+        handleError(error)
+      }
+    },
+    [applyPayload, handleError, state.payload],
+  )
+
+  const openLibraryItem = useCallback<Actions['openLibraryItem']>(
+    async (libraryItemId) => {
+      try {
+        ensureWorkspaceUnlocked(state.payload)
+        applyPayload(await desktopClient.openLibraryItem(libraryItemId))
+      } catch (error) {
+        handleError(error)
+      }
+    },
+    [applyPayload, handleError, state.payload],
+  )
+
+  const saveQueryTabToLibrary = useCallback<Actions['saveQueryTabToLibrary']>(
+    async (request) => {
+      try {
+        ensureWorkspaceUnlocked(state.payload)
+        applyPayload(await desktopClient.saveQueryTabToLibrary(request))
+      } catch (error) {
+        handleError(error)
+      }
+    },
+    [applyPayload, handleError, state.payload],
+  )
+
+  const saveQueryTabToLocalFile = useCallback<Actions['saveQueryTabToLocalFile']>(
+    async (request) => {
+      try {
+        ensureWorkspaceUnlocked(state.payload)
+        applyPayload(await desktopClient.saveQueryTabToLocalFile(request))
       } catch (error) {
         handleError(error)
       }
@@ -189,6 +360,7 @@ export function useQueryTabActions({
     () => ({
       selectTab,
       createTab,
+      createExplorerTab,
       createScopedTab,
       closeTab,
       reopenClosedTab,
@@ -198,23 +370,59 @@ export function useQueryTabActions({
       renameTab,
       saveCurrentQuery,
       saveAndCloseTab,
+      createLibraryFolder,
+      renameLibraryNode,
+      moveLibraryNode,
+      setLibraryNodeEnvironment,
+      deleteLibraryNode,
+      openLibraryItem,
+      saveQueryTabToLibrary,
+      saveQueryTabToLocalFile,
       openSavedWork,
       deleteSavedWork,
     }),
     [
       closeTab,
+      createLibraryFolder,
+      createExplorerTab,
       createScopedTab,
       createTab,
+      deleteLibraryNode,
       deleteSavedWork,
+      moveLibraryNode,
+      openLibraryItem,
       openSavedWork,
       renameTab,
+      renameLibraryNode,
       reorderTabs,
       reopenClosedTab,
       saveAndCloseTab,
       saveCurrentQuery,
+      saveQueryTabToLibrary,
+      saveQueryTabToLocalFile,
       selectTab,
+      setLibraryNodeEnvironment,
       updateQuery,
       updateQueryBuilderState,
     ],
   )
+}
+
+function inferLibraryItemKind(
+  snapshot: WorkspaceSnapshot,
+  tab: QueryTabState,
+): LibraryItemKind {
+  const existingItemId =
+    tab.saveTarget?.kind === 'library' ? tab.saveTarget.libraryItemId : tab.savedQueryId
+  const existingNode = snapshot.libraryNodes.find((node) => node.id === existingItemId)
+
+  if (existingNode?.kind && existingNode.kind !== 'folder') {
+    return existingNode.kind
+  }
+
+  if (/\.(ps1|sh|bash|bat|cmd|js|ts|py)$/i.test(tab.title)) {
+    return 'script'
+  }
+
+  return 'query'
 }

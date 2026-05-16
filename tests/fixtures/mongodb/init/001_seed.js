@@ -34,7 +34,93 @@ db.products.updateOne(
   { upsert: true },
 );
 
+db.products.updateOne(
+  { sku: 'nova-chair' },
+  {
+    $set: {
+      sku: 'nova-chair',
+      name: 'Nova Chair',
+      category: 'furniture',
+      channels: ['store'],
+      inventory: { reserved: 2, available: 24 },
+      price: 129.5,
+      updatedAt: new Date(),
+    },
+  },
+  { upsert: true },
+);
+
+db.accounts.updateOne(
+  { _id: 1 },
+  {
+    $set: {
+      name: 'Northwind',
+      status: 'active',
+      tier: 'enterprise',
+      contacts: [{ name: 'Avery Stone', role: 'buyer', email: 'avery@example.test' }],
+      updatedAt: new Date(),
+    },
+  },
+  { upsert: true },
+);
+
+db.accounts.updateOne(
+  { _id: 2 },
+  {
+    $set: {
+      name: 'Contoso',
+      status: 'active',
+      tier: 'growth',
+      contacts: [{ name: 'Jordan Lee', role: 'ops', email: 'jordan@example.test' }],
+      updatedAt: new Date(),
+    },
+  },
+  { upsert: true },
+);
+
+db.orders.updateOne(
+  { _id: 101 },
+  {
+    $set: {
+      accountId: 1,
+      status: 'processing',
+      totalAmount: 128.4,
+      items: [
+        { sku: 'luna-lamp', quantity: 2, unitPrice: 49.99 },
+        { sku: 'nova-chair', quantity: 1, unitPrice: 28.42 },
+      ],
+      events: [
+        { type: 'created', at: new Date('2026-01-01T00:00:00Z') },
+        { type: 'paid', at: new Date('2026-01-01T00:01:30Z') },
+      ],
+      updatedAt: new Date(),
+    },
+  },
+  { upsert: true },
+);
+
+db.orders.updateOne(
+  { _id: 102 },
+  {
+    $set: {
+      accountId: 2,
+      status: 'fulfilled',
+      totalAmount: 88,
+      items: [{ sku: 'aurora-desk', quantity: 1, unitPrice: 88 }],
+      events: [
+        { type: 'created', at: new Date('2026-01-01T00:02:00Z') },
+        { type: 'fulfilled', at: new Date('2026-01-01T00:10:00Z') },
+      ],
+      updatedAt: new Date(),
+    },
+  },
+  { upsert: true },
+);
+
 db.products.createIndex({ sku: 1 }, { unique: true });
+db.products.createIndex({ category: 1 });
+db.accounts.createIndex({ status: 1, tier: 1 });
+db.orders.createIndex({ accountId: 1, status: 1 });
 
 const perfTargetCount = 100000;
 const perfCollection = db.perfDocuments;

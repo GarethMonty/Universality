@@ -1,5 +1,5 @@
 import type { BootstrapPayload, CreateScopedQueryTabRequest, QueryTabReorderRequest, UpdateQueryBuilderStateRequest } from '@datapadplusplus/shared-types'
-import { closeQueryTab, createQueryTabForConnection, createScopedQueryTabInSnapshot, renameQueryTab, reopenClosedQueryTab, reorderQueryTabsInSnapshot, upsertTab } from './browser-tabs'
+import { closeQueryTab, createExplorerTabInSnapshot, createQueryTabForConnection, createScopedQueryTabInSnapshot, renameQueryTab, reopenClosedQueryTab, reorderQueryTabsInSnapshot, upsertTab } from './browser-tabs'
 import { buildBrowserPayload, cloneSnapshot, findConnection, findTab, loadBrowserSnapshot, saveBrowserSnapshot } from './browser-store'
 import { isTauriRuntime, invokeDesktop } from './desktop-bridge'
 
@@ -70,6 +70,16 @@ export const clientTabs = {
 
     const tab = createQueryTabForConnection(next, connection, true)
     const snapshot = upsertTab(next, tab)
+    saveBrowserSnapshot(snapshot)
+    return buildBrowserPayload(snapshot)
+  },
+
+  async createExplorerTab(connectionId: string): Promise<BootstrapPayload> {
+    if (isTauriRuntime()) {
+      return invokeDesktop<BootstrapPayload>('create_explorer_tab', { connectionId })
+    }
+
+    const snapshot = createExplorerTabInSnapshot(loadBrowserSnapshot(), connectionId)
     saveBrowserSnapshot(snapshot)
     return buildBrowserPayload(snapshot)
   },

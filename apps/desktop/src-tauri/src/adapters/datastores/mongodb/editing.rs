@@ -2,7 +2,7 @@ use mongodb::bson::{self, doc, oid::ObjectId, Bson, Document};
 use serde_json::{json, Value};
 
 use super::super::super::*;
-use super::connection::mongodb_client;
+use super::connection::{mongodb_client, mongodb_database_name};
 
 pub(super) async fn execute_mongodb_data_edit(
     adapter: &super::MongoDbAdapter,
@@ -85,10 +85,7 @@ pub(super) async fn execute_mongodb_data_edit(
     }
 
     let client = mongodb_client(connection).await?;
-    let database_name = connection
-        .database
-        .clone()
-        .unwrap_or_else(|| "admin".into());
+    let database_name = mongodb_database_name(connection);
     let collection = client
         .database(&database_name)
         .collection::<Document>(collection_name);

@@ -18,7 +18,40 @@ export function EngineIcon({ connection }: { connection: ConnectionProfile }) {
   )
 }
 
-export function ExplorerNodeIcon({ kind }: { kind: string }) {
+export function ExplorerNodeIcon({
+  connection,
+  kind,
+}: {
+  connection?: ConnectionProfile
+  kind: string
+}) {
+  if (
+    connection &&
+    [
+      'bucket',
+      'database',
+      'databases',
+      'dataset',
+      'datasets',
+      'graph',
+      'graphs',
+      'keyspace',
+      'keyspaces',
+      'namespace',
+      'namespaces',
+      'schema',
+      'schemas',
+    ].includes(kind)
+  ) {
+    return (
+      <DatastoreIcon
+        className="tree-node-datastore-icon"
+        decorative
+        engine={connection.engine}
+      />
+    )
+  }
+
   if (
     [
       'bucket',

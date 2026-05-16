@@ -6,6 +6,7 @@ mod datastore_commands;
 mod environments;
 mod execution;
 mod fixtures;
+mod library;
 mod preferences;
 mod profiles;
 mod query_tabs;

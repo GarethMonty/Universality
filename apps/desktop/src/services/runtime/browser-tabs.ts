@@ -1,4 +1,4 @@
-import type { ConnectionProfile, CreateScopedQueryTabRequest, QueryTabReorderRequest, QueryTabState, WorkspaceSnapshot } from '@datapadplusplus/shared-types'
+import type { ConnectionProfile, CreateScopedQueryTabRequest, QueryTabReorderRequest, QueryTabState, ScopedQueryTarget, WorkspaceSnapshot } from '@datapadplusplus/shared-types'
 import { createId, defaultQueryTextForConnection, editorLabelForConnection, languageForConnection } from '../../app/state/helpers'
 import { cloneSnapshot, findTab } from './browser-store'
 
@@ -12,6 +12,7 @@ export function createQueryTabForConnection(
   return {
     id: createId('tab'),
     title: defaultQueryTabTitle(snapshot, connection),
+    tabKind: 'query',
     connectionId: connection.id,
     environmentId: connection.environmentIds[0] ?? snapshot.environments[0]?.id ?? 'env-dev',
     family: connection.family,
@@ -22,6 +23,53 @@ export function createQueryTabForConnection(
     dirty,
     history: [],
   }
+}
+
+export function createExplorerTabInSnapshot(
+  snapshot: WorkspaceSnapshot,
+  connectionId: string,
+): WorkspaceSnapshot {
+  const next = cloneSnapshot(snapshot)
+  const connection = next.connections.find((item) => item.id === connectionId)
+
+  if (!connection) {
+    return next
+  }
+
+  const existingExplorerTab = next.tabs.find(
+    (tab) => tab.connectionId === connection.id && tab.tabKind === 'explorer',
+  )
+
+  if (existingExplorerTab) {
+    const focused = upsertTab(next, existingExplorerTab)
+    focused.ui.activeActivity = 'connections'
+    focused.ui.activeSidebarPane = 'connections'
+    focused.ui.explorerView = 'structure'
+    focused.ui.rightDrawer = 'none'
+    return focused
+  }
+
+  const tab: QueryTabState = {
+    id: createId('tab'),
+    title: uniqueExplorerTabTitle(next, connection),
+    tabKind: 'explorer',
+    connectionId: connection.id,
+    environmentId: connection.environmentIds[0] ?? next.environments[0]?.id ?? 'env-dev',
+    family: connection.family,
+    language: 'text',
+    editorLabel: 'Explorer',
+    queryText: '',
+    status: 'idle',
+    dirty: false,
+    history: [],
+  }
+
+  const focused = upsertTab(next, tab)
+  focused.ui.activeActivity = 'connections'
+  focused.ui.activeSidebarPane = 'connections'
+  focused.ui.explorerView = 'structure'
+  focused.ui.rightDrawer = 'none'
+  return focused
 }
 
 
@@ -42,13 +90,31 @@ export function createScopedQueryTabInSnapshot(
     connection.engine === 'mongodb' && request.target.preferredBuilder === 'mongo-find'
       ? 'mongo-find'
       : undefined
+  const legacyTitle = scopedQueryTitleCandidate(
+    connection,
+    targetLabel,
+    builderKind === 'mongo-find',
+  )
+  const existingScopedTab = next.tabs.find(
+    (tab) =>
+      tab.connectionId === request.connectionId &&
+      (tab.scopedTarget
+        ? scopedTargetsMatch(tab.scopedTarget, request.target)
+        : tab.title === legacyTitle),
+  )
+
+  if (existingScopedTab) {
+    return upsertTab(next, existingScopedTab)
+  }
+
   const queryText =
     builderKind === 'mongo-find'
-      ? mongoFindQueryText(targetLabel, 50)
+      ? mongoFindQueryText(targetLabel, 50, connection.database)
       : (request.target.queryTemplate ?? defaultQueryTextForConnection(connection))
   const tab: QueryTabState = {
     id: createId('tab'),
     title: uniqueScopedQueryTitle(next, connection, targetLabel, builderKind === 'mongo-find'),
+    tabKind: 'query',
     connectionId: connection.id,
     environmentId:
       request.environmentId ?? connection.environmentIds[0] ?? next.environments[0]?.id ?? 'env-dev',
@@ -56,6 +122,7 @@ export function createScopedQueryTabInSnapshot(
     language: languageForConnection(connection),
     editorLabel: editorLabelForConnection(connection),
     queryText,
+    scopedTarget: request.target,
     builderState:
       builderKind === 'mongo-find'
         ? {
@@ -76,6 +143,39 @@ export function createScopedQueryTabInSnapshot(
   }
 
   return upsertTab(next, tab)
+}
+
+function uniqueExplorerTabTitle(snapshot: WorkspaceSnapshot, connection: ConnectionProfile) {
+  const candidate = `Explorer - ${connection.name}`
+  const titles = new Set(snapshot.tabs.map((tab) => tab.title))
+
+  if (!titles.has(candidate)) {
+    return candidate
+  }
+
+  let index = 2
+  let title = `${candidate} ${index}`
+
+  while (titles.has(title)) {
+    index += 1
+    title = `${candidate} ${index}`
+  }
+
+  return title
+}
+
+export function scopedTargetsMatch(left: ScopedQueryTarget, right: ScopedQueryTarget) {
+  return (
+    left.kind === right.kind &&
+    left.label === right.label &&
+    (left.scope ?? '') === (right.scope ?? '') &&
+    (left.preferredBuilder ?? '') === (right.preferredBuilder ?? '') &&
+    scopedPathKey(left.path) === scopedPathKey(right.path)
+  )
+}
+
+function scopedPathKey(path?: string[]) {
+  return (path ?? []).join('\u001f')
 }
 
 
@@ -103,8 +203,7 @@ export function uniqueScopedQueryTitle(
   label: string,
   hasBuilder: boolean,
 ) {
-  const extension = tabTitleParts(connection).extension
-  const candidate = hasBuilder ? `${label}.find.${extension}` : `${label}.${extension}`
+  const candidate = scopedQueryTitleCandidate(connection, label, hasBuilder)
   const titles = new Set(snapshot.tabs.map((tab) => tab.title))
 
   if (!titles.has(candidate)) {
@@ -125,11 +224,23 @@ export function uniqueScopedQueryTitle(
   return title
 }
 
+function scopedQueryTitleCandidate(
+  connection: ConnectionProfile,
+  label: string,
+  hasBuilder: boolean,
+) {
+  const extension = tabTitleParts(connection).extension
+  return hasBuilder ? `${label}.find.${extension}` : `${label}.${extension}`
+}
 
 
-export function mongoFindQueryText(collection: string, limit: number) {
+
+export function mongoFindQueryText(collection: string, limit: number, database?: string) {
+  const trimmedDatabase = database?.trim()
+
   return JSON.stringify(
     {
+      ...(trimmedDatabase ? { database: trimmedDatabase } : {}),
       collection,
       filter: {},
       limit,

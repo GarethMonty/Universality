@@ -154,6 +154,7 @@ export function buildDiagnosticsReport(
       environments: snapshot.environments.length,
       tabs: snapshot.tabs.length,
       savedWork: snapshot.savedWork.length,
+      library: snapshot.libraryNodes.length,
     },
     warnings,
   }

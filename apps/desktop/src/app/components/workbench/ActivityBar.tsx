@@ -4,9 +4,7 @@ import {
   ConnectionsIcon,
   EnvironmentsIcon,
   LightThemeIcon,
-  LockIcon,
   SavedWorkIcon,
-  SearchIcon,
   SettingsIcon,
   ThemeIcon,
 } from './icons'
@@ -15,13 +13,10 @@ import { AppLogo } from './AppLogo'
 interface ActivityBarProps {
   activeActivity: UiActivity
   sidebarCollapsed: boolean
-  commandPaletteEnabled: boolean
-  isLocked: boolean
   theme: WorkspaceSnapshot['preferences']['theme']
   onToggleSidebar(): void
   onSelectActivity(activity: UiActivity): void
   onToggleTheme(): void
-  onToggleLock(): void
 }
 
 const activityItems = [
@@ -32,16 +27,10 @@ const activityItems = [
     icon: ConnectionsIcon,
   },
   {
-    id: 'saved-work',
-    label: 'Saved Work',
-    tooltip: 'Saved Work: reopen saved queries, snippets, snapshots, and recovered tabs.',
+    id: 'library',
+    label: 'Library',
+    tooltip: 'Library: organize saved queries, scripts, snippets, notes, and snapshots.',
     icon: SavedWorkIcon,
-  },
-  {
-    id: 'search',
-    label: 'Search',
-    tooltip: 'Search: open the command palette and quickly jump to workbench actions.',
-    icon: SearchIcon,
   },
   {
     id: 'environments',
@@ -59,13 +48,10 @@ const activityItems = [
 export function ActivityBar({
   activeActivity,
   sidebarCollapsed,
-  commandPaletteEnabled,
-  isLocked,
   theme,
   onToggleSidebar,
   onSelectActivity,
   onToggleTheme,
-  onToggleLock,
 }: ActivityBarProps) {
   const ThemeGlyph = theme === 'dark' ? LightThemeIcon : ThemeIcon
 
@@ -85,25 +71,23 @@ export function ActivityBar({
       </div>
 
       <div className="activity-stack">
-        {activityItems
-          .filter((item) => commandPaletteEnabled || item.id !== 'search')
-          .map((item) => {
-            const Icon = item.icon
-            const active = activeActivity === item.id
+        {activityItems.map((item) => {
+          const Icon = item.icon
+          const active = activeActivity === item.id
 
-            return (
-              <button
-                key={item.id}
-                type="button"
-                className={`activity-button${active ? ' is-active' : ''}`}
-                aria-label={`${item.label} view`}
-                title={item.tooltip}
-                onClick={() => selectActivity(item.id)}
-              >
-                <Icon className="activity-icon" />
-              </button>
-            )
-          })}
+          return (
+            <button
+              key={item.id}
+              type="button"
+              className={`activity-button${active ? ' is-active' : ''}`}
+              aria-label={`${item.label} view`}
+              title={item.tooltip}
+              onClick={() => selectActivity(item.id)}
+            >
+              <Icon className="activity-icon" />
+            </button>
+          )
+        })}
       </div>
 
       <div className="activity-spacer" />
@@ -130,19 +114,6 @@ export function ActivityBar({
           onClick={onToggleTheme}
         >
           <ThemeGlyph className="activity-icon" />
-        </button>
-        <button
-          type="button"
-          className={`activity-button${isLocked ? ' is-alert' : ''}`}
-          aria-label={isLocked ? 'Unlock workspace' : 'Lock workspace'}
-          title={
-            isLocked
-              ? 'Unlock workspace to test connections, run queries, and export data.'
-              : 'Lock workspace and pause privileged actions that may touch secrets or data.'
-          }
-          onClick={onToggleLock}
-        >
-          <LockIcon className="activity-icon" />
         </button>
       </div>
     </aside>

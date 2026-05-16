@@ -1,10 +1,11 @@
 import { spawnSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import net from 'node:net'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 
 const root = dirname(fileURLToPath(import.meta.url))
+const generatedEnvPath = join(root, '.generated.env')
 const requestedProfiles = new Set(
   [
     process.argv[2],
@@ -15,6 +16,37 @@ const requestedProfiles = new Set(
     .map((value) => value.trim())
     .filter(Boolean),
 )
+
+function loadGeneratedEnvironment() {
+  if (!existsSync(generatedEnvPath)) {
+    return
+  }
+
+  for (const line of readFileSync(generatedEnvPath, 'utf8').split(/\r?\n/)) {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith('#')) {
+      continue
+    }
+
+    const separatorIndex = trimmed.indexOf('=')
+    if (separatorIndex === -1) {
+      continue
+    }
+
+    const key = trimmed.slice(0, separatorIndex)
+    const value = trimmed.slice(separatorIndex + 1)
+
+    if (!process.env[key]) {
+      process.env[key] = value
+    }
+  }
+}
+
+function fixturePort(envName, fallback) {
+  return Number.parseInt(process.env[envName] ?? String(fallback), 10)
+}
+
+loadGeneratedEnvironment()
 
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
@@ -122,6 +154,93 @@ function seedRedisPerfKeys(container, command = 'redis-cli') {
       commands.push(redisProtocolCommand(['EXPIRE', key, String(1800 + (index % 7200))]))
     }
   }
+
+  docker(['exec', '-i', container, command, '--pipe'], {
+    input: commands.join(''),
+  })
+}
+
+function seedKeyValueDomain(container, command = 'redis-cli') {
+  if (!containerRunning(container)) {
+    return
+  }
+
+  const commands = [
+    redisProtocolCommand([
+      'DEL',
+      'account:1',
+      'account:2',
+      'product:luna-lamp',
+      'product:aurora-desk',
+      'orders:recent',
+      'account:1:segments',
+      'products:inventory',
+      'stream:orders',
+    ]),
+    redisProtocolCommand([
+      'SET',
+      'account:1',
+      JSON.stringify({ id: 1, name: 'Northwind', status: 'active', tier: 'enterprise' }),
+    ]),
+    redisProtocolCommand([
+      'SET',
+      'account:2',
+      JSON.stringify({ id: 2, name: 'Contoso', status: 'active', tier: 'growth' }),
+    ]),
+    redisProtocolCommand([
+      'HSET',
+      'product:luna-lamp',
+      'sku',
+      'luna-lamp',
+      'name',
+      'Luna Lamp',
+      'category',
+      'lighting',
+      'inventory_available',
+      '18',
+      'price',
+      '49.99',
+    ]),
+    redisProtocolCommand([
+      'HSET',
+      'product:aurora-desk',
+      'sku',
+      'aurora-desk',
+      'name',
+      'Aurora Desk',
+      'category',
+      'furniture',
+      'inventory_available',
+      '8',
+      'price',
+      '349.00',
+    ]),
+    redisProtocolCommand(['RPUSH', 'orders:recent', '101', '102', '103']),
+    redisProtocolCommand(['SADD', 'account:1:segments', 'enterprise', 'beta', 'priority-support']),
+    redisProtocolCommand(['ZADD', 'products:inventory', '18', 'luna-lamp', '8', 'aurora-desk', '24', 'nova-chair']),
+    redisProtocolCommand([
+      'XADD',
+      'stream:orders',
+      '1767225600000-0',
+      'order_id',
+      '101',
+      'account_id',
+      '1',
+      'status',
+      'processing',
+    ]),
+    redisProtocolCommand([
+      'XADD',
+      'stream:orders',
+      '1767225660000-0',
+      'order_id',
+      '102',
+      'account_id',
+      '2',
+      'status',
+      'fulfilled',
+    ]),
+  ]
 
   docker(['exec', '-i', container, command, '--pipe'], {
     input: commands.join(''),
@@ -237,6 +356,7 @@ async function seedCore() {
   }
 
   if (containerRunning('datapadplusplus-redis')) {
+    seedKeyValueDomain('datapadplusplus-redis')
     docker([
       'exec',
       'datapadplusplus-redis',
@@ -267,6 +387,7 @@ async function seedCore() {
 
 async function seedCache() {
   if (shouldSeed('datapadplusplus-valkey', 'cache')) {
+    seedKeyValueDomain('datapadplusplus-valkey', 'valkey-cli')
     docker([
       'exec',
       'datapadplusplus-valkey',
@@ -286,8 +407,17 @@ async function seedCache() {
 
   if (shouldSeed('datapadplusplus-memcached', 'cache')) {
     await tcpRequest(
-      11212,
-      'set cache:feature-flags 0 3600 30\r\n{"beta":true,"region":"local"}\r\nquit\r\n',
+      fixturePort('DATAPADPLUSPLUS_MEMCACHED_PORT', 11212),
+      [
+        'set cache:feature-flags 0 3600 30',
+        '{"beta":true,"region":"local"}',
+        'set account:1 0 3600 65',
+        '{"id":1,"name":"Northwind","status":"active","tier":"enterprise"}',
+        'set product:luna-lamp 0 3600 77',
+        '{"sku":"luna-lamp","name":"Luna Lamp","inventory_available":18,"price":49.99}',
+        'quit',
+        '',
+      ].join('\r\n'),
     )
   }
 }
@@ -334,14 +464,15 @@ async function seedAnalytics() {
   }
 
   if (shouldSeed('datapadplusplus-influxdb', 'analytics')) {
-    await httpRequest({ port: 8087, path: '/query?q=CREATE+DATABASE+metrics' })
+    const influxPort = fixturePort('DATAPADPLUSPLUS_INFLUXDB_PORT', 8087)
+    await httpRequest({ port: influxPort, path: '/query?q=CREATE+DATABASE+metrics' })
     for (const query of [
       'INSERT order_latency,region=eu-west-1,account_id=1 value=18.4 1767225600000000000',
       'INSERT order_latency,region=eu-west-1,account_id=1 value=21.0 1767225660000000000',
       'INSERT order_latency,region=us-east-1,account_id=2 value=32.7 1767225720000000000',
     ]) {
       await httpRequest({
-        port: 8087,
+        port: influxPort,
         path: `/query?db=metrics&q=${encodeURIComponent(query)}`,
       })
     }
@@ -350,8 +481,8 @@ async function seedAnalytics() {
 
 async function seedSearch() {
   for (const [container, port] of [
-    ['datapadplusplus-opensearch', 9201],
-    ['datapadplusplus-elasticsearch', 9202],
+    ['datapadplusplus-opensearch', fixturePort('DATAPADPLUSPLUS_OPENSEARCH_PORT', 9201)],
+    ['datapadplusplus-elasticsearch', fixturePort('DATAPADPLUSPLUS_ELASTICSEARCH_PORT', 9202)],
   ]) {
     if (!shouldSeed(container, 'search')) {
       continue
@@ -372,6 +503,49 @@ async function seedSearch() {
       },
     }).catch(() => undefined)
     await httpRequest({
+      method: 'PUT',
+      port,
+      path: '/products',
+      body: {
+        mappings: {
+          properties: {
+            sku: { type: 'keyword' },
+            name: { type: 'text', fields: { keyword: { type: 'keyword' } } },
+            category: { type: 'keyword' },
+            inventory_available: { type: 'integer' },
+            price: { type: 'double' },
+            updated_at: { type: 'date' },
+          },
+        },
+      },
+    }).catch(() => undefined)
+    await httpRequest({
+      method: 'POST',
+      port,
+      path: '/products/_doc/luna-lamp?refresh=true',
+      body: {
+        sku: 'luna-lamp',
+        name: 'Luna Lamp',
+        category: 'lighting',
+        inventory_available: 18,
+        price: 49.99,
+        updated_at: '2026-01-01T00:00:00Z',
+      },
+    })
+    await httpRequest({
+      method: 'POST',
+      port,
+      path: '/products/_doc/aurora-desk?refresh=true',
+      body: {
+        sku: 'aurora-desk',
+        name: 'Aurora Desk',
+        category: 'furniture',
+        inventory_available: 8,
+        price: 349,
+        updated_at: '2026-01-01T00:00:00Z',
+      },
+    })
+    await httpRequest({
       method: 'POST',
       port,
       path: '/orders/_doc/101?refresh=true',
@@ -383,6 +557,18 @@ async function seedSearch() {
         updated_at: '2026-01-01T00:00:00Z',
       },
     })
+    await httpRequest({
+      method: 'POST',
+      port,
+      path: '/orders/_doc/102?refresh=true',
+      body: {
+        order_id: '102',
+        account: { id: '2', name: 'Contoso' },
+        status: 'fulfilled',
+        total_amount: 88,
+        updated_at: '2026-01-01T00:02:00Z',
+      },
+    })
   }
 }
 
@@ -390,7 +576,7 @@ async function seedGraph() {
   if (shouldSeed('datapadplusplus-neo4j', 'graph')) {
     await httpRequest({
       method: 'POST',
-      port: 7475,
+      port: fixturePort('DATAPADPLUSPLUS_NEO4J_HTTP_PORT', 7475),
       path: '/db/neo4j/tx/commit',
       headers: {
         authorization: `Basic ${Buffer.from('neo4j:datapadplusplus').toString('base64')}`,
@@ -408,12 +594,13 @@ async function seedGraph() {
 
   if (shouldSeed('datapadplusplus-arangodb', 'graph')) {
     const auth = { authorization: `Basic ${Buffer.from('root:datapadplusplus').toString('base64')}` }
-    await httpRequest({ method: 'POST', port: 8529, path: '/_api/database', headers: auth, body: { name: 'datapadplusplus' } }).catch(() => undefined)
-    await httpRequest({ method: 'POST', port: 8529, path: '/_db/datapadplusplus/_api/collection', headers: auth, body: { name: 'accounts' } }).catch(() => undefined)
-    await httpRequest({ method: 'POST', port: 8529, path: '/_db/datapadplusplus/_api/collection', headers: auth, body: { name: 'orders' } }).catch(() => undefined)
+    const arangoPort = fixturePort('DATAPADPLUSPLUS_ARANGODB_PORT', 8529)
+    await httpRequest({ method: 'POST', port: arangoPort, path: '/_api/database', headers: auth, body: { name: 'datapadplusplus' } }).catch(() => undefined)
+    await httpRequest({ method: 'POST', port: arangoPort, path: '/_db/datapadplusplus/_api/collection', headers: auth, body: { name: 'accounts' } }).catch(() => undefined)
+    await httpRequest({ method: 'POST', port: arangoPort, path: '/_db/datapadplusplus/_api/collection', headers: auth, body: { name: 'orders' } }).catch(() => undefined)
     await httpRequest({
       method: 'POST',
-      port: 8529,
+      port: arangoPort,
       path: '/_db/datapadplusplus/_api/cursor',
       headers: auth,
       body: {
@@ -447,37 +634,60 @@ async function seedCloudContract() {
     return
   }
 
-  const endpoint = 'http://127.0.0.1:8001'
-  const commonHeaders = {
-    'x-amz-target': 'DynamoDB_20120810.CreateTable',
-    'content-type': 'application/x-amz-json-1.0',
-  }
-  await httpRequest({
-    method: 'POST',
-    port: 8001,
-    path: '/',
-    headers: commonHeaders,
-    body: {
-      TableName: 'orders',
-      AttributeDefinitions: [{ AttributeName: 'order_id', AttributeType: 'S' }],
-      KeySchema: [{ AttributeName: 'order_id', KeyType: 'HASH' }],
-      BillingMode: 'PAY_PER_REQUEST',
-    },
-  }).catch(() => undefined)
-  await globalThis.fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'x-amz-target': 'DynamoDB_20120810.PutItem',
-      'content-type': 'application/x-amz-json-1.0',
-    },
-    body: JSON.stringify({
-      TableName: 'orders',
-      Item: {
-        order_id: { S: '101' },
-        status: { S: 'processing' },
-        total_amount: { N: '128.40' },
+  const dynamodbPort = fixturePort('DATAPADPLUSPLUS_DYNAMODB_PORT', 8001)
+  const endpoint = `http://127.0.0.1:${dynamodbPort}`
+
+  async function dynamodb(target, body) {
+    return globalThis.fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'x-amz-target': `DynamoDB_20120810.${target}`,
+        'content-type': 'application/x-amz-json-1.0',
       },
-    }),
+      body: JSON.stringify(body),
+    })
+  }
+
+  for (const table of [
+    { name: 'accounts', key: 'account_id' },
+    { name: 'products', key: 'sku' },
+    { name: 'orders', key: 'order_id' },
+  ]) {
+    await dynamodb('CreateTable', {
+      TableName: table.name,
+      AttributeDefinitions: [{ AttributeName: table.key, AttributeType: 'S' }],
+      KeySchema: [{ AttributeName: table.key, KeyType: 'HASH' }],
+      BillingMode: 'PAY_PER_REQUEST',
+    }).catch(() => undefined)
+  }
+
+  await dynamodb('PutItem', {
+    TableName: 'accounts',
+    Item: {
+      account_id: { S: '1' },
+      name: { S: 'Northwind' },
+      status: { S: 'active' },
+      tier: { S: 'enterprise' },
+    },
+  })
+  await dynamodb('PutItem', {
+    TableName: 'products',
+    Item: {
+      sku: { S: 'luna-lamp' },
+      name: { S: 'Luna Lamp' },
+      category: { S: 'lighting' },
+      inventory_available: { N: '18' },
+      price: { N: '49.99' },
+    },
+  })
+  await dynamodb('PutItem', {
+    TableName: 'orders',
+    Item: {
+      order_id: { S: '101' },
+      account_id: { S: '1' },
+      status: { S: 'processing' },
+      total_amount: { N: '128.40' },
+    },
   })
 }
 

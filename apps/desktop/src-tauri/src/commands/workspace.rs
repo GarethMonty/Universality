@@ -16,13 +16,16 @@ use crate::{
             DataEditExecutionRequest, DataEditExecutionResponse, DataEditPlanRequest,
             DataEditPlanResponse, DatastoreExperienceResponse, EnvironmentProfile,
             ExecutionRequest, ExecutionResponse, ExplorerInspectRequest, ExplorerInspectResponse,
-            ExplorerRequest, ExplorerResponse, ExportBundle, LocalDatabaseCreateRequest,
-            LocalDatabaseCreateResult, LocalDatabasePickRequest, LocalDatabasePickResult,
-            OperationExecutionRequest, OperationExecutionResponse, OperationManifestRequest,
-            OperationManifestResponse, OperationPlanRequest, OperationPlanResponse,
-            PermissionInspectionRequest, PermissionInspectionResponse, QueryTabReorderRequest,
-            ResultPageRequest, ResultPageResponse, SavedWorkItem, StructureRequest,
-            StructureResponse, UpdateQueryBuilderStateRequest, UpdateUiStateRequest,
+            ExplorerRequest, ExplorerResponse, ExportBundle, LibraryCreateFolderRequest,
+            LibraryDeleteNodeRequest, LibraryMoveNodeRequest, LibraryRenameNodeRequest,
+            LibrarySetEnvironmentRequest, LocalDatabaseCreateRequest, LocalDatabaseCreateResult,
+            LocalDatabasePickRequest, LocalDatabasePickResult, OperationExecutionRequest,
+            OperationExecutionResponse, OperationManifestRequest, OperationManifestResponse,
+            OperationPlanRequest, OperationPlanResponse, PermissionInspectionRequest,
+            PermissionInspectionResponse, QueryTabReorderRequest, ResultPageRequest,
+            ResultPageResponse, SaveQueryTabToLibraryRequest, SaveQueryTabToLocalFileRequest,
+            SavedWorkItem, StructureRequest, StructureResponse, UpdateQueryBuilderStateRequest,
+            UpdateUiStateRequest,
         },
     },
 };
@@ -102,6 +105,15 @@ pub fn create_query_tab(
 ) -> Result<BootstrapPayload, CommandError> {
     let mut state = state.lock().unwrap();
     state.create_query_tab(&connection_id)
+}
+
+#[tauri::command]
+pub fn create_explorer_tab(
+    state: State<'_, SharedAppState>,
+    connection_id: String,
+) -> Result<BootstrapPayload, CommandError> {
+    let mut state = state.lock().unwrap();
+    state.create_explorer_tab(&connection_id)
 }
 
 #[tauri::command]
@@ -204,6 +216,109 @@ pub fn open_saved_work_item(
 ) -> Result<BootstrapPayload, CommandError> {
     let mut state = state.lock().unwrap();
     state.open_saved_work(&saved_work_id)
+}
+
+#[tauri::command]
+pub fn create_library_folder(
+    state: State<'_, SharedAppState>,
+    request: LibraryCreateFolderRequest,
+) -> Result<BootstrapPayload, CommandError> {
+    let mut state = state.lock().unwrap();
+    state.create_library_folder(request)
+}
+
+#[tauri::command]
+pub fn rename_library_node(
+    state: State<'_, SharedAppState>,
+    request: LibraryRenameNodeRequest,
+) -> Result<BootstrapPayload, CommandError> {
+    let mut state = state.lock().unwrap();
+    state.rename_library_node(request)
+}
+
+#[tauri::command]
+pub fn move_library_node(
+    state: State<'_, SharedAppState>,
+    request: LibraryMoveNodeRequest,
+) -> Result<BootstrapPayload, CommandError> {
+    let mut state = state.lock().unwrap();
+    state.move_library_node(request)
+}
+
+#[tauri::command]
+pub fn set_library_node_environment(
+    state: State<'_, SharedAppState>,
+    request: LibrarySetEnvironmentRequest,
+) -> Result<BootstrapPayload, CommandError> {
+    let mut state = state.lock().unwrap();
+    state.set_library_node_environment(request)
+}
+
+#[tauri::command]
+pub fn delete_library_node(
+    state: State<'_, SharedAppState>,
+    request: LibraryDeleteNodeRequest,
+) -> Result<BootstrapPayload, CommandError> {
+    let mut state = state.lock().unwrap();
+    state.delete_library_node(request)
+}
+
+#[tauri::command]
+pub fn open_library_item(
+    state: State<'_, SharedAppState>,
+    library_item_id: String,
+) -> Result<BootstrapPayload, CommandError> {
+    let mut state = state.lock().unwrap();
+    state.open_library_item(&library_item_id)
+}
+
+#[tauri::command]
+pub fn save_query_tab_to_library(
+    state: State<'_, SharedAppState>,
+    request: SaveQueryTabToLibraryRequest,
+) -> Result<BootstrapPayload, CommandError> {
+    let mut state = state.lock().unwrap();
+    state.save_query_tab_to_library(request)
+}
+
+#[tauri::command]
+pub fn save_query_tab_to_local_file(
+    app: AppHandle,
+    state: State<'_, SharedAppState>,
+    mut request: SaveQueryTabToLocalFileRequest,
+) -> Result<BootstrapPayload, CommandError> {
+    if request
+        .path
+        .as_deref()
+        .is_none_or(|path| path.trim().is_empty())
+    {
+        let (title, language) = {
+            let state = state.lock().unwrap();
+            state.ensure_unlocked()?;
+            let tab = state
+                .snapshot
+                .tabs
+                .iter()
+                .find(|tab| tab.id == request.tab_id)
+                .ok_or_else(|| CommandError::new("tab-missing", "Tab was not found."))?;
+            (tab.title.clone(), tab.language.clone())
+        };
+        let selected = app
+            .dialog()
+            .file()
+            .set_title("Save query to local file")
+            .set_file_name(default_query_file_name(&title, &language))
+            .blocking_save_file();
+
+        let Some(selected) = selected else {
+            let state = state.lock().unwrap();
+            return Ok(state.bootstrap_payload());
+        };
+        request.path = Some(dialog_path_to_string(selected)?);
+    }
+
+    let mut state = state.lock().unwrap();
+    state.save_query_tab_to_local_file(request)
 }
 
 #[tauri::command]
@@ -500,6 +615,31 @@ fn dialog_path_to_string(path: FilePath) -> Result<String, CommandError> {
         .map_err(|error| CommandError::new("dialog-path-error", error.to_string()))
 }
 
+fn default_query_file_name(title: &str, language: &str) -> String {
+    let extension = match language {
+        "mongodb" | "json" | "query-dsl" | "esql" => "json",
+        "promql" => "promql",
+        "cql" => "cql",
+        "redis" => "redis",
+        "cypher" => "cypher",
+        "aql" => "aql",
+        "gremlin" => "gremlin",
+        "snowflake-sql" | "google-sql" | "clickhouse-sql" | "sql" => "sql",
+        _ => "txt",
+    };
+    let trimmed = title.trim().trim_end_matches(&format!(".{extension}"));
+    let stem = if trimmed.is_empty() { "query" } else { trimmed };
+    let safe_stem = stem
+        .chars()
+        .map(|character| match character {
+            '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*' => '-',
+            _ => character,
+        })
+        .collect::<String>();
+
+    format!("{safe_stem}.{extension}")
+}
+
 struct LocalDatabaseSpec {
     label: &'static str,
     filter_label: &'static str,
@@ -559,6 +699,59 @@ async fn create_sqlite_local_database(path: &Path, mode: &str) -> Result<(), Com
         .await?;
 
     if mode == "starter" {
+        sqlx::query(
+            "create table if not exists accounts (
+                id integer primary key,
+                display_name text not null,
+                email text not null unique,
+                status text not null default 'active',
+                created_at text not null
+            )",
+        )
+        .execute(&pool)
+        .await?;
+        sqlx::query(
+            "insert into accounts (id, display_name, email, status, created_at)
+             select 1, 'Avery Stone', 'avery@example.test', 'active', '2026-01-10T09:00:00Z'
+             where not exists (select 1 from accounts where id = 1)",
+        )
+        .execute(&pool)
+        .await?;
+        sqlx::query(
+            "insert into accounts (id, display_name, email, status, created_at)
+             select 2, 'Morgan Lee', 'morgan@example.test', 'paused', '2026-01-11T10:30:00Z'
+             where not exists (select 1 from accounts where id = 2)",
+        )
+        .execute(&pool)
+        .await?;
+        sqlx::query("create index if not exists accounts_status_idx on accounts(status)")
+            .execute(&pool)
+            .await?;
+        sqlx::query(
+            "create table if not exists transactions (
+                id integer primary key,
+                account_id integer not null,
+                amount numeric not null,
+                status text not null,
+                created_at text not null,
+                foreign key (account_id) references accounts(id)
+            )",
+        )
+        .execute(&pool)
+        .await?;
+        sqlx::query(
+            "insert into transactions (id, account_id, amount, status, created_at)
+             select 1001, 1, 42.50, 'posted', '2026-01-12T12:00:00Z'
+             where not exists (select 1 from transactions where id = 1001)",
+        )
+        .execute(&pool)
+        .await?;
+        sqlx::query(
+            "create view if not exists active_accounts as
+             select id, display_name, email, created_at from accounts where status = 'active'",
+        )
+        .execute(&pool)
+        .await?;
         sqlx::query(
             "create table if not exists items (
                 id integer primary key autoincrement,
@@ -678,7 +871,7 @@ mod tests {
     }
 
     #[test]
-    fn starter_sqlite_database_creation_seeds_items_table() {
+    fn starter_sqlite_database_creation_seeds_accounts_schema() {
         tauri::async_runtime::block_on(async {
             let path = test_sqlite_path("starter");
             create_sqlite_local_database(&path, "starter")
@@ -694,14 +887,24 @@ mod tests {
                 )
                 .await
                 .unwrap();
-            let count: i64 = sqlx::query_scalar("select count(*) from items")
+            let account_count: i64 = sqlx::query_scalar("select count(*) from accounts")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+            let item_count: i64 = sqlx::query_scalar("select count(*) from items")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+            let active_count: i64 = sqlx::query_scalar("select count(*) from active_accounts")
                 .fetch_one(&pool)
                 .await
                 .unwrap();
             pool.close().await;
             let _ = std::fs::remove_file(path);
 
-            assert_eq!(count, 1);
+            assert_eq!(account_count, 2);
+            assert_eq!(item_count, 1);
+            assert_eq!(active_count, 1);
         });
     }
 

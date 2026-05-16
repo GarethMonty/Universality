@@ -9,7 +9,7 @@ import type {
 import { DATAPADPLUSPLUS_ADAPTER_MANIFESTS } from '@datapadplusplus/shared-types'
 import { buildDiagnosticsReport, resolveEnvironment } from '../state/helpers'
 
-export const EMPTY_WORKSPACE_SCHEMA_VERSION = 6
+export const EMPTY_WORKSPACE_SCHEMA_VERSION = 7
 
 export const adapterManifests: AdapterManifest[] = DATAPADPLUSPLUS_ADAPTER_MANIFESTS
 
@@ -18,7 +18,6 @@ export const defaultPreferences: AppPreferences = {
   telemetry: 'opt-in',
   lockAfterMinutes: 15,
   safeModeEnabled: true,
-  commandPaletteEnabled: true,
 }
 
 export function createBlankSnapshot(): WorkspaceSnapshot {
@@ -30,6 +29,44 @@ export function createBlankSnapshot(): WorkspaceSnapshot {
     environments: [],
     tabs: [],
     closedTabs: [],
+    libraryNodes: [
+      {
+        id: 'library-root-queries',
+        kind: 'folder',
+        name: 'Queries',
+        tags: [],
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        summary: 'Workspace library folder.',
+      },
+      {
+        id: 'library-root-scripts',
+        kind: 'folder',
+        name: 'Scripts',
+        tags: [],
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        summary: 'Workspace library folder.',
+      },
+      {
+        id: 'library-root-snippets',
+        kind: 'folder',
+        name: 'Snippets',
+        tags: [],
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        summary: 'Workspace library folder.',
+      },
+      {
+        id: 'library-root-notes',
+        kind: 'folder',
+        name: 'Notes',
+        tags: [],
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        summary: 'Workspace library folder.',
+      },
+    ],
     savedWork: [],
     explorerNodes: [],
     adapterManifests,

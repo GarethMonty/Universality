@@ -44,6 +44,7 @@ export function EditorTabContextMenu({
     onCloseMenu()
     action()
   }
+  const canSaveTab = contextTab.tabKind !== 'explorer'
 
   return (
     <div
@@ -110,16 +111,18 @@ export function EditorTabContextMenu({
         <RenameIcon className="editor-tab-context-menu-icon" />
         <span>Rename</span>
       </button>
-      <button
-        type="button"
-        role="menuitem"
-        className="editor-tab-context-menu-item"
-        aria-label={`Save tab ${contextTab.title}`}
-        onClick={() => run(() => onSaveTab(contextTab.id))}
-      >
-        <SaveIcon className="editor-tab-context-menu-icon" />
-        <span>Save</span>
-      </button>
+      {canSaveTab ? (
+        <button
+          type="button"
+          role="menuitem"
+          className="editor-tab-context-menu-item"
+          aria-label={`Save tab ${contextTab.title}`}
+          onClick={() => run(() => onSaveTab(contextTab.id))}
+        >
+          <SaveIcon className="editor-tab-context-menu-icon" />
+          <span>Save</span>
+        </button>
+      ) : null}
       <div className="editor-tab-context-menu-separator" role="separator" />
       <button
         type="button"

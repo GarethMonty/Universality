@@ -3,14 +3,20 @@ use crate::domain::models::{QueryTabState, UiState, WorkspaceSnapshot};
 pub(super) fn is_activity(value: &str) -> bool {
     matches!(
         value,
-        "connections" | "environments" | "explorer" | "saved-work" | "search" | "settings"
+        "connections"
+            | "environments"
+            | "explorer"
+            | "library"
+            | "saved-work"
+            | "search"
+            | "settings"
     )
 }
 
 pub(super) fn is_sidebar_pane(value: &str) -> bool {
     matches!(
         value,
-        "connections" | "environments" | "explorer" | "saved-work" | "search"
+        "connections" | "environments" | "explorer" | "library" | "saved-work" | "search"
     )
 }
 
@@ -93,12 +99,16 @@ pub(super) fn normalize_ui_state(snapshot: &WorkspaceSnapshot) -> UiState {
                 .cloned()
         })
         .or_else(|| snapshot.environments.first().cloned());
-    let active_activity = if is_activity(&snapshot.ui.active_activity) {
+    let active_activity = if snapshot.ui.active_activity == "saved-work" {
+        "library".into()
+    } else if is_activity(&snapshot.ui.active_activity) {
         snapshot.ui.active_activity.clone()
     } else {
         "connections".into()
     };
-    let active_sidebar_pane = if is_sidebar_pane(&snapshot.ui.active_sidebar_pane) {
+    let active_sidebar_pane = if snapshot.ui.active_sidebar_pane == "saved-work" {
+        "library".into()
+    } else if is_sidebar_pane(&snapshot.ui.active_sidebar_pane) {
         snapshot.ui.active_sidebar_pane.clone()
     } else if active_activity == "settings" {
         "connections".into()
@@ -136,7 +146,9 @@ pub(super) fn normalize_ui_state(snapshot: &WorkspaceSnapshot) -> UiState {
             && (has_active_tab || active_bottom_panel_tab == "messages"),
         active_bottom_panel_tab,
         bottom_panel_height: clamp_bottom_panel_height(snapshot.ui.bottom_panel_height),
-        right_drawer: if is_right_drawer(&snapshot.ui.right_drawer) {
+        right_drawer: if snapshot.ui.right_drawer == "inspection" {
+            "none".into()
+        } else if is_right_drawer(&snapshot.ui.right_drawer) {
             snapshot.ui.right_drawer.clone()
         } else {
             "none".into()

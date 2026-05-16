@@ -40,7 +40,7 @@ The shared TypeScript contracts define:
 - datastore families, engines, maturity, query languages, and connection modes
 - adapter capabilities and result renderer types
 - connection profiles, environment profiles, and workspace state
-- query tab state, builder state, scoped query targets, and saved work
+- query tab state, builder state, scoped query targets, and Library nodes
 - result payloads, messages, diagnostics, permissions, operation manifests, operation plans, and safe edit requests
 - datastore experience manifests for object kinds, object actions, builders, editable scopes, diagnostics tabs, and safety rules
 

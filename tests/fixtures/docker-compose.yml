@@ -9,7 +9,7 @@ services:
     ports:
       - '${DATAPADPLUSPLUS_POSTGRES_PORT:-54329}:5432'
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U datapadplusplus -d datapadplusplus']
+      test: ['CMD-SHELL', 'PGPASSWORD=datapadplusplus psql -U datapadplusplus -d datapadplusplus -c "select 1" >/dev/null']
       interval: 5s
       timeout: 5s
       retries: 20
@@ -27,7 +27,7 @@ services:
     ports:
       - '${DATAPADPLUSPLUS_MYSQL_PORT:-33060}:3306'
     healthcheck:
-      test: ['CMD', 'mysqladmin', 'ping', '-h', '127.0.0.1', '-u', 'root', '-pdatapadplusplus-root']
+      test: ['CMD-SHELL', "mysql -h 127.0.0.1 -udatapadplusplus -pdatapadplusplus commerce -e 'select 1' >/dev/null"]
       interval: 5s
       timeout: 5s
       retries: 30

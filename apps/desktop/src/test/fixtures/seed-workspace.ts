@@ -24,7 +24,6 @@ const preferences: AppPreferences = {
   telemetry: 'opt-in',
   lockAfterMinutes: 15,
   safeModeEnabled: true,
-  commandPaletteEnabled: true,
 }
 
 const connections: ConnectionProfile[] = [
@@ -198,7 +197,7 @@ const environments: EnvironmentProfile[] = [
       MONGO_HOST: 'catalog-dev.internal',
       MYSQL_HOST: 'commerce-dev.internal',
       SQLITE_PATH:
-        'C:\\Users\\gmont\\source\\repos\\DataPad++\\tests\\fixtures\\sqlite\\datapadplusplus.db',
+        'C:\\Users\\gmont\\source\\repos\\DataPad++\\tests\\fixtures\\sqlite\\datapadplusplus.sqlite3',
     },
     sensitiveKeys: [],
     requiresConfirmation: false,
@@ -499,6 +498,7 @@ export function createSeedSnapshot(): WorkspaceSnapshot {
     environments,
     tabs,
     closedTabs: [],
+    libraryNodes: [],
     savedWork,
     explorerNodes,
     adapterManifests,

@@ -3,7 +3,7 @@ use mongodb::bson::{self, doc, Document};
 use serde_json::{json, Value};
 
 use super::super::super::*;
-use super::connection::mongodb_client;
+use super::connection::{mongodb_client, mongodb_database_name_for_collection_query};
 use super::MongoDbAdapter;
 
 pub(super) async fn execute_mongodb_query(
@@ -14,11 +14,7 @@ pub(super) async fn execute_mongodb_query(
 ) -> Result<ExecutionResultEnvelope, CommandError> {
     let started = Instant::now();
     let client = mongodb_client(connection).await?;
-    let database_name = connection
-        .database
-        .clone()
-        .unwrap_or_else(|| "admin".into());
-    let database = client.database(&database_name);
+    let mut notices = notices;
     let input = serde_json::from_str::<serde_json::Value>(selected_query(request))?;
     let collection_name = input
         .get("collection")
@@ -29,6 +25,13 @@ pub(super) async fn execute_mongodb_query(
                 "MongoDB queries must include a `collection` field in this milestone.",
             )
         })?;
+    let database_resolution =
+        mongodb_database_name_for_collection_query(&client, connection, &input, collection_name)
+            .await;
+    if let Some(notice) = database_resolution.notice {
+        notices.push(notice);
+    }
+    let database = client.database(&database_resolution.database_name);
     let collection = database.collection::<Document>(collection_name);
     let requested_row_limit = request
         .row_limit

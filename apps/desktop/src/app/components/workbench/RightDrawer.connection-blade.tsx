@@ -62,8 +62,6 @@ export function ConnectionBlade({
 
   const selectedEngineOption = engineOption(connectionDraft.engine)
   const localDatabaseManifest = selectedEngineOption?.localDatabase
-  const isLocalDatabaseEngine = Boolean(localDatabaseManifest)
-  const databaseLabel = isLocalDatabaseEngine ? 'Database file' : 'Database'
   const selectedEnvironmentId = connectionDraft.environmentIds[0] ?? ''
   const selectedEnvironment = environments.find(
     (environment) => environment.id === selectedEnvironmentId,
@@ -114,10 +112,13 @@ export function ConnectionBlade({
     })
   }
 
-  const connectionForAction = () => ({
-    ...connectionDraft,
-    name: connectionDraft.name.trim() || inferConnectionName(connectionDraft),
-  })
+  const connectionForAction = () =>
+    normalizeConnectionForMode({
+      ...connectionDraft,
+      name: connectionDraft.name.trim() || inferConnectionName(connectionDraft),
+      connectionMode:
+        connectionDraft.connectionMode ?? selectedEngineOption?.connectionMode ?? 'native',
+    })
 
   const openExistingLocalDatabase = async () => {
     const result = await onPickLocalDatabaseFile({
@@ -220,9 +221,7 @@ export function ConnectionBlade({
 
           <ConnectionForm
             connectionDraft={connectionDraft}
-            databaseLabel={databaseLabel}
             environments={environments}
-            isLocalDatabaseEngine={isLocalDatabaseEngine}
             localDatabaseManifest={localDatabaseManifest}
             localDatabaseName={localDatabaseName}
             localDatabaseStatus={localDatabaseStatus}
@@ -290,4 +289,34 @@ function databaseNameWithExtension(databaseName: string, extension?: string) {
   }
 
   return `${trimmed}.${defaultExtension}`
+}
+
+function normalizeConnectionForMode(profile: ConnectionProfile): ConnectionProfile {
+  const mode = profile.connectionMode ?? 'native'
+
+  if (mode === 'connection-string') {
+    return {
+      ...profile,
+      host: '',
+      port: undefined,
+      connectionString: profile.connectionString ?? '',
+    }
+  }
+
+  if (mode === 'local-file') {
+    const path = profile.database || profile.host
+
+    return {
+      ...profile,
+      host: path,
+      port: undefined,
+      database: path,
+      connectionString: undefined,
+    }
+  }
+
+  return {
+    ...profile,
+    connectionString: undefined,
+  }
 }

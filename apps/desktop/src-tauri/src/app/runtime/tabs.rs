@@ -1,7 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
 use super::query_tabs::{
-    build_query_tab, build_scoped_query_tab, next_query_tab_title, normalize_tab_title,
+    build_explorer_tab, build_query_tab, build_scoped_query_tab, next_query_tab_title,
+    normalize_tab_title, query_tab_title_parts,
 };
 use super::ui::focus_query_tab;
 use super::{generate_id, timestamp_now, ManagedAppState};
@@ -9,7 +10,8 @@ use crate::domain::{
     error::CommandError,
     models::{
         BootstrapPayload, ClosedQueryTabSnapshot, CreateScopedQueryTabRequest,
-        QueryTabReorderRequest, QueryTabState, UpdateQueryBuilderStateRequest, WorkspaceSnapshot,
+        QueryTabReorderRequest, QueryTabState, ScopedQueryTarget, UpdateQueryBuilderStateRequest,
+        WorkspaceSnapshot,
     },
 };
 
@@ -88,6 +90,50 @@ impl ManagedAppState {
         Ok(self.bootstrap_payload())
     }
 
+    pub fn create_explorer_tab(
+        &mut self,
+        connection_id: &str,
+    ) -> Result<BootstrapPayload, CommandError> {
+        let connection = self
+            .snapshot
+            .connections
+            .iter()
+            .find(|item| item.id == connection_id)
+            .cloned()
+            .ok_or_else(|| CommandError::new("connection-missing", "Connection was not found."))?;
+
+        if let Some(existing_tab) = self
+            .snapshot
+            .tabs
+            .iter()
+            .find(|tab| {
+                tab.connection_id == connection.id && tab.tab_kind.as_deref() == Some("explorer")
+            })
+            .cloned()
+        {
+            focus_query_tab(&mut self.snapshot.ui, &existing_tab);
+            self.snapshot.ui.active_activity = "connections".into();
+            self.snapshot.ui.active_sidebar_pane = "connections".into();
+            self.snapshot.ui.explorer_view = "structure".into();
+            self.snapshot.ui.right_drawer = "none".into();
+            self.snapshot.updated_at = timestamp_now();
+            self.persist()?;
+            return Ok(self.bootstrap_payload());
+        }
+
+        let tab = build_explorer_tab(&self.snapshot, &connection);
+
+        self.snapshot.tabs.push(tab.clone());
+        focus_query_tab(&mut self.snapshot.ui, &tab);
+        self.snapshot.ui.active_activity = "connections".into();
+        self.snapshot.ui.active_sidebar_pane = "connections".into();
+        self.snapshot.ui.explorer_view = "structure".into();
+        self.snapshot.ui.right_drawer = "none".into();
+        self.snapshot.updated_at = timestamp_now();
+        self.persist()?;
+        Ok(self.bootstrap_payload())
+    }
+
     pub fn create_scoped_query_tab(
         &mut self,
         request: CreateScopedQueryTabRequest,
@@ -99,6 +145,30 @@ impl ManagedAppState {
             .find(|item| item.id == request.connection_id)
             .cloned()
             .ok_or_else(|| CommandError::new("connection-missing", "Connection was not found."))?;
+        let legacy_title = legacy_scoped_title_candidate(&connection, &request.target);
+
+        if let Some(existing_tab) = self
+            .snapshot
+            .tabs
+            .iter()
+            .find(|tab| {
+                tab.connection_id == request.connection_id
+                    && if let Some(target) = tab.scoped_target.as_ref() {
+                        scoped_targets_match(target, &request.target)
+                    } else {
+                        tab.title == legacy_title
+                    }
+            })
+            .cloned()
+        {
+            focus_query_tab(&mut self.snapshot.ui, &existing_tab);
+            self.snapshot.ui.active_activity = "connections".into();
+            self.snapshot.ui.active_sidebar_pane = "connections".into();
+            self.snapshot.updated_at = timestamp_now();
+            self.persist()?;
+            return Ok(self.bootstrap_payload());
+        }
+
         let tab = build_scoped_query_tab(&self.snapshot, &connection, request);
 
         self.snapshot.tabs.push(tab.clone());
@@ -266,13 +336,57 @@ impl ManagedAppState {
         let title = normalize_tab_title(title, &tab.title);
 
         tab.title = title;
-        if tab.saved_query_id.is_some() {
+        if tab.saved_query_id.is_some() || tab.save_target.is_some() {
             tab.dirty = true;
         }
 
         self.snapshot.updated_at = timestamp_now();
         self.persist()?;
         Ok(self.bootstrap_payload())
+    }
+}
+
+pub(super) fn scoped_targets_match(left: &ScopedQueryTarget, right: &ScopedQueryTarget) -> bool {
+    left.kind == right.kind
+        && left.label == right.label
+        && left.path == right.path
+        && left.scope == right.scope
+        && left.preferred_builder == right.preferred_builder
+}
+
+pub(super) fn legacy_scoped_title_candidate(
+    connection: &crate::domain::models::ConnectionProfile,
+    target: &ScopedQueryTarget,
+) -> String {
+    let (_, extension) = query_tab_title_parts(connection);
+    let label = legacy_normalized_target_label(&target.label);
+    let has_builder =
+        connection.engine == "mongodb" && target.preferred_builder.as_deref() == Some("mongo-find");
+
+    if has_builder {
+        format!("{label}.find.{extension}")
+    } else {
+        format!("{label}.{extension}")
+    }
+}
+
+fn legacy_normalized_target_label(label: &str) -> String {
+    let trimmed = label.trim();
+
+    if trimmed.is_empty() {
+        "query".into()
+    } else {
+        trimmed
+            .chars()
+            .map(|character| {
+                if character.is_control() || character == '/' || character == '\\' {
+                    '_'
+                } else {
+                    character
+                }
+            })
+            .take(80)
+            .collect()
     }
 }
 

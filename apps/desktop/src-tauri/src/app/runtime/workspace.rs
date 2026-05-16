@@ -7,6 +7,7 @@ use super::{
     fixtures::{
         fixture_debug_enabled, fixture_workspace_seed, seed_fixture_secrets, workspace_is_empty,
     },
+    library::ensure_library_nodes,
     ui::normalize_ui_state,
     ManagedAppState,
 };
@@ -82,6 +83,7 @@ impl ManagedAppState {
                 environments: self.snapshot.environments.len(),
                 tabs: self.snapshot.tabs.len(),
                 saved_work: self.snapshot.saved_work.len(),
+                library: self.snapshot.library_nodes.len(),
             },
             warnings,
         }
@@ -178,6 +180,8 @@ fn migrate_snapshot(mut snapshot: WorkspaceSnapshot) -> WorkspaceSnapshot {
     snapshot.schema_version = persistence::SCHEMA_VERSION;
     snapshot.adapter_manifests = adapters::manifests();
     strip_demo_records(&mut snapshot);
+    migrate_connection_modes(&mut snapshot);
+    ensure_library_nodes(&mut snapshot);
 
     for tab in &mut snapshot.tabs {
         tab.result = None;
@@ -190,6 +194,33 @@ fn migrate_snapshot(mut snapshot: WorkspaceSnapshot) -> WorkspaceSnapshot {
     snapshot.ui = normalize_ui_state(&snapshot);
 
     snapshot
+}
+
+fn migrate_connection_modes(snapshot: &mut WorkspaceSnapshot) {
+    for connection in &mut snapshot.connections {
+        let mode = match connection.connection_mode.as_deref() {
+            Some("file") => Some("local-file".to_string()),
+            Some(mode) => Some(mode.to_string()),
+            None if connection
+                .connection_string
+                .as_deref()
+                .is_some_and(|value| !value.trim().is_empty()) =>
+            {
+                Some("connection-string".to_string())
+            }
+            None => Some(default_connection_mode(&connection.engine).to_string()),
+        };
+
+        connection.connection_mode = mode;
+    }
+}
+
+fn default_connection_mode(engine: &str) -> &'static str {
+    match engine {
+        "sqlite" | "litedb" | "duckdb" => "local-file",
+        "dynamodb" | "bigquery" => "cloud-iam",
+        _ => "native",
+    }
 }
 
 fn strip_demo_records(snapshot: &mut WorkspaceSnapshot) {
@@ -225,6 +256,9 @@ fn strip_demo_records(snapshot: &mut WorkspaceSnapshot) {
         .saved_work
         .retain(|item| !DEMO_SAVED_WORK.contains(&item.id.as_str()));
     snapshot
+        .library_nodes
+        .retain(|item| !DEMO_SAVED_WORK.contains(&item.id.as_str()));
+    snapshot
         .explorer_nodes
         .retain(|node| !node.id.starts_with("explorer-"));
     snapshot.guardrails.clear();
@@ -247,6 +281,12 @@ fn strip_demo_records(snapshot: &mut WorkspaceSnapshot) {
             .iter()
             .filter_map(|item| item.environment_id.clone()),
     );
+    referenced_environments.extend(
+        snapshot
+            .library_nodes
+            .iter()
+            .filter_map(|item| item.environment_id.clone()),
+    );
 
     snapshot.environments.retain(|environment| {
         !DEMO_ENVIRONMENTS.contains(&environment.id.as_str())
@@ -265,6 +305,51 @@ pub fn blank_workspace_snapshot() -> WorkspaceSnapshot {
         environments: Vec::new(),
         tabs: Vec::new(),
         closed_tabs: Vec::new(),
+        library_nodes: {
+            let mut snapshot = WorkspaceSnapshot {
+                schema_version: persistence::SCHEMA_VERSION,
+                connections: Vec::new(),
+                environments: Vec::new(),
+                tabs: Vec::new(),
+                closed_tabs: Vec::new(),
+                library_nodes: Vec::new(),
+                saved_work: Vec::new(),
+                explorer_nodes: Vec::new(),
+                adapter_manifests: Vec::new(),
+                preferences: AppPreferences {
+                    theme: "dark".into(),
+                    telemetry: "opt-in".into(),
+                    lock_after_minutes: 15,
+                    safe_mode_enabled: true,
+                },
+                guardrails: Vec::new(),
+                lock_state: LockState {
+                    is_locked: false,
+                    locked_at: None,
+                },
+                ui: UiState {
+                    active_connection_id: String::new(),
+                    active_environment_id: String::new(),
+                    active_tab_id: String::new(),
+                    explorer_filter: String::new(),
+                    explorer_view: "structure".into(),
+                    connection_group_mode: "none".into(),
+                    sidebar_section_states: HashMap::new(),
+                    active_activity: "connections".into(),
+                    sidebar_collapsed: false,
+                    active_sidebar_pane: "connections".into(),
+                    sidebar_width: 280,
+                    bottom_panel_visible: false,
+                    active_bottom_panel_tab: "results".into(),
+                    bottom_panel_height: 260,
+                    right_drawer: "none".into(),
+                    right_drawer_width: 360,
+                },
+                updated_at: created_at.clone(),
+            };
+            ensure_library_nodes(&mut snapshot);
+            snapshot.library_nodes
+        },
         saved_work: Vec::new(),
         explorer_nodes: Vec::new(),
         adapter_manifests: adapters::manifests(),
@@ -273,7 +358,6 @@ pub fn blank_workspace_snapshot() -> WorkspaceSnapshot {
             telemetry: "opt-in".into(),
             lock_after_minutes: 15,
             safe_mode_enabled: true,
-            command_palette_enabled: true,
         },
         guardrails: Vec::new(),
         lock_state: LockState {

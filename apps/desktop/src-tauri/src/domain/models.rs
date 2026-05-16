@@ -167,6 +167,14 @@ pub struct QueryHistoryEntry {
     pub status: String,
 }
 
+#[derive(Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct QuerySaveTarget {
+    pub kind: String,
+    pub library_item_id: Option<String>,
+    pub path: Option<String>,
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UserFacingError {
@@ -179,14 +187,20 @@ pub struct UserFacingError {
 pub struct QueryTabState {
     pub id: String,
     pub title: String,
+    #[serde(default)]
+    pub tab_kind: Option<String>,
     pub connection_id: String,
     pub environment_id: String,
     pub family: String,
     pub language: String,
     pub pinned: Option<bool>,
+    #[serde(default)]
+    pub save_target: Option<QuerySaveTarget>,
     pub saved_query_id: Option<String>,
     pub editor_label: String,
     pub query_text: String,
+    #[serde(default)]
+    pub scoped_target: Option<ScopedQueryTarget>,
     #[serde(default)]
     pub builder_state: Option<Value>,
     pub status: String,
@@ -224,6 +238,83 @@ pub struct SavedWorkItem {
     pub language: Option<String>,
     pub query_text: Option<String>,
     pub snapshot_result_id: Option<String>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryNode {
+    pub id: String,
+    pub kind: String,
+    pub parent_id: Option<String>,
+    pub name: String,
+    pub summary: Option<String>,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    pub favorite: Option<bool>,
+    pub created_at: String,
+    pub updated_at: String,
+    pub last_opened_at: Option<String>,
+    pub connection_id: Option<String>,
+    pub environment_id: Option<String>,
+    pub language: Option<String>,
+    pub query_text: Option<String>,
+    pub script_text: Option<String>,
+    pub snapshot_result_id: Option<String>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryCreateFolderRequest {
+    pub parent_id: Option<String>,
+    pub name: String,
+    pub environment_id: Option<String>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryRenameNodeRequest {
+    pub node_id: String,
+    pub name: String,
+}
+
+#[derive(Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryDeleteNodeRequest {
+    pub node_id: String,
+}
+
+#[derive(Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryMoveNodeRequest {
+    pub node_id: String,
+    pub parent_id: Option<String>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct LibrarySetEnvironmentRequest {
+    pub node_id: String,
+    pub environment_id: Option<String>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct SaveQueryTabToLibraryRequest {
+    pub tab_id: String,
+    pub item_id: Option<String>,
+    pub folder_id: Option<String>,
+    pub name: String,
+    pub kind: Option<String>,
+    pub environment_id: Option<String>,
+    #[serde(default)]
+    pub tags: Vec<String>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct SaveQueryTabToLocalFileRequest {
+    pub tab_id: String,
+    pub path: Option<String>,
 }
 
 #[derive(Clone, Serialize, Deserialize, Default)]
@@ -558,7 +649,6 @@ pub struct AppPreferences {
     pub telemetry: String,
     pub lock_after_minutes: u32,
     pub safe_mode_enabled: bool,
-    pub command_palette_enabled: bool,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -619,6 +709,7 @@ pub struct DiagnosticsCounts {
     pub environments: usize,
     pub tabs: usize,
     pub saved_work: usize,
+    pub library: usize,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -641,6 +732,9 @@ pub struct WorkspaceSnapshot {
     pub tabs: Vec<QueryTabState>,
     #[serde(default)]
     pub closed_tabs: Vec<ClosedQueryTabSnapshot>,
+    #[serde(default)]
+    pub library_nodes: Vec<LibraryNode>,
+    #[serde(default)]
     pub saved_work: Vec<SavedWorkItem>,
     pub explorer_nodes: Vec<ExplorerNode>,
     pub adapter_manifests: Vec<AdapterManifest>,

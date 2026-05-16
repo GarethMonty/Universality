@@ -9,7 +9,8 @@ import type {
   EnvironmentProfile,
   QueryTabState,
 } from '@datapadplusplus/shared-types'
-import { CloseIcon } from '../icons'
+import { DatastoreIcon } from '../DatastoreIcon'
+import { CloseIcon, DatabaseIcon, RefreshIcon, WarningIcon } from '../icons'
 import { colorWithAlpha, normalizeTabDisplayTitle } from './tab-title'
 
 export interface EditorTabDropTarget {
@@ -71,10 +72,18 @@ export function EditorTabItem({
     '--tab-env-color': environmentColor,
     '--tab-env-tint': colorWithAlpha(environmentColor, 0.16),
   } as CSSProperties
+  const tabCanBeSaved = tab.tabKind !== 'explorer'
+  const showUnsavedChanges = tabCanBeSaved && tab.dirty
   const connectionName = connection?.name ?? 'Unknown connection'
   const environmentName = environment?.label ?? 'No environment'
   const tooltip = `${tab.title}\nConnection: ${connectionName}\nEnvironment: ${environmentName}${
-    tab.dirty ? '\nUnsaved changes' : ''
+    tab.status === 'queued' || tab.status === 'running' ? `\nStatus: ${tab.status}` : ''
+  }${
+    tab.status === 'error' || tab.status === 'blocked'
+      ? `\nStatus: ${tab.status}${tab.error?.message ? ` - ${tab.error.message}` : ''}`
+      : ''
+  }${
+    showUnsavedChanges ? '\nUnsaved changes' : ''
   }`
   const dropBefore = dropTarget?.tabId === tab.id && dropTarget.placement === 'before'
   const dropAfter = dropTarget?.tabId === tab.id && dropTarget.placement === 'after'
@@ -99,6 +108,19 @@ export function EditorTabItem({
       onDragEnd={onDragEnd}
       onKeyDown={(event) => onKeyDown(event, tab)}
     >
+      {connection ? (
+        <DatastoreIcon
+          className="editor-tab-datastore-icon"
+          decorative={false}
+          engine={connection.engine}
+          label={`${connection.name} datastore icon`}
+        />
+      ) : (
+        <DatabaseIcon
+          className="editor-tab-fallback-icon"
+          aria-label="Datastore icon"
+        />
+      )}
       {editing ? (
         <input
           aria-label={`Rename tab ${tab.title}`}
@@ -125,9 +147,10 @@ export function EditorTabItem({
       ) : (
         <span className="editor-tab-label">{normalizeTabDisplayTitle(tab.title)}</span>
       )}
-      {tab.dirty ? (
+      {showUnsavedChanges ? (
         <span className="editor-tab-dirty" title="Unsaved changes" aria-hidden="true" />
       ) : null}
+      <EditorTabStatusIcon tab={tab} />
       {tab.pinned ? (
         <span className="editor-tab-pin" title="Pinned tab" aria-label="Pinned tab">
           Pinned
@@ -138,7 +161,7 @@ export function EditorTabItem({
         className="editor-tab-close-button"
         aria-label={`Close tab ${tab.title}`}
         title={
-          tab.savedQueryId && tab.dirty
+          tabCanBeSaved && tab.savedQueryId && tab.dirty
             ? 'Close this saved query tab. You will be asked whether to save changes first.'
             : 'Close this tab and keep a recovery copy in closed tab history.'
         }
@@ -151,4 +174,32 @@ export function EditorTabItem({
       </button>
     </div>
   )
+}
+
+function EditorTabStatusIcon({ tab }: { tab: QueryTabState }) {
+  if (tab.status === 'queued' || tab.status === 'running') {
+    return (
+      <span
+        className="editor-tab-status-icon editor-tab-status-icon--running"
+        aria-label={tab.status === 'queued' ? 'Query queued' : 'Query running'}
+        role="img"
+      >
+        <RefreshIcon className="editor-tab-status-svg" />
+      </span>
+    )
+  }
+
+  if (tab.status === 'error' || tab.status === 'blocked') {
+    return (
+      <span
+        className="editor-tab-status-icon editor-tab-status-icon--error"
+        aria-label={tab.status === 'blocked' ? 'Query blocked' : 'Query error'}
+        role="img"
+      >
+        <WarningIcon className="editor-tab-status-svg" />
+      </span>
+    )
+  }
+
+  return null
 }

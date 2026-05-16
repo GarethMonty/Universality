@@ -12,7 +12,7 @@ Cover:
 - capability-driven UI selection
 - connection configuration validation
 - result renderer selection
-- saved work transformations
+- Library migration and save-target transformations
 - query-builder generation and raw synchronization
 - safe edit planning helpers
 - operation-plan guardrails

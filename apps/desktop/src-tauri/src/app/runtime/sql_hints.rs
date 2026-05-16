@@ -88,6 +88,19 @@ fn relation_does_not_exist_hint(
                 Some(relation.to_string())
             }
         })?
+    } else if lowered.contains("no such table:") {
+        let marker = "no such table:";
+        let start = lowered.find(marker)?;
+        let relation = lowered[start + marker.len()..]
+            .split_whitespace()
+            .next()
+            .unwrap_or_default()
+            .trim_matches(|character| matches!(character, '\'' | '"' | '`' | '[' | ']'))
+            .trim_end_matches(';');
+        if relation.is_empty() {
+            return None;
+        }
+        relation.to_string()
     } else {
         let marker = "invalid object name '";
         let start = lowered.find(marker)?;
@@ -115,6 +128,9 @@ fn relation_does_not_exist_hint(
             "Use `schema.table` naming and verify the object exists in the active database."
                 .to_string()
         }
+    } else if connection.engine == "sqlite" {
+        "For SQLite, verify the connection is opening the intended `.sqlite`/`.db` file, then use `table` or `[main].[table]` naming."
+            .to_string()
     } else {
         "Try using the schema-qualified form: `schema.table` (or \"schema\".\"table\" for case-sensitive names)."
             .to_string()
@@ -139,6 +155,12 @@ fn relation_does_not_exist_hint(
             "This connection did not define an explicit database, so the driver may be using a default database. "
                 .to_string()
                 + "Verify the target database (for example observability) and open the table from an Explorer-generated query template."
+        );
+    }
+    if connection.engine == "sqlite" {
+        parts.push(
+            "`select 1` only confirms SQLite opened a database file; it can still be the wrong or empty file. Re-test the connection and check the Database file path in Connection Profile."
+                .to_string(),
         );
     }
 

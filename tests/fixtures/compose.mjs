@@ -72,6 +72,52 @@ function runDockerCompose(args, env) {
   }
 }
 
+function runDockerComposeWithRecovery(args, env) {
+  let lastError = null
+
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      runDockerCompose(args, env)
+      const staleServices = staleCoreFixtureServices()
+
+      if (staleServices.length === 0) {
+        return
+      }
+
+      console.warn(
+        `Fixture credential validation failed for ${staleServices.join(', ')}; recreating stale fixture container(s).`,
+      )
+      recreateComposeServices(staleServices, env)
+      continue
+    } catch (error) {
+      lastError = error
+
+      if (!args.includes('up')) {
+        throw error
+      }
+
+      const staleServices = staleCoreFixtureServices()
+      const servicesToRecreate =
+        staleServices.length > 0
+          ? staleServices
+          : mongoFixtureNeedsRecreate()
+            ? ['mongodb']
+            : []
+
+      if (servicesToRecreate.length === 0) {
+        throw error
+      }
+
+      console.warn(
+        `Fixture startup failed because ${servicesToRecreate.join(', ')} has stale local state; recreating and retrying.`,
+      )
+      recreateComposeServices(servicesToRecreate, env)
+    }
+  }
+
+  throw lastError ?? new Error(`docker compose ${args.join(' ')} failed`)
+}
+
 function dockerOutput(args) {
   const result = runDocker(args, { encoding: 'utf8', stdio: 'pipe' })
 
@@ -80,6 +126,97 @@ function dockerOutput(args) {
   }
 
   return result.stdout.trim()
+}
+
+function dockerSucceeds(args) {
+  const result = runDocker(args, { stdio: 'ignore' })
+  return result.status === 0
+}
+
+function recreateComposeServices(services, env) {
+  const removeResult = runDocker(
+    ['compose', '--env-file', generatedEnvFile, '-f', composeFile, 'rm', '-sf', ...services],
+    {
+      env,
+      stdio: 'inherit',
+    },
+  )
+
+  if (removeResult.status !== 0) {
+    throw new Error(`Failed to recreate stale fixture service(s): ${services.join(', ')}`)
+  }
+}
+
+function mongoFixtureNeedsRecreate() {
+  const health = dockerOutput([
+    'inspect',
+    '--format',
+    '{{json .State.Health}}',
+    'datapadplusplus-mongodb',
+  ])
+
+  return /Authentication failed|UserNotFound|Could not find user/i.test(health)
+}
+
+function staleCoreFixtureServices() {
+  const stale = []
+
+  if (
+    dockerOutput(['inspect', '-f', '{{.State.Running}}', 'datapadplusplus-postgres']) === 'true' &&
+    !dockerSucceeds([
+      'exec',
+      '-e',
+      'PGPASSWORD=datapadplusplus',
+      'datapadplusplus-postgres',
+      'psql',
+      '-U',
+      'datapadplusplus',
+      '-d',
+      'datapadplusplus',
+      '-c',
+      'select 1',
+    ])
+  ) {
+    stale.push('postgres')
+  }
+
+  if (
+    dockerOutput(['inspect', '-f', '{{.State.Running}}', 'datapadplusplus-mysql']) === 'true' &&
+    !dockerSucceeds([
+      'exec',
+      'datapadplusplus-mysql',
+      'mysql',
+      '-udatapadplusplus',
+      '-pdatapadplusplus',
+      'commerce',
+      '-e',
+      'select 1',
+    ])
+  ) {
+    stale.push('mysql')
+  }
+
+  if (
+    dockerOutput(['inspect', '-f', '{{.State.Running}}', 'datapadplusplus-mongodb']) === 'true' &&
+    !dockerSucceeds([
+      'exec',
+      'datapadplusplus-mongodb',
+      'mongosh',
+      '--quiet',
+      '--username',
+      'datapadplusplus',
+      '--password',
+      'datapadplusplus',
+      '--authenticationDatabase',
+      'admin',
+      '--eval',
+      'db.adminCommand({ ping: 1 })',
+    ])
+  ) {
+    stale.push('mongodb')
+  }
+
+  return stale
 }
 
 function mappedContainerPort(container, containerPort) {
@@ -153,7 +290,7 @@ const [command, profile] = process.argv.slice(2)
 switch (command) {
   case 'up': {
     const env = await buildComposeEnvironment([])
-    runDockerCompose(['up', '-d', '--wait'], env)
+    runDockerComposeWithRecovery(['up', '-d', '--wait'], env)
     break
   }
   case 'up-profile': {
@@ -164,12 +301,12 @@ switch (command) {
       throw new Error(`Unknown fixture profile "${profile}". Valid profiles: ${profiles.join(', ')}`)
     }
     const env = await buildComposeEnvironment([profile])
-    runDockerCompose(['--profile', profile, 'up', '-d', '--wait'], env)
+    runDockerComposeWithRecovery(['--profile', profile, 'up', '-d', '--wait'], env)
     break
   }
   case 'up-all': {
     const env = await buildComposeEnvironment(profiles)
-    runDockerCompose([
+    runDockerComposeWithRecovery([
       ...profiles.flatMap((item) => ['--profile', item]),
       'up',
       '-d',

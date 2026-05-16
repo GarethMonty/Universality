@@ -42,7 +42,6 @@ export function applyExecutionRequestLocally(
       const executionId = request.executionId ?? createId('execution')
       tab.queryText = request.queryText
       tab.status = 'blocked'
-      tab.dirty = false
       tab.lastRunAt = new Date().toISOString()
       tab.history.unshift({
         id: createId('history'),
@@ -106,14 +105,13 @@ export function applyExecutionRequestLocally(
     diagnostics.push(guardrail.reasons[0] ?? 'Confirmation required for this query.')
   }
 
-  tab.queryText = request.queryText
-  tab.status =
+tab.queryText = request.queryText
+tab.status =
     guardrail.status === 'block'
       ? 'blocked'
       : result
         ? 'success'
         : 'error'
-  tab.dirty = false
   tab.lastRunAt = new Date().toISOString()
   tab.history.unshift({
     id: createId('history'),

@@ -12,6 +12,7 @@ interface DetailsViewProps {
   activeTab: QueryTabState
   diagnostics?: DiagnosticsReport
   explorerInspection?: ExplorerInspectResponse
+  onApplyInspectionTemplate(queryTemplate?: string): void
 }
 
 export function DetailsView({
@@ -20,7 +21,12 @@ export function DetailsView({
   activeTab,
   diagnostics,
   explorerInspection,
+  onApplyInspectionTemplate,
 }: DetailsViewProps) {
+  const canApplyInspectionTemplate = Boolean(
+    explorerInspection?.queryTemplate && activeTab.tabKind !== 'explorer',
+  )
+
   return (
     <div className="panel-body-frame">
       <div className="panel-title-row">
@@ -50,8 +56,35 @@ export function DetailsView({
       </div>
 
       <div className="details-section">
-        <strong>Inspection</strong>
+        <div className="details-section-header">
+          <strong>Inspection</strong>
+          {explorerInspection?.queryTemplate ? (
+            <button
+              type="button"
+              className="drawer-link-button"
+              disabled={!canApplyInspectionTemplate}
+              title={
+                canApplyInspectionTemplate
+                  ? 'Apply this inspection query template to the active query tab.'
+                  : 'Open a query tab before applying this inspection query template.'
+              }
+              onClick={() => onApplyInspectionTemplate(explorerInspection.queryTemplate)}
+            >
+              Apply template
+            </button>
+          ) : null}
+        </div>
         <p>{explorerInspection?.summary ?? 'No object selected.'}</p>
+        {explorerInspection?.queryTemplate ? (
+          <pre className="drawer-code">
+            <code>{explorerInspection.queryTemplate}</code>
+          </pre>
+        ) : null}
+        {explorerInspection?.payload ? (
+          <pre className="drawer-code">
+            <code>{JSON.stringify(explorerInspection.payload, null, 2)}</code>
+          </pre>
+        ) : null}
       </div>
     </div>
   )

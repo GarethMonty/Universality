@@ -13,20 +13,13 @@ import type {
   LocalDatabaseCreateResult,
   LocalDatabasePickRequest,
   LocalDatabasePickResult,
-  OperationExecutionRequest,
-  OperationExecutionResponse,
-  OperationManifestRequest,
-  OperationManifestResponse,
-  OperationPlanRequest,
-  OperationPlanResponse,
   RightDrawerView,
   WorkspaceSnapshot,
 } from '@datapadplusplus/shared-types'
-import { ConnectionsIcon, SettingsIcon } from './icons'
+import { ConnectionsIcon } from './icons'
 import { ConnectionBlade } from './RightDrawer.connection-blade'
 import { DiagnosticsBlade } from './RightDrawer.diagnostics-blade'
 import { InspectionBlade } from './RightDrawer.inspection-blade'
-import { OperationsBlade } from './RightDrawer.operations-blade'
 import { DrawerHeader } from './RightDrawer.primitives'
 
 interface RightDrawerProps {
@@ -35,7 +28,6 @@ interface RightDrawerProps {
   health: AppHealth
   theme: WorkspaceSnapshot['preferences']['theme']
   activeConnection?: ConnectionProfile
-  activeEnvironment?: EnvironmentProfile
   environments: EnvironmentProfile[]
   connectionTest?: ConnectionTestResult
   diagnostics?: DiagnosticsReport
@@ -53,15 +45,6 @@ interface RightDrawerProps {
   onExportWorkspace(): void
   onImportWorkspace(): void
   onApplyTemplate(queryTemplate?: string): void
-  onListOperations(
-    request: OperationManifestRequest,
-  ): Promise<OperationManifestResponse | undefined>
-  onPlanOperation(
-    request: OperationPlanRequest,
-  ): Promise<OperationPlanResponse | undefined>
-  onExecuteOperation(
-    request: OperationExecutionRequest,
-  ): Promise<OperationExecutionResponse | undefined>
   onToggleTheme(): void
   onPickLocalDatabaseFile(request: LocalDatabasePickRequest): Promise<LocalDatabasePickResult>
   onCreateLocalDatabase(
@@ -76,7 +59,6 @@ export function RightDrawer({
   health,
   theme,
   activeConnection,
-  activeEnvironment,
   environments,
   connectionTest,
   diagnostics,
@@ -94,9 +76,6 @@ export function RightDrawer({
   onExportWorkspace,
   onImportWorkspace,
   onApplyTemplate,
-  onListOperations,
-  onPlanOperation,
-  onExecuteOperation,
   onToggleTheme,
   onPickLocalDatabaseFile,
   onCreateLocalDatabase,
@@ -192,27 +171,6 @@ export function RightDrawer({
           onRefreshDiagnostics={onRefreshDiagnostics}
           onToggleTheme={onToggleTheme}
         />
-      ) : null}
-
-      {view === 'operations' ? (
-        activeConnection && activeEnvironment ? (
-          <OperationsBlade
-            activeConnection={activeConnection}
-            activeEnvironment={activeEnvironment}
-            onApplyTemplate={onApplyTemplate}
-            onClose={onClose}
-            onExecuteOperation={onExecuteOperation}
-            onListOperations={onListOperations}
-            onPlanOperation={onPlanOperation}
-          />
-        ) : (
-          <DrawerPlaceholder
-            copy="Select a connection and environment before opening operation actions."
-            icon={SettingsIcon}
-            title="No Operation Context"
-            onClose={onClose}
-          />
-        )
       ) : null}
     </aside>
   )

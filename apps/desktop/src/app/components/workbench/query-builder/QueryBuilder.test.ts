@@ -275,13 +275,7 @@ describe('SQL SELECT query builder', () => {
         limit: 25,
       }),
     ).toBe(
-      [
-        'select "email", "status"',
-        'from "public"."accounts"',
-        'where "status" = \'active\' and "total" >= 100',
-        'order by "created_at" desc',
-        'limit 25;',
-      ].join('\n'),
+      'select "email", "status" from "public"."accounts" where "status" = \'active\' and "total" >= 100 order by "created_at" desc limit 25;',
     )
   })
 
@@ -291,7 +285,16 @@ describe('SQL SELECT query builder', () => {
         createDefaultSqlSelectBuilderState('orders', 'dbo', 10),
         'sqlserver',
       ),
-    ).toBe('select top 10 *\nfrom [dbo].[orders];')
+    ).toBe('select top 10 * from [dbo].[orders];')
+  })
+
+  it('uses SQLite main schema and bracket identifiers', () => {
+    expect(
+      buildSqlSelectQueryText(
+        createDefaultSqlSelectBuilderState('accounts', undefined, 100),
+        'sqlite',
+      ),
+    ).toBe('select * from [main].[accounts] limit 100;')
   })
 
   it('parses simple table SELECTs back into builder state', () => {

@@ -3,7 +3,7 @@ use mongodb::bson::{self, doc, Document};
 use serde_json::json;
 
 use super::super::super::*;
-use super::connection::mongodb_client;
+use super::connection::{mongodb_client, mongodb_database_name};
 
 pub(crate) async fn load_mongodb_structure(
     connection: &ResolvedConnectionProfile,
@@ -11,10 +11,7 @@ pub(crate) async fn load_mongodb_structure(
 ) -> Result<StructureResponse, CommandError> {
     let limit = request.limit.unwrap_or(80);
     let client = mongodb_client(connection).await?;
-    let database_name = connection
-        .database
-        .clone()
-        .unwrap_or_else(|| "admin".into());
+    let database_name = mongodb_database_name(connection);
     let database = client.database(&database_name);
     let collections = database.list_collection_names().await?;
     let mut nodes = Vec::new();

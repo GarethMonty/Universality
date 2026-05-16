@@ -12,6 +12,7 @@ use crate::{
     persistence, security,
 };
 
+use super::library::{ensure_library_nodes, library_nodes_are_empty_scaffold};
 use super::query_tabs::{editor_label_for_connection, language_for_connection};
 use super::timestamp_now;
 pub(super) struct FixtureWorkspaceSeed {
@@ -37,6 +38,7 @@ pub(super) fn workspace_is_empty(snapshot: &WorkspaceSnapshot) -> bool {
     snapshot.connections.is_empty()
         && snapshot.environments.is_empty()
         && snapshot.tabs.is_empty()
+        && library_nodes_are_empty_scaffold(&snapshot.library_nodes)
         && snapshot.saved_work.is_empty()
 }
 
@@ -94,50 +96,50 @@ pub(super) fn fixture_workspace_seed_for_profile(
         .unwrap_or_default();
     let active_tab_id = tabs.first().map(|tab| tab.id.clone()).unwrap_or_default();
 
-    FixtureWorkspaceSeed {
-        snapshot: WorkspaceSnapshot {
-            schema_version: persistence::SCHEMA_VERSION,
-            connections,
-            environments,
-            tabs,
-            closed_tabs,
-            saved_work,
-            explorer_nodes: Vec::new(),
-            adapter_manifests: adapters::manifests(),
-            preferences: AppPreferences {
-                theme: "dark".into(),
-                telemetry: "opt-in".into(),
-                lock_after_minutes: 15,
-                safe_mode_enabled: true,
-                command_palette_enabled: true,
-            },
-            guardrails: Vec::new(),
-            lock_state: LockState {
-                is_locked: false,
-                locked_at: None,
-            },
-            ui: UiState {
-                active_connection_id,
-                active_environment_id: "env-fixtures".into(),
-                active_tab_id,
-                explorer_filter: String::new(),
-                explorer_view: "structure".into(),
-                connection_group_mode: "none".into(),
-                sidebar_section_states: HashMap::new(),
-                active_activity: "connections".into(),
-                sidebar_collapsed: false,
-                active_sidebar_pane: "connections".into(),
-                sidebar_width: 300,
-                bottom_panel_visible: false,
-                active_bottom_panel_tab: "results".into(),
-                bottom_panel_height: 300,
-                right_drawer: "none".into(),
-                right_drawer_width: 380,
-            },
-            updated_at: created_at,
+    let mut snapshot = WorkspaceSnapshot {
+        schema_version: persistence::SCHEMA_VERSION,
+        connections,
+        environments,
+        tabs,
+        closed_tabs,
+        library_nodes: Vec::new(),
+        saved_work,
+        explorer_nodes: Vec::new(),
+        adapter_manifests: adapters::manifests(),
+        preferences: AppPreferences {
+            theme: "dark".into(),
+            telemetry: "opt-in".into(),
+            lock_after_minutes: 15,
+            safe_mode_enabled: true,
         },
-        secrets,
-    }
+        guardrails: Vec::new(),
+        lock_state: LockState {
+            is_locked: false,
+            locked_at: None,
+        },
+        ui: UiState {
+            active_connection_id,
+            active_environment_id: "env-fixtures".into(),
+            active_tab_id,
+            explorer_filter: String::new(),
+            explorer_view: "structure".into(),
+            connection_group_mode: "none".into(),
+            sidebar_section_states: HashMap::new(),
+            active_activity: "connections".into(),
+            sidebar_collapsed: false,
+            active_sidebar_pane: "connections".into(),
+            sidebar_width: 300,
+            bottom_panel_visible: false,
+            active_bottom_panel_tab: "results".into(),
+            bottom_panel_height: 300,
+            right_drawer: "none".into(),
+            right_drawer_width: 380,
+        },
+        updated_at: created_at,
+    };
+    ensure_library_nodes(&mut snapshot);
+
+    FixtureWorkspaceSeed { snapshot, secrets }
 }
 
 pub(super) fn seed_fixture_secrets(secrets: &[(SecretRef, String)]) -> Result<(), CommandError> {
@@ -273,14 +275,17 @@ fn fixture_query_tab(
     QueryTabState {
         id: format!("tab-{}", seed.id),
         title: seed.query_title.into(),
+        tab_kind: Some("query".into()),
         connection_id: connection.id.clone(),
         environment_id: "env-fixtures".into(),
         family: connection.family.clone(),
         language: language_for_connection(connection),
         pinned: Some(seed.profile.is_none()),
+        save_target: None,
         saved_query_id: Some(format!("saved-{}", seed.id)),
         editor_label: editor_label_for_connection(connection),
         query_text: seed.query_text.into(),
+        scoped_target: None,
         builder_state: None,
         status: "idle".into(),
         dirty: false,

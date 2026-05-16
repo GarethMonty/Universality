@@ -280,7 +280,7 @@ describe('ResultPayloadView', () => {
     expect(screen.queryByLabelText('Change type status')).not.toBeInTheDocument()
   })
 
-  it('renders table payloads with selection, buffered filtering, and copy actions', async () => {
+  it('renders table payloads with compact filtering and keyboard copy shortcuts', async () => {
     const { container } = render(
       <ResultPayloadView
         payload={{
@@ -298,18 +298,30 @@ describe('ResultPayloadView', () => {
       target: { value: 'avery' },
     })
 
-    expect(screen.getByText('1 of 2 buffered row(s)')).toBeInTheDocument()
+    expect(screen.queryByText(/buffered row\(s\)/i)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Copy Selection' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Copy Row' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Copy All' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Avery' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Blake' })).not.toBeInTheDocument()
     expect(
       container.querySelector('.data-grid-row:not(.data-grid-row--header)'),
     ).toHaveStyle({ transform: 'translateY(30px)' })
 
-    fireEvent.pointerDown(screen.getByRole('button', { name: 'Avery' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Copy Selection' }))
+    const averyCell = screen.getByRole('button', { name: 'Avery' })
+    fireEvent.pointerDown(averyCell)
+    fireEvent.keyDown(averyCell, { key: 'c', ctrlKey: true })
 
     await waitFor(() => {
       expect(writeTextSpy).toHaveBeenCalledWith('Avery')
+    })
+
+    const rowNumber = screen.getByRole('button', { name: 'Select row 1' })
+    fireEvent.pointerDown(rowNumber)
+    fireEvent.keyDown(rowNumber, { key: 'c', ctrlKey: true })
+
+    await waitFor(() => {
+      expect(writeTextSpy).toHaveBeenCalledWith('Avery\tactive')
     })
   })
 

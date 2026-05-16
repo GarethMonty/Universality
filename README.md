@@ -155,7 +155,7 @@ DataPadPlusPlus/
 DataPad++ is organized around a capability-driven desktop architecture:
 
 1. The React UI shell owns layout, navigation, workbench panes, query editors, result surfaces, and user interaction.
-2. The application layer coordinates workspace state, active connection/environment selection, guardrails, query execution, saved work, and diagnostics.
+2. The application layer coordinates workspace state, active connection/environment selection, guardrails, query execution, Library items, and diagnostics.
 3. Shared TypeScript contracts define datastore families, engines, capabilities, connections, environments, runtime requests, results, and workspace state.
 4. Rust adapters isolate engine-specific connection validation, metadata exploration, execution, result normalization, operation planning, permissions, and diagnostics.
 5. The Tauri native layer owns privileged desktop commands, persistence, secret storage integration, local file selection, imports/exports, and OS integration.

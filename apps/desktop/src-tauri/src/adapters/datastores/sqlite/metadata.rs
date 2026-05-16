@@ -1,17 +1,14 @@
 use sqlx::Row;
 
 use super::super::super::*;
-use super::connection::sqlite_dsn;
+use super::connection::sqlite_pool;
 
 pub(crate) async fn load_sqlite_structure(
     connection: &ResolvedConnectionProfile,
     request: &StructureRequest,
 ) -> Result<StructureResponse, CommandError> {
     let limit = request.limit.unwrap_or(120);
-    let pool = sqlx::sqlite::SqlitePoolOptions::new()
-        .max_connections(1)
-        .connect(&sqlite_dsn(connection))
-        .await?;
+    let pool = sqlite_pool(connection).await?;
     let objects = sqlx::query(&format!(
         "select name, type from sqlite_master where type in ('table', 'view') and name not like 'sqlite_%' order by name limit {}",
         limit + 1

@@ -3,7 +3,7 @@ use mongodb::bson::{self, doc, Document};
 use serde_json::{json, Value};
 
 use super::super::super::*;
-use super::connection::mongodb_client;
+use super::connection::{mongodb_client, mongodb_database_name_for_collection_query};
 
 pub(crate) async fn fetch_mongodb_page(
     connection: &ResolvedConnectionProfile,
@@ -12,11 +12,6 @@ pub(crate) async fn fetch_mongodb_page(
     let page_size = bounded_page_size(request.page_size);
     let page_index = request.page_index.unwrap_or(1);
     let client = mongodb_client(connection).await?;
-    let database_name = connection
-        .database
-        .clone()
-        .unwrap_or_else(|| "admin".into());
-    let database = client.database(&database_name);
     let input = serde_json::from_str::<serde_json::Value>(selected_page_query(request))?;
     let collection_name = input
         .get("collection")
@@ -27,6 +22,15 @@ pub(crate) async fn fetch_mongodb_page(
                 "MongoDB queries must include a `collection` field for paging.",
             )
         })?;
+    let database_resolution =
+        mongodb_database_name_for_collection_query(&client, connection, &input, collection_name)
+            .await;
+    let page_notices = database_resolution
+        .notice
+        .map(|notice| notice.message)
+        .into_iter()
+        .collect();
+    let database = client.database(&database_resolution.database_name);
     let collection = database.collection::<Document>(collection_name);
     let query_skip = input.get("skip").and_then(Value::as_u64).unwrap_or(0);
     let skip = query_skip + u64::from(page_index) * u64::from(page_size);
@@ -83,7 +87,7 @@ pub(crate) async fn fetch_mongodb_page(
             buffered_rows,
             has_more,
             next_cursor: None,
-            notices: Vec::new(),
+            notices: page_notices,
         },
     ))
 }

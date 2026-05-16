@@ -1,9 +1,17 @@
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
+import { fileURLToPath, URL } from 'node:url'
 
 export default defineConfig({
   plugins: [react()],
   clearScreen: false,
+  resolve: {
+    alias: {
+      '@datapadplusplus/shared-types': fileURLToPath(
+        new URL('../../packages/shared-types/src/index.ts', import.meta.url),
+      ),
+    },
+  },
   server: {
     port: 1420,
     strictPort: true,

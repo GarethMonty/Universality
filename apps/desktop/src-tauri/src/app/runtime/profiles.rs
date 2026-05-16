@@ -230,6 +230,10 @@ impl ManagedAppState {
                 .database
                 .as_ref()
                 .is_some_and(|value| has_unresolved_tokens(value))
+            || resolved
+                .connection_string
+                .as_ref()
+                .is_some_and(|value| has_unresolved_tokens(value))
         {
             return Ok(ConnectionTestResult {
                 ok: false,

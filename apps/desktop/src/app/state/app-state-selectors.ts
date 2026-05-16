@@ -72,7 +72,7 @@ export function savedWorkItemForTab(
     tags:
       existingSavedWork?.tags ??
       [connection.engine, environment.label.toLowerCase()],
-    folder: existingSavedWork?.folder ?? 'Saved Queries',
+    folder: existingSavedWork?.folder ?? 'Queries',
     favorite: existingSavedWork?.favorite ?? false,
     updatedAt: new Date().toISOString(),
     connectionId: connection.id,

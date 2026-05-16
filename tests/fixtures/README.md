@@ -2,6 +2,9 @@
 
 This folder contains repeatable local fixtures for debugging and E2E testing datastore adapters.
 
+Connection strings, credentials, and seeded smoke queries are listed in
+[`CONNECTIONS.md`](./CONNECTIONS.md).
+
 ## Commands
 
 - Core fixtures: `npm run fixtures:up`
@@ -47,6 +50,8 @@ npm run fixtures:up
 ```
 
 VS Code debug tasks should run `fixtures:up` first so the generated environment file exists before the desktop app starts. This keeps debugger connection profiles aligned with any automatic port fallback.
+
+If an existing local fixture container was created before the current credentials or health checks, `fixtures:up` may recreate only that stale fixture container and retry. This is expected for local test data; rerun `fixtures:seed` after `fixtures:up` to repopulate deterministic samples.
 
 | Engine | Host Port | Database | User | Password |
 | --- | ---: | --- | --- | --- |

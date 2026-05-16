@@ -1,12 +1,8 @@
 use serde_json::{json, Value};
-use sqlx::{
-    query::Query,
-    sqlite::{SqliteArguments, SqlitePoolOptions},
-    Sqlite,
-};
+use sqlx::{query::Query, sqlite::SqliteArguments, Sqlite};
 
 use super::super::super::*;
-use super::connection::sqlite_dsn;
+use super::connection::sqlite_pool;
 
 pub(super) async fn execute_sqlite_data_edit(
     connection: &ResolvedConnectionProfile,
@@ -65,10 +61,7 @@ pub(super) async fn execute_sqlite_data_edit(
         }
     };
 
-    let pool = SqlitePoolOptions::new()
-        .max_connections(1)
-        .connect(&sqlite_dsn(connection))
-        .await?;
+    let pool = sqlite_pool(connection).await?;
     let mut query = sqlx::query(&statement.sql);
     for value in &statement.values {
         query = bind_sqlite_value(query, value);

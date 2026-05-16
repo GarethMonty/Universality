@@ -79,7 +79,7 @@ export function DiagnosticsBlade({
             <DrawerDetailRow label="Platform" value={diagnostics?.platform ?? health.platform} />
             <DrawerDetailRow label="App Version" value={diagnostics?.appVersion ?? 'Unknown'} />
             <DrawerDetailRow label="Connections" value={String(diagnostics?.counts.connections ?? 0)} />
-            <DrawerDetailRow label="Saved Work" value={String(diagnostics?.counts.savedWork ?? 0)} />
+            <DrawerDetailRow label="Library" value={String(diagnostics?.counts.library ?? 0)} />
           </div>
           <ul className="messages-list">
             {(diagnostics?.warnings.length ? diagnostics.warnings : ['No active warnings.']).map((warning) => (

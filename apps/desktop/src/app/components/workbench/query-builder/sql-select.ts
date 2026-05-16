@@ -62,12 +62,26 @@ export function buildSqlSelectQueryText(
 
   const limit = state.limit && state.limit > 0 ? Math.floor(state.limit) : undefined
   const topClause = engine === 'sqlserver' && limit ? ` top ${limit}` : ''
-  const fromClause = `from ${quoteSqlTablePath(state, engine)}`
+  const clauses = [
+    `select${topClause} ${projection}`,
+    `from ${quoteSqlTablePath(state, engine)}`,
+  ]
   const whereClause = buildWhereClause(state, engine)
   const sortClause = buildSortClause(state, engine)
-  const limitClause = engine === 'sqlserver' || !limit ? '' : `\nlimit ${limit}`
 
-  return `select${topClause} ${projection}\n${fromClause}${whereClause}${sortClause}${limitClause};`
+  if (whereClause) {
+    clauses.push(whereClause)
+  }
+
+  if (sortClause) {
+    clauses.push(sortClause)
+  }
+
+  if (engine !== 'sqlserver' && limit) {
+    clauses.push(`limit ${limit}`)
+  }
+
+  return `${clauses.join(' ')};`
 }
 
 export function parseSqlSelectQueryText(
@@ -113,7 +127,7 @@ function buildWhereClause(state: SqlSelectBuilderState, engine: ConnectionProfil
     .filter(Boolean)
 
   return predicates.length > 0
-    ? `\nwhere ${predicates.join(` ${state.filterLogic} `)}`
+    ? `where ${predicates.join(` ${state.filterLogic} `)}`
     : ''
 }
 
@@ -149,11 +163,13 @@ function buildSortClause(state: SqlSelectBuilderState, engine: ConnectionProfile
     })
     .filter(Boolean)
 
-  return sort.length > 0 ? `\norder by ${sort.join(', ')}` : ''
+  return sort.length > 0 ? `order by ${sort.join(', ')}` : ''
 }
 
 function quoteSqlTablePath(state: SqlSelectBuilderState, engine: ConnectionProfile['engine']) {
-  return [state.schema, state.table]
+  const schema = state.schema?.trim() || (engine === 'sqlite' ? 'main' : undefined)
+
+  return [schema, state.table]
     .filter((part): part is string => Boolean(part?.trim()))
     .map((part) => quoteSqlIdentifier(part, engine))
     .join('.')
@@ -181,7 +197,7 @@ function quoteSqlIdentifier(identifier: string, engine: ConnectionProfile['engin
     return identifier
   }
 
-  if (engine === 'sqlserver') {
+  if (engine === 'sqlserver' || engine === 'sqlite') {
     return `[${identifier.replaceAll(']', ']]')}]`
   }
 

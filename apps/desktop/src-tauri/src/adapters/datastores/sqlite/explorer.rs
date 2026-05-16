@@ -2,16 +2,13 @@ use serde_json::json;
 use sqlx::Row;
 
 use super::super::super::*;
-use super::connection::sqlite_dsn;
+use super::connection::sqlite_pool;
 
 pub(super) async fn list_sqlite_explorer_nodes(
     connection: &ResolvedConnectionProfile,
     request: &ExplorerRequest,
 ) -> Result<ExplorerResponse, CommandError> {
-    let pool = sqlx::sqlite::SqlitePoolOptions::new()
-        .max_connections(1)
-        .connect(&sqlite_dsn(connection))
-        .await?;
+    let pool = sqlite_pool(connection).await?;
     let nodes = if let Some(scope) = &request.scope {
         if let Some(table) = scope.strip_prefix("table:") {
             let query = format!("pragma table_info('{}')", sql_literal(table));
@@ -95,13 +92,14 @@ pub(super) fn inspect_sqlite_explorer_node(
 
 pub(crate) fn sqlite_select_template(table: &str) -> String {
     format!(
-        "select * from {} limit 100;",
+        "select * from {}.{} limit 100;",
+        sqlite_quote_identifier("main"),
         sqlite_quote_identifier(table)
     )
 }
 
 fn sqlite_quote_identifier(identifier: &str) -> String {
-    format!("\"{}\"", identifier.replace('"', "\"\""))
+    format!("[{}]", identifier.replace(']', "]]"))
 }
 
 #[cfg(test)]
@@ -112,11 +110,11 @@ mod tests {
     fn sqlite_select_template_escapes_identifiers() {
         assert_eq!(
             sqlite_select_template("accounts"),
-            "select * from \"accounts\" limit 100;"
+            "select * from [main].[accounts] limit 100;"
         );
         assert_eq!(
-            sqlite_select_template("odd\"table"),
-            "select * from \"odd\"\"table\" limit 100;"
+            sqlite_select_template("odd]table"),
+            "select * from [main].[odd]]table] limit 100;"
         );
     }
 }

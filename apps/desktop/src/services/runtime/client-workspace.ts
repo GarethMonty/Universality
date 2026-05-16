@@ -7,7 +7,11 @@ import { isTauriRuntime, invokeDesktop } from './desktop-bridge'
 export const clientWorkspace = {
   async bootstrapApp(): Promise<BootstrapPayload> {
     if (isTauriRuntime()) {
-      return invokeDesktop<BootstrapPayload>('bootstrap_app')
+      const payload = await invokeDesktop<BootstrapPayload>('bootstrap_app')
+
+      return payload.snapshot.lockState.isLocked
+        ? invokeDesktop<BootstrapPayload>('unlock_app')
+        : payload
     }
 
     return buildBrowserPayload(loadBrowserSnapshot())

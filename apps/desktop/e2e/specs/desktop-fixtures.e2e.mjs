@@ -443,9 +443,10 @@ describe('DataPad++ Tauri desktop fixtures', () => {
   })
 
   it('saves real work and exports without raw secrets', async () => {
-    await clickControl('Saved Work view')
-    await clickControl('Save current query')
-    await waitForText('Saved Queries')
+    await clickControl('Library view')
+    await clickControl('Save current query to library')
+    await clickControl('Save')
+    await waitForText('Queries')
 
     const encryptedPayload = await exportWorkspace()
     assert.equal(encryptedPayload.includes('DataPadPlusPlus_pwd_123'), false)

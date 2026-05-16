@@ -1,4 +1,17 @@
-import type { ConnectionProfile, ScopedQueryTarget } from '@datapadplusplus/shared-types'
+import type {
+  ConnectionProfile,
+  ExplorerNode,
+  ScopedQueryTarget,
+} from '@datapadplusplus/shared-types'
+import {
+  branchNodeForPath,
+  documentFindQueryTemplate,
+  managementActionsForNode,
+  normalizeExplorerKind,
+  placementForExplorerNode,
+  sqlObjectQueryTemplate,
+  type ConnectionTreeAction,
+} from './SideBar.datastore-tree-registry'
 
 export interface ConnectionTreeNode {
   id: string
@@ -9,6 +22,10 @@ export interface ConnectionTreeNode {
   path?: string[]
   queryTemplate?: string
   queryable?: boolean
+  expandable?: boolean
+  refreshScope?: string
+  category?: boolean
+  actions?: ConnectionTreeAction[]
   builderKind?: ScopedQueryTarget['preferredBuilder']
   children?: ConnectionTreeNode[]
 }
@@ -34,6 +51,181 @@ export function buildConnectionObjectTree(connection: ConnectionProfile): Connec
     default:
       return sqlConnectionTree(connection)
   }
+}
+
+export function buildConnectionObjectTreeFromExplorerNodes(
+  connection: ConnectionProfile,
+  nodes: ExplorerNode[],
+): ConnectionTreeNode[] {
+  const roots: ConnectionTreeNode[] = []
+  const nodesByPath = new Map<string, ConnectionTreeNode>()
+
+  const ensureBranch = (path: string[]) => {
+    let parent: ConnectionTreeNode | undefined
+
+    path.forEach((_segment, index) => {
+      const branchPath = path.slice(0, index + 1)
+      const key = treePathKey(branchPath)
+      let branch = nodesByPath.get(key)
+
+      if (!branch) {
+        branch = branchNodeForPath(connection, branchPath)
+        nodesByPath.set(key, branch)
+
+        if (parent) {
+          attachChild(parent, branch)
+        } else {
+          attachRoot(roots, branch)
+        }
+      }
+
+      parent = branch
+    })
+
+    return parent
+  }
+
+  for (const node of nodes) {
+    const placement = placementForExplorerNode(connection, node)
+    const parentNode = ensureBranch(placement.path)
+    const treeNode = explorerNodeToConnectionTreeNode(connection, node, placement.kind)
+    const fullPath = [...placement.path, treeNode.label]
+    const key = treePathKey(fullPath)
+    const existingNode = nodesByPath.get(key)
+    const mergedNode = existingNode ? mergeTreeNode(existingNode, treeNode) : treeNode
+
+    nodesByPath.set(key, mergedNode)
+
+    if (parentNode) {
+      attachChild(parentNode, mergedNode)
+    } else {
+      attachRoot(roots, mergedNode)
+    }
+  }
+
+  decorateTreeNodes(connection, roots, undefined)
+  return roots
+}
+
+function explorerNodeToConnectionTreeNode(
+  connection: ConnectionProfile,
+  node: ExplorerNode,
+  normalizedKind = normalizeExplorerKind(connection, node.kind),
+): ConnectionTreeNode {
+  return {
+    id: node.id,
+    label: node.label,
+    kind: normalizedKind,
+    detail: node.detail,
+    scope: node.scope,
+    refreshScope: node.scope,
+    path: node.path,
+    queryTemplate: node.queryTemplate ?? fallbackExplorerQueryTemplate(connection, node),
+    queryable: isExplorerNodeQueryable(connection, node),
+    expandable: node.expandable,
+    builderKind:
+      connection.engine === 'mongodb' && node.kind === 'collection'
+        ? 'mongo-find'
+        : undefined,
+  }
+}
+
+function attachRoot(roots: ConnectionTreeNode[], node: ConnectionTreeNode) {
+  if (!roots.some((root) => root === node || root.id === node.id)) {
+    roots.push(node)
+  }
+}
+
+function attachChild(parent: ConnectionTreeNode, child: ConnectionTreeNode) {
+  parent.children ??= []
+  if (!parent.children.some((item) => item === child || item.id === child.id)) {
+    parent.children.push(child)
+  }
+}
+
+function mergeTreeNode(
+  existingNode: ConnectionTreeNode,
+  incomingNode: ConnectionTreeNode,
+) {
+  const children = existingNode.children ?? incomingNode.children
+
+  Object.assign(existingNode, incomingNode)
+  existingNode.children = children
+  return existingNode
+}
+
+function decorateTreeNodes(
+  connection: ConnectionProfile,
+  nodes: ConnectionTreeNode[],
+  inheritedRefreshScope: string | undefined,
+) {
+  for (const node of nodes) {
+    node.refreshScope ??= node.scope ?? inheritedRefreshScope
+    node.actions = managementActionsForNode(connection, node)
+
+    if (node.children?.length) {
+      decorateTreeNodes(connection, node.children, node.scope ?? node.refreshScope)
+    }
+  }
+}
+
+function treePathKey(path: string[]) {
+  return path.map((segment) => segment.toLowerCase()).join('/')
+}
+
+function fallbackExplorerQueryTemplate(
+  connection: ConnectionProfile,
+  node: ExplorerNode,
+): string | undefined {
+  const kind = normalizeExplorerKind(connection, node.kind)
+
+  if (
+    connection.family === 'sql' &&
+    ['table', 'hypertable', 'view', 'materialized-view'].includes(kind)
+  ) {
+    const { schema, objectName } = sqlObjectPartsFromExplorerNode(connection, node)
+
+    if (objectName) {
+      return sqlObjectQueryTemplate(connection, schema, objectName)
+    }
+  }
+
+  if (connection.engine === 'mongodb' && node.kind === 'collection') {
+    return documentFindQueryTemplate(node.label, 20, connection.database?.trim())
+  }
+
+  return undefined
+}
+
+function sqlObjectPartsFromExplorerNode(
+  connection: ConnectionProfile,
+  node: ExplorerNode,
+) {
+  const scopedName =
+    node.scope?.startsWith(`${node.kind}:`) ? node.scope.replace(`${node.kind}:`, '') : undefined
+  const [scopedSchema, scopedObjectName] = scopedName?.includes('.')
+    ? scopedName.split('.')
+    : [undefined, scopedName]
+  const normalizedPath =
+    node.path?.[0] === connection.name ? node.path.slice(1) : node.path ?? []
+
+  return {
+    schema: scopedSchema || normalizedPath[0] || defaultSqlSchema(connection),
+    objectName: scopedObjectName || node.label,
+  }
+}
+
+function isExplorerNodeQueryable(connection: ConnectionProfile, node: ExplorerNode) {
+  const kind = normalizeExplorerKind(connection, node.kind)
+
+  return Boolean(
+    node.queryTemplate ||
+      ['collection', 'table', 'hypertable', 'view', 'materialized-view'].includes(kind) ||
+      (['elasticsearch', 'opensearch'].includes(connection.engine) &&
+        ['index', 'data-stream'].includes(kind)) ||
+      (connection.engine === 'dynamodb' && kind === 'table') ||
+      (connection.engine === 'cassandra' && kind === 'table'),
+  )
 }
 
 function sqlConnectionTree(connection: ConnectionProfile): ConnectionTreeNode[] {
@@ -97,25 +289,15 @@ function documentConnectionTree(connection: ConnectionProfile): ConnectionTreeNo
 }
 
 function documentCollectionLeaf(connection: ConnectionProfile, collection: string) {
+  const database = connection.database?.trim()
+
   return leaf(`collection-${collection}`, collection, 'collection', 'sample collection', {
     path: [connection.name, connection.database ?? 'default', 'Collections'],
     scope: `collection:${collection}`,
     queryable: true,
     builderKind: connection.engine === 'mongodb' ? 'mongo-find' : undefined,
-    queryTemplate: `{\n  "collection": "${collection}",\n  "filter": {},\n  "limit": 20\n}`,
+    queryTemplate: documentFindQueryTemplate(collection, 20, database),
   })
-}
-
-function sqlObjectQueryTemplate(connection: ConnectionProfile, schema: string, objectName: string) {
-  if (connection.engine === 'sqlserver') {
-    return `select top 100 * from ${schema}.${objectName};`
-  }
-
-  if (connection.engine === 'sqlite' || connection.engine === 'duckdb') {
-    return `select * from ${objectName} limit 100;`
-  }
-
-  return `select * from ${schema}.${objectName} limit 100;`
 }
 
 function keyValueConnectionTree(connection: ConnectionProfile): ConnectionTreeNode[] {

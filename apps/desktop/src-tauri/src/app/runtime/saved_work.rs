@@ -4,7 +4,10 @@ use super::query_tabs::{
 use super::{generate_id, timestamp_now, ManagedAppState};
 use crate::domain::{
     error::CommandError,
-    models::{BootstrapPayload, QueryTabState, SavedWorkItem},
+    models::{
+        BootstrapPayload, QuerySaveTarget, QueryTabState, SaveQueryTabToLibraryRequest,
+        SavedWorkItem,
+    },
 };
 
 impl ManagedAppState {
@@ -31,26 +34,17 @@ impl ManagedAppState {
         }
 
         item.updated_at = timestamp_now();
-        let saved_work_id = item.id.clone();
-        let saved_query_name = item.name.clone();
-        let saved_query_text = item.query_text.clone();
-
+        let request = SaveQueryTabToLibraryRequest {
+            tab_id: tab_id.into(),
+            item_id: Some(item.id.clone()),
+            folder_id: None,
+            name: item.name.clone(),
+            kind: Some(item.kind.clone()),
+            environment_id: item.environment_id.clone(),
+            tags: item.tags.clone(),
+        };
         upsert_saved_work_item(&mut self.snapshot.saved_work, item);
-
-        let tab = &mut self.snapshot.tabs[tab_index];
-        tab.saved_query_id = Some(saved_work_id);
-        tab.title = saved_query_name;
-        if let Some(query_text) = saved_query_text {
-            tab.query_text = query_text;
-        }
-        tab.dirty = false;
-        tab.result = None;
-        tab.error = None;
-        tab.status = "idle".into();
-
-        self.snapshot.updated_at = timestamp_now();
-        self.persist()?;
-        Ok(self.bootstrap_payload())
+        self.save_query_tab_to_library(request)
     }
 
     pub fn upsert_saved_work(
@@ -64,6 +58,7 @@ impl ManagedAppState {
         let saved_query_text = item.query_text.clone();
 
         upsert_saved_work_item(&mut self.snapshot.saved_work, item);
+        super::library::ensure_library_nodes(&mut self.snapshot);
 
         for tab in &mut self.snapshot.tabs {
             if tab.saved_query_id.as_deref() == Some(saved_work_id.as_str()) {
@@ -91,6 +86,9 @@ impl ManagedAppState {
         self.snapshot
             .saved_work
             .retain(|item| item.id != saved_work_id);
+        self.snapshot
+            .library_nodes
+            .retain(|item| item.id != saved_work_id);
         self.snapshot.updated_at = timestamp_now();
         self.persist()?;
         Ok(self.bootstrap_payload())
@@ -107,11 +105,21 @@ impl ManagedAppState {
             .iter()
             .find(|saved| saved.id == saved_work_id)
             .cloned()
-            .ok_or_else(|| CommandError::new("saved-work-missing", "Saved work was not found."))?;
+            .ok_or_else(|| {
+                CommandError::new("saved-work-missing", "Library item was not found.")
+            })?;
+        if self
+            .snapshot
+            .library_nodes
+            .iter()
+            .any(|node| node.id == saved_work_id)
+        {
+            return self.open_library_item(saved_work_id);
+        }
         let query_text = item.query_text.clone().ok_or_else(|| {
             CommandError::new(
                 "saved-work-not-openable",
-                "Saved work does not contain query text.",
+                "Library item does not contain query text.",
             )
         })?;
         let connection_id = item
@@ -127,6 +135,7 @@ impl ManagedAppState {
         let tab = QueryTabState {
             id: generate_id("tab"),
             title: item.name.clone(),
+            tab_kind: Some("query".into()),
             connection_id: connection.id.clone(),
             environment_id,
             family: connection.family.clone(),
@@ -135,9 +144,15 @@ impl ManagedAppState {
                 .clone()
                 .unwrap_or_else(|| language_for_connection(&connection)),
             pinned: None,
+            save_target: Some(QuerySaveTarget {
+                kind: "library".into(),
+                library_item_id: Some(item.id.clone()),
+                path: None,
+            }),
             saved_query_id: Some(item.id.clone()),
             editor_label: editor_label_for_connection(&connection),
             query_text,
+            scoped_target: None,
             builder_state: None,
             status: "idle".into(),
             dirty: false,

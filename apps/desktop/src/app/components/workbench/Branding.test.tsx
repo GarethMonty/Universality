@@ -36,13 +36,10 @@ describe('workbench branding', () => {
       <ActivityBar
         activeActivity="connections"
         sidebarCollapsed={false}
-        commandPaletteEnabled
-        isLocked={false}
         theme="dark"
         onToggleSidebar={vi.fn()}
         onSelectActivity={vi.fn()}
         onToggleTheme={vi.fn()}
-        onToggleLock={vi.fn()}
       />,
     )
 

@@ -11,6 +11,7 @@
     "node": ">=24.0.0"
   },
   "scripts": {
+    "dev:preflight": "node .vscode/ensure-workspace-path.mjs",
     "dev": "npm run dev --workspace @datapadplusplus/desktop",
     "build": "npm run build --workspace @datapadplusplus/shared-types && npm run build --workspace @datapadplusplus/desktop",
     "lint": "npm run lint --workspace @datapadplusplus/desktop",

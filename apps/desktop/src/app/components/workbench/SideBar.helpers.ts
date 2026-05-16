@@ -8,8 +8,12 @@ import type {
 } from '@datapadplusplus/shared-types'
 import type { ConnectionTreeNode } from './SideBar.connection-tree'
 
-export { buildConnectionObjectTree } from './SideBar.connection-tree'
+export {
+  buildConnectionObjectTree,
+  buildConnectionObjectTreeFromExplorerNodes,
+} from './SideBar.connection-tree'
 export type { ConnectionTreeNode } from './SideBar.connection-tree'
+export type { ConnectionTreeAction } from './SideBar.datastore-tree-registry'
 
 export function isScopedQueryable(node: ConnectionTreeNode) {
   return Boolean(node.queryable || node.queryTemplate || node.builderKind)

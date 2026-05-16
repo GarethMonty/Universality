@@ -26,6 +26,10 @@ pub(super) fn build_resolution_warnings(
             .database
             .as_ref()
             .is_some_and(|value| has_unresolved_tokens(value))
+        || profile
+            .connection_string
+            .as_ref()
+            .is_some_and(|value| has_unresolved_tokens(value))
     {
         warnings.push("Connection fields still contain unresolved placeholders.".into());
     }

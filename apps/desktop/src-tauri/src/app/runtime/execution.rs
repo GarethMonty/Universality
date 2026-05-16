@@ -67,7 +67,6 @@ impl ManagedAppState {
                     let tab = &mut self.snapshot.tabs[tab_index];
                     tab.query_text = request.query_text.clone();
                     tab.status = "blocked".into();
-                    tab.dirty = false;
                     tab.last_run_at = Some(executed_at.clone());
                     tab.history.insert(
                         0,
@@ -159,7 +158,6 @@ impl ManagedAppState {
             let tab = &mut self.snapshot.tabs[tab_index];
             tab.query_text = request.query_text.clone();
             tab.status = status.clone();
-            tab.dirty = false;
             tab.last_run_at = Some(executed_at.clone());
             tab.history.insert(
                 0,

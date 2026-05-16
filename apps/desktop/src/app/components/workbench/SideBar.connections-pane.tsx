@@ -4,6 +4,7 @@ import type {
   ConnectionGroupMode,
   ConnectionProfile,
   EnvironmentProfile,
+  ExplorerNode,
   ScopedQueryTarget,
 } from '@datapadplusplus/shared-types'
 import {
@@ -36,16 +37,18 @@ export function ConnectionsPane({
   connectionGroupMode,
   connectionGroups,
   environments,
+  explorerNodes,
+  explorerStatus,
   sectionStates,
   onConnectionFilterChange,
   onConnectionGroupModeChange,
   onSidebarSectionExpandedChange,
   onCreateConnection,
   onDeleteConnection,
-  onOpenConnectionOperations,
   onDuplicateConnection,
   onOpenConnectionExplorer,
   onOpenConnectionDrawer,
+  onLoadExplorerScope,
   onOpenScopedQuery,
   onCreateTab,
   onSelectConnection,
@@ -55,14 +58,16 @@ export function ConnectionsPane({
   connectionGroupMode: ConnectionGroupMode
   connectionGroups: Record<string, ConnectionProfile[]>
   environments: EnvironmentProfile[]
+  explorerNodes: ExplorerNode[]
+  explorerStatus: 'idle' | 'loading' | 'ready'
   sectionStates: Record<string, boolean>
   onConnectionFilterChange(value: string): void
   onConnectionGroupModeChange(value: ConnectionGroupMode): void
   onSidebarSectionExpandedChange(sectionId: string, expanded: boolean): void
   onCreateConnection(): void
   onDeleteConnection(connectionId: string): void
-  onOpenConnectionOperations(connectionId: string): void
   onOpenConnectionDrawer(connectionId: string): void
+  onLoadExplorerScope(connectionId: string, scope?: string): void
   onDuplicateConnection(connectionId: string): void
   onOpenConnectionExplorer(connectionId: string): void
   onOpenScopedQuery(connectionId: string, target: ScopedQueryTarget): void
@@ -119,6 +124,16 @@ export function ConnectionsPane({
       x: event.clientX,
       y: event.clientY,
     })
+  }
+  const openExplorerFromDoubleClick = (
+    event: MouseEvent<HTMLElement>,
+    connectionId: string,
+  ) => {
+    if (isInteractiveConnectionTarget(event.target)) {
+      return
+    }
+
+    onOpenConnectionExplorer(connectionId)
   }
 
   return (
@@ -187,6 +202,7 @@ export function ConnectionsPane({
                         expandConnectionTree(connection.id)
                         onSelectConnection(connection.id)
                       }}
+                      onDoubleClick={(event) => openExplorerFromDoubleClick(event, connection.id)}
                       onKeyDown={(event) => {
                         if (event.key === 'Enter' || event.key === ' ') {
                           event.preventDefault()
@@ -203,6 +219,7 @@ export function ConnectionsPane({
                         title={`${expanded ? 'Collapse' : 'Expand'} ${connection.name} object tree.`}
                         onClick={(event) => {
                           event.stopPropagation()
+                          onSelectConnection(connection.id)
                           toggleConnectionTree(connection.id)
                         }}
                       >
@@ -244,6 +261,14 @@ export function ConnectionsPane({
                     {expanded ? (
                       <ConnectionObjectTree
                         connection={connection}
+                        environment={environment}
+                        explorerNodes={
+                          connection.id === activeConnectionId ? explorerNodes : []
+                        }
+                        explorerStatus={
+                          connection.id === activeConnectionId ? explorerStatus : 'idle'
+                        }
+                        onLoadExplorerScope={onLoadExplorerScope}
                         onOpenScopedQuery={onOpenScopedQuery}
                       />
                     ) : null}
@@ -265,9 +290,12 @@ export function ConnectionsPane({
           onDuplicateConnection={onDuplicateConnection}
           onOpenConnectionDrawer={onOpenConnectionDrawer}
           onOpenConnectionExplorer={onOpenConnectionExplorer}
-          onOpenConnectionOperations={onOpenConnectionOperations}
         />
       ) : null}
     </>
   )
+}
+
+function isInteractiveConnectionTarget(target: EventTarget | null) {
+  return target instanceof Element && Boolean(target.closest('button, input, select, textarea, a'))
 }
