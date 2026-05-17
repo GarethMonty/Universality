@@ -12,6 +12,8 @@ type RuntimeActions = Pick<
   | 'loadExplorer'
   | 'loadStructureMap'
   | 'inspectExplorer'
+  | 'scanRedisKeys'
+  | 'inspectRedisKey'
   | 'executeQuery'
   | 'fetchResultPage'
   | 'cancelExecution'
@@ -107,6 +109,44 @@ export function useRuntimeActions({
       }
     },
     [dispatch, state.payload],
+  )
+
+  const scanRedisKeys = useCallback<Actions['scanRedisKeys']>(
+    async (request) => {
+      try {
+        ensureWorkspaceUnlocked(state.payload)
+        return await desktopClient.scanRedisKeys(request)
+      } catch (error) {
+        handleError(error)
+        return undefined
+      }
+    },
+    [handleError, state.payload],
+  )
+
+  const inspectRedisKey = useCallback<Actions['inspectRedisKey']>(
+    async (request) => {
+      try {
+        ensureWorkspaceUnlocked(state.payload)
+        dispatch({ type: 'EXECUTION_LOADING' })
+        const execution = await desktopClient.inspectRedisKey(request)
+        dispatch({
+          type: 'EXECUTION_READY',
+          execution,
+          request: {
+            executionId: execution.executionId,
+            tabId: request.tabId,
+            connectionId: request.connectionId,
+            environmentId: request.environmentId,
+            language: 'redis',
+            queryText: `INSPECT ${request.key}`,
+          },
+        })
+      } catch (error) {
+        handleError(error)
+      }
+    },
+    [dispatch, handleError, state.payload],
   )
 
   const executeQuery = useCallback<Actions['executeQuery']>(
@@ -303,6 +343,8 @@ export function useRuntimeActions({
       loadExplorer,
       loadStructureMap,
       inspectExplorer,
+      scanRedisKeys,
+      inspectRedisKey,
       executeQuery,
       fetchResultPage,
       cancelExecution,
@@ -320,10 +362,12 @@ export function useRuntimeActions({
       executeDatastoreOperation,
       executeQuery,
       fetchResultPage,
+      inspectRedisKey,
       inspectExplorer,
       listDatastoreOperations,
       loadExplorer,
       loadStructureMap,
+      scanRedisKeys,
       executeDataEdit,
       pickLocalDatabaseFile,
       planDataEdit,

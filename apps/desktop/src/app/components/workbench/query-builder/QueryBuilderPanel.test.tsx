@@ -1,5 +1,6 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { useState } from 'react'
+import type { ComponentProps } from 'react'
 import type { QueryBuilderState, QueryTabState } from '@datapadplusplus/shared-types'
 import { describe, expect, it, vi } from 'vitest'
 import { FIELD_DRAG_MIME, FIELD_DRAG_PAYLOAD_MIME } from '../results/field-drag'
@@ -8,6 +9,7 @@ import { createDefaultCqlPartitionBuilderState } from './cql-partition'
 import { createDefaultDynamoDbKeyConditionBuilderState } from './dynamodb-key-condition'
 import { createDefaultMongoFindBuilderState } from './mongo-find'
 import { QueryBuilderPanel } from './QueryBuilderPanel'
+import { createDefaultRedisKeyBrowserState } from './redis-key-browser'
 import { createDefaultSearchDslBuilderState } from './search-dsl'
 import { createDefaultSqlSelectBuilderState } from './sql-select'
 
@@ -238,16 +240,71 @@ describe('QueryBuilderPanel', () => {
     expect(screen.getByLabelText('Aggregation field')).toHaveValue('status.keyword')
     expect(onBuilderStateChange).toHaveBeenCalled()
   })
+
+  it('opens Redis tabs as a key browser and inspects selected keys', async () => {
+    const onBuilderStateChange = vi.fn()
+    const onInspectRedisKey = vi.fn()
+    const onScanRedisKeys = vi.fn().mockResolvedValue({
+      connectionId: 'conn-redis',
+      environmentId: 'env-dev',
+      cursor: '0',
+      scannedCount: 3,
+      keys: [
+        {
+          key: 'product:luna-lamp',
+          type: 'hash',
+          ttlLabel: 'No limit',
+          memoryUsageLabel: '120 B',
+          length: 4,
+        },
+      ],
+      usedTypeFilterFallback: false,
+      moduleTypes: [],
+      warnings: [],
+    })
+
+    render(
+      <BuilderHarness
+        connectionEngine="redis"
+        initialBuilderState={createDefaultRedisKeyBrowserState('*', 100)}
+        onBuilderStateChange={onBuilderStateChange}
+        onInspectRedisKey={onInspectRedisKey}
+        onScanRedisKeys={onScanRedisKeys}
+        tab={redisTab()}
+      />,
+    )
+
+    expect(screen.getByLabelText('Redis key browser')).toBeInTheDocument()
+    expect(screen.getByLabelText('Redis key type')).toHaveValue('all')
+    expect(screen.getByLabelText('Filter by key name or pattern')).toHaveValue('*')
+    await waitFor(() => expect(screen.getByText(/product/)).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /product1/ }))
+    await waitFor(() => expect(screen.getByText('product:luna-lamp')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('button', { name: 'product:luna-lamp' }))
+
+    expect(onInspectRedisKey).toHaveBeenCalledWith({
+      tabId: 'tab-redis',
+      connectionId: 'conn-redis',
+      environmentId: 'env-dev',
+      key: 'product:luna-lamp',
+      sampleSize: 100,
+    })
+  })
 })
 
 function BuilderHarness({
   connectionEngine = 'mongodb',
   initialBuilderState,
+  onInspectRedisKey,
+  onScanRedisKeys,
   onBuilderStateChange,
   tab,
 }: {
-  connectionEngine?: 'mongodb' | 'postgresql' | 'dynamodb' | 'cassandra' | 'elasticsearch'
+  connectionEngine?: 'mongodb' | 'postgresql' | 'dynamodb' | 'cassandra' | 'elasticsearch' | 'redis'
   initialBuilderState?: QueryBuilderState
+  onInspectRedisKey?: ComponentProps<typeof QueryBuilderPanel>['onInspectRedisKey']
+  onScanRedisKeys?: ComponentProps<typeof QueryBuilderPanel>['onScanRedisKeys']
   onBuilderStateChange(tabId: string, builderState: QueryBuilderState): void
   tab: QueryTabState
 }) {
@@ -264,6 +321,8 @@ function BuilderHarness({
         family:
           connectionEngine === 'mongodb'
             ? 'document'
+            : connectionEngine === 'redis'
+              ? 'keyvalue'
             : connectionEngine === 'dynamodb'
               ? 'widecolumn'
             : connectionEngine === 'cassandra'
@@ -289,8 +348,29 @@ function BuilderHarness({
         setBuilderState(nextBuilderState)
         onBuilderStateChange(tabId, nextBuilderState)
       }}
+      onInspectRedisKey={onInspectRedisKey}
+      onScanRedisKeys={onScanRedisKeys}
     />
   )
+}
+
+function redisTab(): QueryTabState {
+  const builderState: QueryBuilderState = createDefaultRedisKeyBrowserState('*')
+
+  return {
+    id: 'tab-redis',
+    title: 'Console 1.redis',
+    connectionId: 'conn-redis',
+    environmentId: 'env-dev',
+    family: 'keyvalue',
+    language: 'redis',
+    editorLabel: 'Redis console',
+    queryText: 'SCAN 0 MATCH * COUNT 100',
+    status: 'idle',
+    dirty: false,
+    history: [],
+    builderState,
+  }
 }
 
 function searchTab(): QueryTabState {

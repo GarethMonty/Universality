@@ -884,6 +884,57 @@ pub struct ResultPageResponse {
     pub notices: Vec<String>,
 }
 
+#[derive(Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct RedisKeySummary {
+    pub key: String,
+    #[serde(rename = "type")]
+    pub key_type: String,
+    pub ttl_seconds: Option<i64>,
+    pub ttl_label: Option<String>,
+    pub memory_usage_bytes: Option<u64>,
+    pub memory_usage_label: Option<String>,
+    pub length: Option<u64>,
+    pub encoding: Option<String>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct RedisKeyScanRequest {
+    pub tab_id: Option<String>,
+    pub connection_id: String,
+    pub environment_id: String,
+    pub pattern: Option<String>,
+    pub type_filter: Option<String>,
+    pub cursor: Option<String>,
+    pub count: Option<u32>,
+    pub page_size: Option<u32>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct RedisKeyScanResponse {
+    pub connection_id: String,
+    pub environment_id: String,
+    pub cursor: String,
+    pub next_cursor: Option<String>,
+    pub scanned_count: u32,
+    pub keys: Vec<RedisKeySummary>,
+    pub used_type_filter_fallback: bool,
+    pub module_types: Vec<String>,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct RedisKeyInspectRequest {
+    pub tab_id: String,
+    pub connection_id: String,
+    pub environment_id: String,
+    pub key: String,
+    pub sample_size: Option<u32>,
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExecutionResponse {

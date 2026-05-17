@@ -71,10 +71,11 @@ export function ResultPayloadView({
   if (payload.renderer === 'keyvalue') {
     return (
       <KeyValueResultsView
-        key={keyValuePayloadKey(payload.entries)}
+        key={keyValuePayloadKey(payload.entries, payload.key)}
         connection={connection}
         editContext={editContext}
         entries={sliceRecord(payload.entries, pageIndex, pageSize)}
+        payload={payload}
         onExecuteDataEdit={onExecuteDataEdit}
       />
     )
@@ -156,9 +157,9 @@ function documentPayloadKey(documents: Array<Record<string, unknown>>) {
     .join('|')
 }
 
-function keyValuePayloadKey(entries: Record<string, string>) {
+function keyValuePayloadKey(entries: Record<string, string>, key?: string) {
   return Object.entries(entries)
-    .map(([key, value]) => `${key}:${value}`)
+    .map(([entryKey, value]) => `${key ?? 'entries'}:${entryKey}:${value}`)
     .join('|')
 }
 

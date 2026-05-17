@@ -84,6 +84,7 @@ export interface QueryTabDefinition {
 
 export type QueryBuilderKind =
   | 'mongo-find'
+  | 'redis-key-browser'
   | 'sql-select'
   | 'dynamodb-key-condition'
   | 'cql-partition'
@@ -335,8 +336,45 @@ export interface SearchDslBuilderState {
   lastAppliedQueryText?: string
 }
 
+export type RedisKeyTypeFilter =
+  | 'all'
+  | 'string'
+  | 'hash'
+  | 'list'
+  | 'set'
+  | 'zset'
+  | 'stream'
+  | 'json'
+  | 'timeseries'
+  | 'search-index'
+  | 'bloom'
+  | 'cuckoo'
+  | 'cms'
+  | 'topk'
+  | 'tdigest'
+  | 'vectorset'
+  | 'module'
+  | 'unknown'
+
+export interface RedisKeyBrowserState {
+  kind: 'redis-key-browser'
+  pattern: string
+  typeFilter: RedisKeyTypeFilter
+  cursor?: string
+  scanCount?: number
+  pageSize?: number
+  scannedCount?: number
+  selectedKey?: string
+  expandedPrefixes?: string[]
+  visibleColumns?: string[]
+  viewMode?: 'tree' | 'list'
+  lastRefreshAt?: string
+  lastAppliedQueryText?: string
+}
+
 export type QueryBuilderState =
   | MongoFindBuilderState
+  | RedisKeyBrowserState
   | SqlSelectBuilderState
   | DynamoDbKeyConditionBuilderState
   | CqlPartitionBuilderState
@@ -369,6 +407,18 @@ export interface KeyValuePayload {
   entries: Record<string, string>
   ttl?: string
   memoryUsage?: string
+  key?: string
+  redisType?: string
+  ttlSeconds?: number
+  ttlMs?: number
+  memoryUsageBytes?: number
+  encoding?: string
+  length?: number
+  value?: unknown
+  members?: Array<Record<string, unknown>>
+  metadata?: Record<string, unknown>
+  supports?: Record<string, boolean>
+  disabledActions?: Record<string, string>
 }
 
 export interface RawPayload {

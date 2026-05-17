@@ -217,6 +217,82 @@ fn keyvalue_edit_request(request: &DataEditPlanRequest) -> String {
                 .unwrap_or_else(|| "<seconds>".into())
         ),
         "delete-key" => format!("DEL {key}"),
+        "rename-key" => format!(
+            "RENAME {key} {}",
+            request
+                .changes
+                .first()
+                .and_then(|change| change.new_name.clone())
+                .unwrap_or_else(|| "<new-key>".into())
+        ),
+        "persist-ttl" => format!("PERSIST {key}"),
+        "hash-set-field" => format!(
+            "HSET {key} {} {}",
+            request
+                .changes
+                .first()
+                .and_then(|change| change.field.clone())
+                .or_else(|| request
+                    .changes
+                    .first()
+                    .and_then(|change| change.path.as_ref().and_then(|path| path.first().cloned())))
+                .unwrap_or_else(|| "<field>".into()),
+            request
+                .changes
+                .first()
+                .and_then(|change| change.value.as_ref())
+                .map(value_to_command_arg)
+                .unwrap_or_else(|| "<value>".into())
+        ),
+        "hash-delete-field" => format!(
+            "HDEL {key} {}",
+            request
+                .changes
+                .first()
+                .and_then(|change| change.field.clone())
+                .unwrap_or_else(|| "<field>".into())
+        ),
+        "list-set-index" => format!(
+            "LSET {key} {} {}",
+            request
+                .changes
+                .first()
+                .and_then(|change| change.field.clone())
+                .unwrap_or_else(|| "<index>".into()),
+            request
+                .changes
+                .first()
+                .and_then(|change| change.value.as_ref())
+                .map(value_to_command_arg)
+                .unwrap_or_else(|| "<value>".into())
+        ),
+        "set-add-member" => format!(
+            "SADD {key} {}",
+            request
+                .changes
+                .first()
+                .and_then(|change| change.value.as_ref())
+                .map(value_to_command_arg)
+                .unwrap_or_else(|| "<member>".into())
+        ),
+        "set-remove-member" => format!(
+            "SREM {key} {}",
+            request
+                .changes
+                .first()
+                .and_then(|change| change.value.as_ref())
+                .map(value_to_command_arg)
+                .unwrap_or_else(|| "<member>".into())
+        ),
+        "zset-add-member" => format!("ZADD {key} <score> <member>"),
+        "zset-remove-member" => format!(
+            "ZREM {key} {}",
+            request
+                .changes
+                .first()
+                .and_then(|change| change.field.clone())
+                .unwrap_or_else(|| "<member>".into())
+        ),
         _ => format!(
             "SET {key} {}",
             request

@@ -30,6 +30,11 @@ import {
   parseSearchDslQueryText,
 } from './components/workbench/query-builder/search-dsl'
 import {
+  createDefaultRedisKeyBrowserState,
+  isRedisKeyBrowserState,
+  parseRedisKeyBrowserQueryText,
+} from './components/workbench/query-builder/redis-key-browser'
+import {
   defaultRowLimitForConnection,
   editorLanguageForConnection,
 } from './state/helpers'
@@ -62,6 +67,18 @@ export function builderStateForTab(
       mongoCollectionFromQueryText(tab.queryText),
       mongoLimitFromQueryText(tab.queryText),
     )
+  }
+
+  if (connection.engine === 'redis' || connection.engine === 'valkey') {
+    if (isRedisKeyBrowserState(draftState)) {
+      return draftState
+    }
+
+    if (isRedisKeyBrowserState(tab.builderState)) {
+      return tab.builderState
+    }
+
+    return parseRedisKeyBrowserQueryText(tab.queryText) ?? createDefaultRedisKeyBrowserState('*', 100)
   }
 
   if (isSqlBuilderConnection(connection)) {
@@ -122,6 +139,10 @@ export function queryBuilderObjectOptions(
   explorerItems: Array<{ kind: string; label: string }>,
 ) {
   if (connection?.engine !== 'mongodb') {
+    if (connection?.engine === 'redis' || connection?.engine === 'valkey') {
+      return []
+    }
+
     if (connection?.engine === 'dynamodb') {
       return Array.from(new Set([
         ...explorerItems

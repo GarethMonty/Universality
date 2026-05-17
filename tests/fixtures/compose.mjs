@@ -7,6 +7,7 @@ const generatedEnvFile = 'tests/fixtures/.generated.env'
 
 const profiles = [
   'cache',
+  'redis-stack',
   'sqlplus',
   'analytics',
   'search',
@@ -22,6 +23,7 @@ const fixturePorts = [
   { env: 'DATAPADPLUSPLUS_SQLSERVER_PORT', container: 'datapadplusplus-sqlserver', containerPort: 1433, defaultPort: 14333, fallbackStart: 15333, profiles: ['core'] },
   { env: 'DATAPADPLUSPLUS_MONGODB_PORT', container: 'datapadplusplus-mongodb', containerPort: 27017, defaultPort: 27018, fallbackStart: 27118, profiles: ['core'] },
   { env: 'DATAPADPLUSPLUS_REDIS_PORT', container: 'datapadplusplus-redis', containerPort: 6379, defaultPort: 6380, fallbackStart: 6480, profiles: ['core'] },
+  { env: 'DATAPADPLUSPLUS_REDIS_STACK_PORT', container: 'datapadplusplus-redis-stack', containerPort: 6379, defaultPort: 6382, fallbackStart: 6482, profiles: ['redis-stack'] },
   { env: 'DATAPADPLUSPLUS_VALKEY_PORT', container: 'datapadplusplus-valkey', containerPort: 6379, defaultPort: 6381, fallbackStart: 6481, profiles: ['cache'] },
   { env: 'DATAPADPLUSPLUS_MEMCACHED_PORT', container: 'datapadplusplus-memcached', containerPort: 11211, defaultPort: 11212, fallbackStart: 11312, profiles: ['cache'] },
   { env: 'DATAPADPLUSPLUS_MARIADB_PORT', container: 'datapadplusplus-mariadb', containerPort: 3306, defaultPort: 33061, fallbackStart: 33361, profiles: ['sqlplus'] },

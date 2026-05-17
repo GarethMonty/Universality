@@ -247,6 +247,55 @@ function seedKeyValueDomain(container, command = 'redis-cli') {
   })
 }
 
+function redisCommandIfSupported(container, parts, command = 'redis-cli') {
+  if (!containerRunning(container)) {
+    return false
+  }
+
+  const result = spawnSync('docker', ['exec', container, command, ...parts.map(String)], {
+    cwd: root,
+    env: process.env,
+    encoding: 'utf8',
+    stdio: 'ignore',
+    shell: false,
+  })
+
+  return result.status === 0
+}
+
+function seedRedisStackDomain(container) {
+  if (!containerRunning(container)) {
+    return
+  }
+
+  seedKeyValueDomain(container)
+  redisCommandIfSupported(container, ['DEL', 'json:account:1', 'ts:orders:throughput'])
+  redisCommandIfSupported(container, [
+    'JSON.SET',
+    'json:account:1',
+    '$',
+    JSON.stringify({
+      id: 1,
+      name: 'Northwind',
+      tier: 'enterprise',
+      preferences: { currency: 'USD', dashboard: true },
+    }),
+  ])
+  redisCommandIfSupported(container, ['TS.CREATE', 'ts:orders:throughput', 'RETENTION', '86400000'])
+  redisCommandIfSupported(container, ['TS.ADD', 'ts:orders:throughput', '1767225600000', '12'])
+  redisCommandIfSupported(container, ['TS.ADD', 'ts:orders:throughput', '1767225660000', '18'])
+  redisCommandIfSupported(container, ['BF.RESERVE', 'bf:seen-orders', '0.01', '1000'])
+  redisCommandIfSupported(container, ['BF.ADD', 'bf:seen-orders', 'order-101'])
+  redisCommandIfSupported(container, ['CF.RESERVE', 'cf:skus', '1000'])
+  redisCommandIfSupported(container, ['CF.ADD', 'cf:skus', 'luna-lamp'])
+  redisCommandIfSupported(container, ['CMS.INITBYDIM', 'cms:regions', '20', '5'])
+  redisCommandIfSupported(container, ['CMS.INCRBY', 'cms:regions', 'eu-west-1', '3'])
+  redisCommandIfSupported(container, ['TOPK.RESERVE', 'topk:products', '5'])
+  redisCommandIfSupported(container, ['TOPK.ADD', 'topk:products', 'luna-lamp', 'aurora-desk'])
+  redisCommandIfSupported(container, ['TDIGEST.CREATE', 'tdigest:latency'])
+  redisCommandIfSupported(container, ['TDIGEST.ADD', 'tdigest:latency', '12', '18', '23'])
+}
+
 function runPython(script) {
   const candidates = process.env.PYTHON ? [process.env.PYTHON] : ['python3', 'python']
 
@@ -386,6 +435,10 @@ async function seedCore() {
 }
 
 async function seedCache() {
+  if (shouldSeed('datapadplusplus-redis-stack', 'redis-stack')) {
+    seedRedisStackDomain('datapadplusplus-redis-stack')
+  }
+
   if (shouldSeed('datapadplusplus-valkey', 'cache')) {
     seedKeyValueDomain('datapadplusplus-valkey', 'valkey-cli')
     docker([

@@ -2,56 +2,116 @@
 
 [![CI](https://github.com/FullMontyDevelopment/DataPadPlusPlus/actions/workflows/ci.yml/badge.svg)](https://github.com/FullMontyDevelopment/DataPadPlusPlus/actions/workflows/ci.yml)
 
-DataPad++ is a cross-platform desktop workbench for exploring, querying, inspecting, and managing multiple datastore families from one consistent interface.
+DataPad++ is a desktop workspace for people who work across databases. It brings SQL, document stores, key-value systems, search engines, and cloud-style datastores into one local app, with a familiar editor, visual query tools, rich results, and safety checks for real environments.
 
-The project is built as a Tauri desktop application with a React and TypeScript workbench, a Rust native host, and shared datastore contracts. It is intentionally desktop-first: the web frontend exists to render the Tauri shell, not to ship a hosted web app.
+The goal is simple: one place to connect, explore, query, inspect, and safely change data without jumping between a different tool for every datastore.
 
-## Project Status
+## What You Can Do
 
-DataPad++ is early-stage software, but the repository now contains a substantial desktop workbench: connection and environment management, scoped query tabs, visual builders, rich result views, safe data-edit planning, adapter manifests, Docker fixtures, release automation, and dependency-free CI checks.
+### Connect To Many Datastores
 
-Public docs use two labels:
+Create saved connection profiles for the systems you use every day. DataPad++ supports local files, host/port connections, and connection strings where the datastore allows them.
 
-- **Current product surface**: workflows that exist in the repository today, including the desktop workbench, local workspace state, environments, explicit query-tab creation, scoped object actions, visual query builders, rich result renderers, diagnostics, fixtures, and Tauri command wiring.
-- **Adapter roadmap**: datastore support that is represented in contracts, manifests, beta adapters, tests, or roadmap documents. Some adapters are read/diagnostic-oriented or preview-only while live execution and cloud identity paths are hardened.
+Current focus areas include:
 
-## What DataPad++ Does
+- SQL: PostgreSQL, CockroachDB, SQL Server, MySQL, MariaDB, SQLite
+- Document and NoSQL: MongoDB, DynamoDB, Cassandra
+- Key-value and cache: Redis and Valkey
+- Search: Elasticsearch and OpenSearch
+- Local analytical files: SQLite, DuckDB, LiteDB surfaces
 
-DataPad++ is designed for developers and operators who move between different data systems and want one local, safety-aware workstation instead of a stack of disconnected tools.
+More engines are being added behind the same workspace experience.
 
-Current workbench capabilities include:
+### Explore Before You Query
 
-- connection profiles with engine, family, environment, read-only, tags, notes, secret references, datastore icons, test-connection feedback, and explicit save semantics
-- environment profiles with variables, risk levels, safe mode, sensitive-key redaction, clone/save workflows, and confirmation settings
-- explicit query-tab creation from connection and object context menus, without auto-opening query tabs or connection drawers on selection
-- query tabs with datastore-aware editor language selection, simplified visible titles, saved queries, closed-tab recovery, query history, result history, and dirty-state handling
-- visual query builders for MongoDB, SQL SELECT targets, DynamoDB key conditions, Cassandra partition-key CQL, and search DSL targets
-- builder/raw layout controls that show Builder + Raw, Builder only, or Raw only for builder-capable tabs
-- capability-driven adapter and experience manifests so the UI can react to features instead of hardcoding engine branches
-- explorer and structure views for datastore metadata, opened from scoped connection/object actions
-- normalized result payloads for tables, JSON, documents, key-value data, schemas, graphs, charts, plans, metrics, series, search hits, profiles, and cost estimates
-- rich results workbench with SSMS-like table behavior, Studio 3T-style document trees, document-only paging, non-document virtualization, copy/export, runtime footer, and query history
-- drag-and-drop document fields into query-builder filters, projections, and sort sections
-- safe live data-edit planning/execution for supported row/document/key/item edits when identity is unambiguous
-- guarded operation plans for admin/destructive work, explain-analyze/profile flows, backup/restore, import/export, and cloud-cost operations
-- workspace lock, diagnostics, encrypted workspace bundle import/export, local database create/open flows, and local/browser-preview fallback behavior
-- Docker fixture flows and Tauri/WebDriver e2e plumbing for adapter and desktop validation
+Use the connection tree or Explorer tabs to browse what exists in a datastore before writing a query.
 
-For a fuller product walkthrough, see [Feature Guide](docs/features.md).
+Depending on the datastore, DataPad++ can show:
 
-## Datastore Coverage
+- databases, schemas, tables, views, indexes, functions, and procedures
+- MongoDB databases, collections, indexes, and sampled document shapes
+- Redis and Valkey key groups, key types, TTLs, memory usage, and typed values
+- search indexes, mappings, data streams, and search-oriented objects
+- Cassandra keyspaces, tables, indexes, and materialized views
 
-The adapter model separates UI capability from engine-specific implementation. Maturity values come from the shared adapter catalog and runtime manifests.
+Object menus help you open a query already scoped to the item you selected.
 
-| Maturity | Datastores | Meaning |
-| --- | --- | --- |
-| Core+popular completion priority | PostgreSQL, CockroachDB, SQL Server / Azure SQL, MySQL, MariaDB, SQLite, MongoDB, Redis / Valkey, Elasticsearch / OpenSearch, DynamoDB, Cassandra | These engines drive the main product experience: explorer, query execution, builders where useful, rich results, permissions, diagnostics, safe edits, and operation planning. |
-| Beta / contract-oriented | Oracle, TimescaleDB, Cosmos DB, LiteDB, Memcached, Neo4j, Amazon Neptune, ArangoDB, JanusGraph, InfluxDB, Prometheus, OpenTSDB, ClickHouse, DuckDB, Snowflake, BigQuery | Adapters and catalog entries expose capability, operation, permission, diagnostics, preview behavior, local/mock fixtures, or file-backed behavior while live execution and cloud identity paths are hardened. |
-| Roadmap families | SQL, document, key-value, graph, time-series, wide-column, search, warehouse, embedded OLAP | The product direction is broader than the initial MVP, but public docs distinguish roadmap from finished support. |
+### Query In The Style That Fits The Datastore
 
-For the deeper implementation plan, see [Datastore Adapter Roadmap](docs/architecture/datastore-adapter-roadmap.md).
+DataPad++ supports raw query editors and visual builders. You can switch between builder-only, raw-only, or side-by-side views when a builder exists.
 
-## Quick Start
+Examples:
+
+- write SQL directly for relational databases
+- build MongoDB find queries with filters, projections, sorting, limits, and grouped AND/OR logic
+- browse Redis keys visually instead of typing `SCAN` commands by hand
+- create search queries for Elasticsearch/OpenSearch
+- build key-condition or partition-key queries for stores like DynamoDB and Cassandra
+
+Builder changes update the raw query immediately, so you can learn the generated query, edit it, save it, or share it.
+
+### Work With Results Comfortably
+
+Results are designed to feel like database work, not a generic web table.
+
+Table results include:
+
+- sticky headers and row numbers
+- row and cell selection
+- keyboard copy shortcuts
+- column sizing
+- large-result virtualization
+- compact null and empty-value styling
+
+Document and JSON-like results include:
+
+- expandable field trees
+- type-colored values
+- document root labels based on the document id
+- drag fields into query-builder filters, projections, or sorts
+- double-click editing where the datastore safely supports it
+
+Redis and Valkey results include type-aware views for strings, hashes, lists, sets, sorted sets, streams, and supported Redis Stack-style values.
+
+### Save Work In A Library
+
+The Library is a workspace for saved queries, scripts, snippets, notes, bookmarks, snapshots, and folders. You can organize items into nested folders, move them around, rename them, and reopen recent work.
+
+When saving a query, DataPad++ can save it into the Library or to a local file on your machine.
+
+### Use Environments And Safety Controls
+
+Connections can be tied to environments such as Local, QA, Stage, and Production. Environments can carry colors, risk levels, variables, and confirmation rules.
+
+DataPad++ is built to make risky actions visible:
+
+- read-only connection profiles can block writes
+- production or high-risk environments can require confirmations
+- destructive operations are previewed before execution
+- unsupported actions explain why they are disabled
+- secrets are kept out of normal workspace files where possible
+
+### Inspect Diagnostics
+
+Where the datastore supports it, DataPad++ can surface execution plans, query profiles, performance counters, permissions, locks, sessions, index stats, Redis INFO/SLOWLOG/ACL data, and other engine-specific diagnostics.
+
+Diagnostics vary by datastore. The app is designed to show the best useful information each engine can provide instead of forcing every database into the same shape.
+
+## Downloading Releases
+
+Releases are published from GitHub Actions as draft-reviewed desktop artifacts.
+
+Look for assets such as:
+
+- Windows installers: `.exe` or `.msi`
+- Linux packages: `.deb`, `.rpm`, or AppImage
+- macOS Apple Silicon builds: `.dmg` or app bundle artifacts
+
+GitHub also adds automatic "Source code" zip/tar files to every release. Those are normal GitHub archives, but they are not the desktop app installers.
+
+## Building From Source
+
+Most users should download a release. Build from source if you want to contribute, test unreleased work, or run local datastore fixtures.
 
 ### Prerequisites
 
@@ -59,7 +119,7 @@ For the deeper implementation plan, see [Datastore Adapter Roadmap](docs/archite
 - npm 11+
 - Rust stable toolchain
 - Tauri platform prerequisites from the [official Tauri docs](https://tauri.app/start/prerequisites/)
-- Docker, when running database fixtures
+- Docker, when running the optional datastore fixtures
 - On Windows, the Visual Studio C++ desktop workload and Windows SDK required by Tauri native builds
 
 ### Install
@@ -68,18 +128,10 @@ For the deeper implementation plan, see [Datastore Adapter Roadmap](docs/archite
 npm install
 ```
 
-### Run the desktop app
+### Run The Desktop App
 
 ```bash
 npm run tauri:dev
-```
-
-### Run the fast frontend preview
-
-This runs the Tauri frontend layer in Vite at `http://127.0.0.1:1420`. It is useful for UI work, but it is not the full native desktop runtime.
-
-```bash
-npm run dev
 ```
 
 ### Build
@@ -94,115 +146,47 @@ npm run tauri:build
 ```bash
 npm run check
 npm run check:native
-npm run check:all
-npm run ci:test
 ```
 
-Useful individual checks:
+## Sample Datastores For Testing
 
-```bash
-npm run lint
-npm run test
-npm run rust:fmt
-npm run rust:check
-npm run rust:test
-npm run rust:clippy
-```
-
-## Fixtures And E2E
-
-Database fixtures live under `tests/fixtures` and are driven by Docker Compose plus seed scripts.
+The repository includes Docker fixtures with repeatable seed data for local testing.
 
 ```bash
 npm run fixtures:up
 npm run fixtures:seed
-npm run fixtures:down
 ```
 
-Additional fixture helpers:
+Optional fixture profiles add more engines such as Redis Stack, search engines, graph stores, analytics stores, Cassandra, Oracle, and cloud-contract mocks.
 
-```bash
-npm run fixtures:up:profile
-npm run fixtures:up:all
-npm run fixtures:seed:all
-```
+See [Docker Fixtures](tests/fixtures/README.md) for connection details and commands.
 
-Desktop end-to-end support uses Tauri driver and WebDriverIO.
+## Documentation
 
-```bash
-npm run e2e:desktop
-npm run check:e2e
-```
+- [Feature Guide](docs/features.md) - product walkthrough and datastore experiences
+- [Development Guide](docs/contributing/development.md) - build, test, release, and contributor workflow
+- [Testing Strategy](docs/testing/strategy.md) - how checks and fixtures are organized
+- [Architecture Overview](docs/architecture/overview.md) - deeper design notes for contributors
+- [Datastore Adapter Roadmap](docs/architecture/datastore-adapter-roadmap.md) - long-term datastore platform plan
+- [Security And Safety](docs/architecture/security-and-safety.md) - safety model and guardrails
 
-## Repository Layout
+## Project Status
 
-```text
-DataPadPlusPlus/
-  apps/
-    desktop/           React workbench, Vite app, and Tauri host
-  packages/
-    shared-types/      Shared contracts, capabilities, runtime models, and datastore catalog
-  docs/
-    architecture/      Architecture, adapter model, safety, roadmap, and investigation notes
-    contributing/      Development workflow and coding expectations
-    testing/           Test strategy
-  tests/
-    fixtures/          Docker Compose fixtures and seed data
-```
+DataPad++ is early-stage desktop software. Many core workflows already exist, and the project is actively growing toward a complete multi-datastore workbench. Some datastore experiences are mature enough for regular local use, while others are still beta, preview, or fixture-backed.
 
-## Architecture
-
-DataPad++ is organized around a capability-driven desktop architecture:
-
-1. The React UI shell owns layout, navigation, workbench panes, query editors, result surfaces, and user interaction.
-2. The application layer coordinates workspace state, active connection/environment selection, guardrails, query execution, Library items, and diagnostics.
-3. Shared TypeScript contracts define datastore families, engines, capabilities, connections, environments, runtime requests, results, and workspace state.
-4. Rust adapters isolate engine-specific connection validation, metadata exploration, execution, result normalization, operation planning, permissions, and diagnostics.
-5. The Tauri native layer owns privileged desktop commands, persistence, secret storage integration, local file selection, imports/exports, and OS integration.
-
-Key docs:
-
-- [Architecture Overview](docs/architecture/overview.md)
-- [Adapter Model](docs/architecture/adapter-model.md)
-- [Feature Guide](docs/features.md)
-- [Security And Safety](docs/architecture/security-and-safety.md)
-- [Datastore Adapter Roadmap](docs/architecture/datastore-adapter-roadmap.md)
-- [Development Guide](docs/contributing/development.md)
-- [Testing Strategy](docs/testing/strategy.md)
-
-The public wiki is intended to live at [github.com/FullMontyDevelopment/DataPadPlusPlus/wiki](https://github.com/FullMontyDevelopment/DataPadPlusPlus/wiki).
-
-## Security And Safety
-
-DataPad++ is designed for workflows that may touch live credentials and production systems. The safety model is part of the architecture:
-
-- keep secret values in the OS credential store where available and persist only references in regular workspace state
-- redact sensitive values in previews, logs, diagnostics, and exports by default
-- make environment risk visible through the workbench
-- support read-only profiles and safe-mode behavior
-- require confirmation for risky operations in high-risk environments
-- block or warn on destructive-looking queries, unresolved variables, large result sets, costly operations, and preview-only adapter paths
-
-Early-stage users should treat production connections with care, keep profiles read-only by default, and review generated operation plans before running anything against important systems.
-
-## CI And Releases
-
-CI runs on pull requests and pushes to `main`, `release/**`, and `app-v*` tags. It intentionally stays deterministic: frontend lint/tests/build, release workflow tests, quality tests, Rust formatting/check/test/clippy, and dependency-free adapter/runtime integration tests. Docker fixtures, desktop E2E, and live datastore/cloud checks remain local or manually triggered workflows for now.
-
-Desktop releases use `.github/workflows/release.yml`. Run the workflow manually with a semantic version; it updates the checked-in version files, commits that release bump, tags the release commit as `app-vX.Y.Z`, and builds draft Tauri artifacts for Linux, Windows, and macOS, with signing/notarization hooks available through repository secrets.
+Use care with production systems. Prefer read-only profiles until you are comfortable with the app's safety prompts and generated operation previews.
 
 ## Contributing
 
-The project is public and contributions should follow the existing architecture:
+Contributions are welcome. Please keep new datastore work aligned with the existing experience:
 
-- keep shared contracts engine-neutral when possible
-- put datastore-specific logic behind adapters or family-specific modules
-- prefer capability checks over engine-name checks in the UI
-- keep privileged operations behind Tauri commands
-- redact sensitive data in fixtures, tests, logs, diagnostics, screenshots, and docs
-- add tests around new adapter behavior, guardrails, and public contracts
+- make features feel natural for that datastore
+- keep dangerous actions explicit and previewable
+- avoid storing secrets in regular workspace files
+- add tests for user-facing behavior and adapter safety
+- keep product docs understandable for people who are not working inside the codebase
 
-Start with the [Development Guide](docs/contributing/development.md), [Testing Strategy](docs/testing/strategy.md), and [Datastore Adapter Roadmap](docs/architecture/datastore-adapter-roadmap.md).
+Start with the [Development Guide](docs/contributing/development.md).
 
 ## License
 

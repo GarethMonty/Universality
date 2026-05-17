@@ -31,6 +31,9 @@ import type {
   OperationManifestResponse,
   OperationPlanRequest,
   OperationPlanResponse,
+  RedisKeyInspectRequest,
+  RedisKeyScanRequest,
+  RedisKeyScanResponse,
   ResultPageResponse,
   SaveQueryTabToLibraryRequest,
   SaveQueryTabToLocalFileRequest,
@@ -139,6 +142,8 @@ export interface Actions {
   inspectExplorer(
     request: Pick<ExplorerRequest, 'connectionId' | 'environmentId'> & { nodeId: string },
   ): Promise<void>
+  scanRedisKeys(request: RedisKeyScanRequest): Promise<RedisKeyScanResponse | undefined>
+  inspectRedisKey(request: RedisKeyInspectRequest): Promise<void>
   executeQuery(
     tabId: string,
     mode?: ExecutionRequest['mode'],

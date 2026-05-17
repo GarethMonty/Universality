@@ -1,5 +1,6 @@
 import type {
   ExecutionCapabilities,
+  QueryBuilderState,
 } from '@datapadplusplus/shared-types'
 import {
   ExplainIcon,
@@ -10,6 +11,7 @@ import {
   StopIcon,
   TableIcon,
   JsonIcon,
+  KeyValueIcon,
 } from './icons'
 
 type QueryWindowMode = 'both' | 'builder' | 'raw'
@@ -25,6 +27,7 @@ interface EditorToolbarProps {
   onOpenConnectionDrawer(): void
   onToggleBottomPanel(): void
   canToggleBuilderView: boolean
+  builderKind?: QueryBuilderState['kind']
   queryWindowMode: QueryWindowMode
   onToggleQueryWindowMode(mode: QueryWindowMode): void
 }
@@ -40,6 +43,7 @@ export function EditorToolbar({
   onOpenConnectionDrawer,
   onToggleBottomPanel,
   canToggleBuilderView,
+  builderKind,
   queryWindowMode,
   onToggleQueryWindowMode,
 }: EditorToolbarProps) {
@@ -51,6 +55,18 @@ export function EditorToolbar({
     builder: { icon: JsonIcon, text: 'Show builder only' },
     raw: { icon: TableIcon, text: 'Show raw query only' },
   }
+  const redisModeButtonLabels: Record<
+    QueryWindowMode,
+    { icon: typeof PlayIcon; text: string }
+  > = {
+    both: { icon: ColumnIcon, text: 'Show key browser and console' },
+    builder: { icon: KeyValueIcon, text: 'Show key browser' },
+    raw: { icon: TableIcon, text: 'Show Redis console' },
+  }
+  const modeLabels =
+    builderKind === 'redis-key-browser'
+      ? redisModeButtonLabels
+      : queryWindowModeButtonLabels
 
   return (
     <div className="editor-toolbar" aria-label="Editor toolbar">
@@ -107,7 +123,7 @@ export function EditorToolbar({
               { mode: 'raw', icon: TableIcon },
             ] as const
           ).map(({ mode, icon: Icon }) => {
-            const label = queryWindowModeButtonLabels[mode].text
+            const label = modeLabels[mode].text
 
             return (
               <button

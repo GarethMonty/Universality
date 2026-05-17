@@ -149,6 +149,34 @@ function keyValueEditRequest(request: DataEditPlanRequest) {
     return `DEL ${key}`
   }
 
+  if (request.editKind === 'hash-set-field') {
+    return `HSET ${key} ${request.changes[0]?.field ?? '<field>'} ${valueToCommandArg(request.changes[0]?.value ?? '<value>')}`
+  }
+
+  if (request.editKind === 'hash-delete-field') {
+    return `HDEL ${key} ${request.changes[0]?.field ?? '<field>'}`
+  }
+
+  if (request.editKind === 'list-set-index') {
+    return `LSET ${key} ${request.changes[0]?.field ?? '<index>'} ${valueToCommandArg(request.changes[0]?.value ?? '<value>')}`
+  }
+
+  if (request.editKind === 'set-add-member') {
+    return `SADD ${key} ${valueToCommandArg(request.changes[0]?.value ?? '<member>')}`
+  }
+
+  if (request.editKind === 'set-remove-member') {
+    return `SREM ${key} ${valueToCommandArg(request.changes[0]?.value ?? '<member>')}`
+  }
+
+  if (request.editKind === 'zset-add-member') {
+    return `ZADD ${key} <score> ${request.changes[0]?.field ?? '<member>'}`
+  }
+
+  if (request.editKind === 'zset-remove-member') {
+    return `ZREM ${key} ${request.changes[0]?.field ?? '<member>'}`
+  }
+
   return `SET ${key} ${valueToCommandArg(request.changes[0]?.value ?? '<value>')}`
 }
 

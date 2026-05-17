@@ -1,4 +1,4 @@
-import type { AdapterDiagnosticsRequest, AdapterDiagnosticsResponse, DataEditExecutionRequest, DataEditExecutionResponse, DataEditPlanRequest, DataEditPlanResponse, DatastoreExperienceResponse, ExplorerInspectRequest, ExplorerInspectResponse, ExplorerRequest, ExplorerResponse, OperationExecutionRequest, OperationExecutionResponse, OperationManifestRequest, OperationManifestResponse, OperationPlanRequest, OperationPlanResponse, PermissionInspectionRequest, PermissionInspectionResponse, StructureRequest, StructureResponse } from '@datapadplusplus/shared-types'
+import type { AdapterDiagnosticsRequest, AdapterDiagnosticsResponse, DataEditExecutionRequest, DataEditExecutionResponse, DataEditPlanRequest, DataEditPlanResponse, DatastoreExperienceResponse, ExecutionResponse, ExecutionResultEnvelope, ExplorerInspectRequest, ExplorerInspectResponse, ExplorerRequest, ExplorerResponse, OperationExecutionRequest, OperationExecutionResponse, OperationManifestRequest, OperationManifestResponse, OperationPlanRequest, OperationPlanResponse, PermissionInspectionRequest, PermissionInspectionResponse, ResultRenderer, RedisKeyInspectRequest, RedisKeyScanRequest, RedisKeyScanResponse, StructureRequest, StructureResponse } from '@datapadplusplus/shared-types'
 import { buildDatastoreExperiences, executeDataEditLocally, planDataEditLocally } from './browser-datastore-platform'
 import { createExplorerNodes, inspectExplorerNodeLocally } from './browser-explorer'
 import { buildOperationManifestsForConnection, collectDiagnosticsLocally, executeOperationLocally, inspectPermissionsLocally, planOperationLocally } from './browser-operations'
@@ -40,6 +40,115 @@ export const clientAdapters = {
     }
 
     return createStructureResponseLocally(loadBrowserSnapshot(), request)
+  },
+
+  async scanRedisKeys(request: RedisKeyScanRequest): Promise<RedisKeyScanResponse> {
+    if (isTauriRuntime()) {
+      return invokeDesktop<RedisKeyScanResponse>('scan_redis_keys', { request })
+    }
+
+    const snapshot = loadBrowserSnapshot()
+    const connection = findConnection(snapshot, request.connectionId)
+    const sampleKeys = [
+      { key: 'account:1', type: 'string', ttlLabel: 'No limit', memoryUsageLabel: '96 B', length: 62 },
+      { key: 'orders:recent', type: 'list', ttlLabel: 'No limit', memoryUsageLabel: '224 B', length: 3 },
+      { key: 'product:luna-lamp', type: 'hash', ttlLabel: 'No limit', memoryUsageLabel: '288 B', length: 4 },
+      { key: 'products:inventory', type: 'zset', ttlLabel: 'No limit', memoryUsageLabel: '120 B', length: 2 },
+      { key: 'stream:orders', type: 'stream', ttlLabel: 'No limit', memoryUsageLabel: '512 B', length: 2 },
+    ]
+    const pattern = request.pattern?.replaceAll('*', '').trim().toLowerCase() ?? ''
+    const typeFilter = request.typeFilter ?? 'all'
+    const keys = sampleKeys
+      .filter((item) => !pattern || item.key.toLowerCase().includes(pattern))
+      .filter((item) => typeFilter === 'all' || item.type === typeFilter)
+
+    return {
+      connectionId: request.connectionId,
+      environmentId: request.environmentId,
+      cursor: request.cursor ?? '0',
+      scannedCount: sampleKeys.length,
+      keys,
+      usedTypeFilterFallback: false,
+      moduleTypes: [],
+      warnings: connection ? [] : ['Connection was not found in preview mode.'],
+    }
+  },
+
+  async inspectRedisKey(request: RedisKeyInspectRequest): Promise<ExecutionResponse> {
+    if (isTauriRuntime()) {
+      return invokeDesktop<ExecutionResponse>('inspect_redis_key', { request })
+    }
+
+    const snapshot = loadBrowserSnapshot()
+    const tab = snapshot.tabs.find((item) => item.id === request.tabId)
+    const connection = findConnection(snapshot, request.connectionId)
+
+    if (!tab || !connection) {
+      throw new Error('Redis key inspection needs an open tab and connection.')
+    }
+
+    const value = previewRedisValue(request.key)
+    const payload = {
+      renderer: 'keyvalue' as const,
+      entries: value.entries,
+      key: request.key,
+      redisType: value.type,
+      ttl: 'No limit',
+      ttlSeconds: -1,
+      memoryUsage: 'Preview',
+      length: Object.keys(value.entries).length,
+      value: value.value,
+      metadata: { key: request.key, type: value.type },
+      supports: { deleteKey: true, ttl: true, setValue: value.type === 'string' },
+      disabledActions: {},
+    }
+    const rendererModes: ResultRenderer[] = ['keyvalue', 'json', 'raw']
+    const result: ExecutionResultEnvelope = {
+      id: `result-${Date.now()}`,
+      engine: connection.engine,
+      summary: `Redis key \`${request.key}\` loaded as ${value.type}.`,
+      defaultRenderer: 'keyvalue' as const,
+      rendererModes,
+      payloads: [
+        payload,
+        { renderer: 'json' as const, value: { key: request.key, type: value.type, value: value.value } },
+        { renderer: 'raw' as const, text: `INSPECT ${request.key}` },
+      ],
+      notices: [],
+      executedAt: new Date().toISOString(),
+      durationMs: 1,
+      truncated: false,
+      rowLimit: request.sampleSize ?? 200,
+      pageInfo: {
+        pageSize: request.sampleSize ?? 200,
+        pageIndex: 0,
+        bufferedRows: Object.keys(value.entries).length,
+        hasMore: false,
+      },
+    }
+    const nextTab = {
+      ...tab,
+      status: 'success' as const,
+      result,
+      lastRunAt: result.executedAt,
+      history: [
+        {
+          id: `history-${Date.now()}`,
+          queryText: `INSPECT ${request.key}`,
+          executedAt: result.executedAt,
+          status: 'success' as const,
+        },
+        ...tab.history,
+      ],
+    }
+
+    return {
+      executionId: `execution-${Date.now()}`,
+      tab: nextTab,
+      result,
+      guardrail: { status: 'allow', reasons: [], safeModeApplied: false },
+      diagnostics: [],
+    }
   },
 
   async inspectExplorer(
@@ -156,4 +265,30 @@ export const clientAdapters = {
 
     return collectDiagnosticsLocally(loadBrowserSnapshot(), request)
   },
+}
+
+function previewRedisValue(key: string) {
+  if (key.includes('product:')) {
+    const value = { sku: key.split(':').pop() ?? key, name: 'Preview product', inventory: '18' }
+    return {
+      type: 'hash',
+      entries: value,
+      value,
+    }
+  }
+
+  if (key.includes('orders')) {
+    const value = ['order-1001', 'order-1002', 'order-1003']
+    return {
+      type: 'list',
+      entries: Object.fromEntries(value.map((item, index) => [String(index), item])),
+      value,
+    }
+  }
+
+  return {
+    type: 'string',
+    entries: { [key]: JSON.stringify({ preview: true, key }) },
+    value: { preview: true, key },
+  }
 }

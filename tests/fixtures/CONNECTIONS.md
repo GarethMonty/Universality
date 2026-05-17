@@ -13,6 +13,7 @@ Run optional fixtures:
 
 ```powershell
 npm run fixtures:up:profile -- sqlplus
+npm run fixtures:up:profile -- redis-stack
 npm run fixtures:up:profile -- search
 npm run fixtures:up:all
 npm run fixtures:seed:all
@@ -37,6 +38,7 @@ The fixture runner writes the actual selected ports to `tests/fixtures/.generate
 | --- | --- | --- | ---: | --- | --- | --- | --- | --- |
 | `cache` | Valkey | `localhost` | `6381` | `0` | | | `redis://localhost:6381/0` | `GET account:1` |
 | `cache` | Memcached | `localhost` | `11212` | | | | `localhost:11212` | `get account:1` |
+| `redis-stack` | Redis Stack | `localhost` | `6382` | `0` | | | `redis://localhost:6382/0` | `JSON.GET json:account:1` |
 | `sqlplus` | MariaDB | `localhost` | `33061` | `commerce` | `datapadplusplus` | `datapadplusplus` | `mysql://datapadplusplus:datapadplusplus@localhost:33061/commerce` | `select * from accounts limit 20;` |
 | `sqlplus` | CockroachDB | `localhost` | `26257` | `datapadplusplus` | `root` | | `postgresql://root@localhost:26257/datapadplusplus?sslmode=disable` | `select * from accounts limit 20;` |
 | `sqlplus` | CockroachDB SQL UI | `localhost` | `8080` | | | | `http://localhost:8080` | browser UI |

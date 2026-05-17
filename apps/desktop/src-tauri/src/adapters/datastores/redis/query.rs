@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use redis::AsyncCommands;
+use redis::Value as RedisValue;
 use serde_json::{json, Value};
 
 use super::super::super::*;
@@ -166,7 +167,25 @@ pub(super) async fn execute_redis_query(
                 format!("Redis TTL for {} resolved successfully.", key),
             )
         }
-        _ => unreachable!("redis command support is validated before connecting"),
+        command => {
+            let mut redis_command = redis::cmd(command);
+            for part in parts.iter().skip(1) {
+                redis_command.arg(part);
+            }
+            let value: RedisValue = redis_command.query_async(&mut redis).await?;
+            let json_value = redis_value_to_json(&value);
+
+            (
+                vec![
+                    payload_json(json!({
+                        "command": command,
+                        "value": json_value,
+                    })),
+                    payload_raw(redis_value_to_raw(&value)),
+                ],
+                format!("Redis command {command} returned successfully."),
+            )
+        }
     };
 
     let default_renderer = payloads
@@ -197,4 +216,56 @@ pub(super) async fn execute_redis_query(
         truncated: false,
         explain_payload: None,
     }))
+}
+
+fn redis_value_to_json(value: &RedisValue) -> Value {
+    match value {
+        RedisValue::Nil => Value::Null,
+        RedisValue::Int(value) => json!(value),
+        RedisValue::BulkString(bytes) => Value::String(String::from_utf8_lossy(bytes).into()),
+        RedisValue::Array(values) => Value::Array(values.iter().map(redis_value_to_json).collect()),
+        RedisValue::SimpleString(value) => Value::String(value.clone()),
+        RedisValue::Okay => Value::String("OK".into()),
+        RedisValue::Map(values) => Value::Object(
+            values
+                .iter()
+                .map(|(key, value)| (redis_value_to_raw(key), redis_value_to_json(value)))
+                .collect(),
+        ),
+        RedisValue::Attribute { data, attributes } => json!({
+            "data": redis_value_to_json(data),
+            "attributes": attributes
+                .iter()
+                .map(|(key, value)| json!({
+                    "key": redis_value_to_json(key),
+                    "value": redis_value_to_json(value),
+                }))
+                .collect::<Vec<_>>(),
+        }),
+        RedisValue::Set(values) => Value::Array(values.iter().map(redis_value_to_json).collect()),
+        RedisValue::Double(value) => json!(value),
+        RedisValue::Boolean(value) => json!(value),
+        RedisValue::VerbatimString { text, .. } => Value::String(text.clone()),
+        RedisValue::BigNumber(value) => Value::String(format!("{value:?}")),
+        RedisValue::Push { kind, data } => json!({
+            "kind": format!("{kind:?}"),
+            "data": data.iter().map(redis_value_to_json).collect::<Vec<_>>(),
+        }),
+        RedisValue::ServerError(error) => Value::String(error.to_string()),
+        _ => Value::String(format!("{value:?}")),
+    }
+}
+
+fn redis_value_to_raw(value: &RedisValue) -> String {
+    match value {
+        RedisValue::Nil => "(nil)".into(),
+        RedisValue::BulkString(bytes) => String::from_utf8_lossy(bytes).into(),
+        RedisValue::SimpleString(value) => value.clone(),
+        RedisValue::Okay => "OK".into(),
+        RedisValue::Int(value) => value.to_string(),
+        RedisValue::Double(value) => value.to_string(),
+        RedisValue::Boolean(value) => value.to_string(),
+        RedisValue::VerbatimString { text, .. } => text.clone(),
+        other => serde_json::to_string_pretty(&redis_value_to_json(other)).unwrap_or_default(),
+    }
 }

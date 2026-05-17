@@ -59,6 +59,53 @@ export function buildKeyValueEditRequest({
   }
 }
 
+export function buildRedisMemberEditRequest({
+  connection,
+  editContext,
+  editKind,
+  key,
+  field,
+  value,
+}: {
+  connection?: ConnectionProfile
+  editContext?: DocumentEditContext
+  editKind: Extract<
+    DataEditKind,
+    | 'hash-set-field'
+    | 'hash-delete-field'
+    | 'list-set-index'
+    | 'set-add-member'
+    | 'set-remove-member'
+    | 'zset-add-member'
+    | 'zset-remove-member'
+  >
+  key: string
+  field?: string
+  value?: unknown
+}): DataEditExecutionRequest | undefined {
+  if (!keyValueCanEdit(connection, editContext) || !editContext) {
+    return undefined
+  }
+
+  return {
+    connectionId: editContext.connectionId,
+    environmentId: editContext.environmentId,
+    editKind,
+    target: {
+      objectKind: 'key-member',
+      path: field ? [field] : [],
+      key,
+    },
+    changes: [
+      {
+        field,
+        value,
+        valueType: valueTypeName(value),
+      },
+    ],
+  }
+}
+
 export function parseKeyValueInput(value: string) {
   return parseJsonValue(value)
 }

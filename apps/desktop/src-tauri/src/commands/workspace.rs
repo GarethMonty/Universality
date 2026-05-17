@@ -22,9 +22,10 @@ use crate::{
             LocalDatabasePickRequest, LocalDatabasePickResult, OperationExecutionRequest,
             OperationExecutionResponse, OperationManifestRequest, OperationManifestResponse,
             OperationPlanRequest, OperationPlanResponse, PermissionInspectionRequest,
-            PermissionInspectionResponse, QueryTabReorderRequest, ResultPageRequest,
-            ResultPageResponse, SaveQueryTabToLibraryRequest, SaveQueryTabToLocalFileRequest,
-            SavedWorkItem, StructureRequest, StructureResponse, UpdateQueryBuilderStateRequest,
+            PermissionInspectionResponse, QueryTabReorderRequest, RedisKeyInspectRequest,
+            RedisKeyScanRequest, RedisKeyScanResponse, ResultPageRequest, ResultPageResponse,
+            SaveQueryTabToLibraryRequest, SaveQueryTabToLocalFileRequest, SavedWorkItem,
+            StructureRequest, StructureResponse, UpdateQueryBuilderStateRequest,
             UpdateUiStateRequest,
         },
     },
@@ -357,6 +358,26 @@ pub async fn load_structure_map(
 ) -> Result<StructureResponse, CommandError> {
     let runtime = clone_runtime(&state);
     runtime.load_structure_map(request).await
+}
+
+#[tauri::command]
+pub async fn scan_redis_keys(
+    state: State<'_, SharedAppState>,
+    request: RedisKeyScanRequest,
+) -> Result<RedisKeyScanResponse, CommandError> {
+    let runtime = clone_runtime(&state);
+    runtime.scan_redis_keys(request).await
+}
+
+#[tauri::command]
+pub async fn inspect_redis_key(
+    state: State<'_, SharedAppState>,
+    request: RedisKeyInspectRequest,
+) -> Result<ExecutionResponse, CommandError> {
+    let mut runtime = clone_runtime(&state);
+    let response = runtime.inspect_redis_key(request).await?;
+    replace_runtime(&state, runtime);
+    Ok(response)
 }
 
 #[tauri::command]

@@ -5,7 +5,6 @@ import { fileURLToPath } from 'node:url'
 const REQUIRED_PLATFORMS = [
   'ubuntu-22.04',
   'windows-latest',
-  'macos-13',
   'macos-latest'
 ]
 
@@ -61,6 +60,11 @@ export function validateReleaseWorkflow(repoRoot = process.cwd()) {
   )
   requireMatch(
     text,
+    /gh\s+release\s+create\s+"\$\{release_args\[@\]\}"/,
+    'release workflow must explicitly create a draft GitHub Release'
+  )
+  requireMatch(
+    text,
     /ref:\s*\$\{\{\s*needs\.validate\.outputs\.release-sha\s*\}\}/,
     'release workflow publish jobs must check out the committed release SHA'
   )
@@ -103,6 +107,16 @@ export function validateReleaseWorkflow(repoRoot = process.cwd()) {
     text,
     /name:\s*Package raw executable/,
     'release workflow must package raw executables'
+  )
+  requireMatch(
+    text,
+    /name:\s*Upload Tauri bundle artifacts to draft release/,
+    'release workflow must explicitly upload Tauri installer and bundle assets'
+  )
+  requireMatch(
+    text,
+    /No Tauri installer or bundle assets were found/,
+    'release workflow must fail if Tauri produces no installer or bundle assets'
   )
   requireMatch(
     text,

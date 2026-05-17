@@ -1,5 +1,6 @@
 use super::super::*;
 
+mod browser;
 mod catalog;
 mod commands;
 mod connection;
@@ -9,6 +10,7 @@ mod metadata;
 mod paging;
 mod query;
 
+pub(crate) use browser::{inspect_redis_key, scan_redis_keys};
 pub(crate) use editing::execute_redis_data_edit;
 pub(crate) use metadata::load_redis_structure;
 pub(crate) use paging::fetch_redis_page;

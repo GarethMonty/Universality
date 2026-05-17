@@ -12,7 +12,8 @@ use crate::{
             ExplorerRequest, ExplorerResponse, OperationExecutionRequest,
             OperationExecutionResponse, OperationManifestRequest, OperationManifestResponse,
             OperationPlanRequest, OperationPlanResponse, PermissionInspectionRequest,
-            PermissionInspectionResponse, StructureRequest, StructureResponse,
+            PermissionInspectionResponse, QueryHistoryEntry, RedisKeyInspectRequest,
+            RedisKeyScanRequest, RedisKeyScanResponse, StructureRequest, StructureResponse,
         },
     },
 };
@@ -57,6 +58,73 @@ impl ManagedAppState {
         let (resolved, _, _) =
             self.resolve_connection_profile(&profile, &request.environment_id)?;
         adapters::load_structure_map(&resolved, &request).await
+    }
+
+    pub async fn scan_redis_keys(
+        &self,
+        request: RedisKeyScanRequest,
+    ) -> Result<RedisKeyScanResponse, CommandError> {
+        self.ensure_unlocked()?;
+        let profile = self.connection_by_id(&request.connection_id)?;
+        let (resolved, _, _) =
+            self.resolve_connection_profile(&profile, &request.environment_id)?;
+        adapters::scan_redis_keys(&resolved, &request).await
+    }
+
+    pub async fn inspect_redis_key(
+        &mut self,
+        request: RedisKeyInspectRequest,
+    ) -> Result<crate::domain::models::ExecutionResponse, CommandError> {
+        self.ensure_unlocked()?;
+        let tab_index = self
+            .snapshot
+            .tabs
+            .iter()
+            .position(|item| item.id == request.tab_id)
+            .ok_or_else(|| CommandError::new("tab-missing", "Tab was not found."))?;
+        let profile = self.connection_by_id(&request.connection_id)?;
+        let (resolved, _, _) =
+            self.resolve_connection_profile(&profile, &request.environment_id)?;
+        let result = adapters::inspect_redis_key(&resolved, &request).await?;
+        let executed_at = timestamp_now();
+        let tab_response = {
+            let tab = &mut self.snapshot.tabs[tab_index];
+            tab.status = "success".into();
+            tab.last_run_at = Some(executed_at.clone());
+            tab.history.insert(
+                0,
+                QueryHistoryEntry {
+                    id: super::generate_id("history"),
+                    query_text: format!("INSPECT {}", request.key),
+                    executed_at,
+                    status: "success".into(),
+                },
+            );
+            tab.error = None;
+            tab.result = Some(result.clone());
+            self.snapshot.ui.active_tab_id = tab.id.clone();
+            self.snapshot.ui.active_connection_id = tab.connection_id.clone();
+            self.snapshot.ui.active_environment_id = tab.environment_id.clone();
+            tab.clone()
+        };
+        self.snapshot.ui.bottom_panel_visible = true;
+        self.snapshot.ui.active_bottom_panel_tab = "results".into();
+        self.snapshot.updated_at = timestamp_now();
+        self.persist()?;
+
+        Ok(crate::domain::models::ExecutionResponse {
+            execution_id: super::generate_id("execution"),
+            tab: tab_response,
+            result: Some(result),
+            guardrail: crate::domain::models::GuardrailDecision {
+                id: None,
+                status: "allow".into(),
+                reasons: Vec::new(),
+                safe_mode_applied: false,
+                required_confirmation_text: None,
+            },
+            diagnostics: Vec::new(),
+        })
     }
 
     pub fn list_datastore_experiences(&self) -> Result<DatastoreExperienceResponse, CommandError> {
@@ -138,12 +206,25 @@ impl ManagedAppState {
 
     pub async fn execute_data_edit(
         &self,
-        request: DataEditExecutionRequest,
+        mut request: DataEditExecutionRequest,
     ) -> Result<DataEditExecutionResponse, CommandError> {
         self.ensure_unlocked()?;
         let profile = self.connection_by_id(&request.connection_id)?;
+        let environment = self.environment_by_id(&request.environment_id)?;
         let (resolved, _, _) =
             self.resolve_connection_profile(&profile, &request.environment_id)?;
+        if can_auto_confirm_redis_single_key_delete(
+            &resolved,
+            &environment,
+            &request,
+            self.snapshot.preferences.safe_mode_enabled,
+        ) {
+            request.confirmation_text = Some(format!(
+                "CONFIRM {} {}",
+                resolved.engine.to_uppercase(),
+                request.edit_kind.to_uppercase()
+            ));
+        }
         adapters::execute_data_edit(&resolved, &request).await
     }
 
@@ -181,4 +262,24 @@ impl ManagedAppState {
             diagnostics,
         })
     }
+}
+
+fn can_auto_confirm_redis_single_key_delete(
+    connection: &crate::domain::models::ResolvedConnectionProfile,
+    environment: &crate::domain::models::EnvironmentProfile,
+    request: &DataEditExecutionRequest,
+    global_safe_mode: bool,
+) -> bool {
+    matches!(connection.engine.as_str(), "redis" | "valkey")
+        && request.edit_kind == "delete-key"
+        && request
+            .target
+            .key
+            .as_deref()
+            .is_some_and(|key| !key.trim().is_empty() && !key.contains('*'))
+        && !connection.read_only
+        && !global_safe_mode
+        && !environment.safe_mode
+        && !environment.requires_confirmation
+        && matches!(environment.risk.as_str(), "low" | "medium")
 }

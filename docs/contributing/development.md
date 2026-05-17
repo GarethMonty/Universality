@@ -114,7 +114,7 @@ The current env prefix is `DATAPADPLUSPLUS_*`. Legacy prefixes are compatibility
 
 ## Releases
 
-Releases are created through the manual GitHub Actions `Release` workflow. The workflow accepts a semantic version, updates version files, commits `chore: release v<version>`, tags `app-v<version>`, and uploads draft Tauri artifacts. Release assets include Windows NSIS/MSI installers, Linux deb/rpm/AppImage bundles, macOS app/DMG bundles, and raw executable archives for each platform.
+Releases are created through the manual GitHub Actions `Release` workflow. The workflow accepts a semantic version, updates version files, commits `chore: release v<version>`, tags `app-v<version>`, creates a draft GitHub Release, and explicitly uploads draft Tauri artifacts. Release assets include Windows NSIS/MSI installers, Linux deb/rpm/AppImage bundles, macOS Apple Silicon app/DMG bundles, and raw executable archives for each platform. GitHub still shows automatic source-code archives on every release; those are not the desktop installers.
 
 Useful release checks:
 

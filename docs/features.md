@@ -1,224 +1,336 @@
 # DataPad++ Feature Guide
 
-This guide describes the product surface that exists in the current repository after the DataPad++ rename. It separates live app behavior from roadmap intent so contributors know what is ready to use, what is guarded, and where to add new work.
+DataPad++ is a desktop workbench for databases and datastores. It is built for developers, analysts, support engineers, and operators who need to move between different data systems without changing tools every few minutes.
 
-## Naming
+This guide focuses on what the application lets you do. For implementation details, see the architecture and contributing docs.
 
-- Product name: **DataPad++**
-- Repository-safe name: `DataPadPlusPlus`
-- Package/crate-safe name: `datapadplusplus`
-- NPM packages: `@datapadplusplus/desktop` and `@datapadplusplus/shared-types`
-- Rust crate: `datapadplusplus-desktop`
-- Default Tauri identifier: `com.datapadplusplus.desktop`
-- Current environment variable prefix: `DATAPADPLUSPLUS_`
+## The Everyday Workflow
 
-Legacy `DATANAUT_*` and `UNIVERSALITY_*` environment variables are still read as fallbacks for local workspaces, secret files, and fixtures. This is intentional compatibility, not the new public name.
+Most work in DataPad++ follows a simple flow:
 
-## Workbench Shell
+1. Create or choose a connection.
+2. Pick the environment you are working in.
+3. Explore the available objects.
+4. Open a query or browser tab for the object you care about.
+5. Run, inspect, edit safely where supported, and save useful work into the Library.
 
-The desktop app is organized around a VS Code-style workbench:
+The app is intentionally local-first. Your workspace, saved work, and connection profiles live on your machine, and secrets are handled through desktop-safe storage where available.
 
-- Activity bar for Connections, Library, Search, Environments, Settings, theme, and lock controls.
-- Connections sidebar with search, compact persisted grouping, datastore icons, and persisted collapsible sections.
-- Explorer is opened from a connection or object context menu instead of a permanent activity-bar item.
-- Query editor area with tabs, context menus, simplified visible tab labels, dirty-state indicators, and query toolbar actions.
-- Bottom panel with Results, Messages, Query History, and Details tabs.
-- Right-side drawers for connection editing, diagnostics, operations, and inspection.
+## Connections
 
-Opening or selecting a connection does not automatically create a query tab. Query tabs are opened explicitly from context menus or tab strip actions. Editing a connection is also explicit through the connection context menu or edit workflow.
+Connections are the starting point for every datastore. A connection profile can include the datastore type, host, port, database name, local file path, connection string, tags, notes, and read-only settings.
 
-## Connections And Environments
+DataPad++ supports several connection styles depending on the datastore:
 
-Connection profiles include:
+- host, port, database, username, and password
+- connection strings for engines that support them
+- local database files for file-backed engines such as SQLite, DuckDB, and LiteDB-style workflows
+- cloud-style or SDK-backed connection flows where those adapters are available
 
-- datastore engine and family
-- host, port, database, username, local path, and connection string fields
-- read-only mode
-- tags and notes
-- secret references instead of persisted raw passwords
-- datastore-specific warnings and defaults
+Creating a connection does not immediately add it to the workspace. You can fill out the form, test it, adjust it, and save only when it is ready.
 
-Creating a connection opens a draft form. No connection is added to the workspace until the user chooses **Save**.
+## Environments
 
-Environment profiles include:
+Environments help keep context visible. A connection or Library folder can be associated with an environment such as Local, Development, QA, Stage, or Production.
 
-- label, color, and risk level
-- variable values and sensitive-key redaction
-- safe-mode and confirmation rules
-- clone and save workflows
+Environments can provide:
 
-The environment list is presented directly without an extra Workspace grouping.
+- a label and color
+- a risk level
+- variables used in connection strings or queries
+- safe-mode behavior
+- confirmation rules for risky actions
 
-## Local Datastore Files
+When folders in the Library have environments, child folders and files inherit the closest environment unless they override it. This makes it easier to keep related scripts and queries aligned with the right target.
 
-Local file-oriented datastores support create/open-style flows where the engine can reasonably support it:
+## Exploring Datastores
 
-- SQLite: open existing database files, create empty files, and create starter databases.
-- DuckDB: open or create local analytical databases.
-- LiteDB: create or open local `.db` files through the LiteDB bridge surface.
+The Connections panel and Explorer tabs let you browse a datastore before querying it. The tree changes based on the datastore type.
 
-The create flow asks for a folder and a database name instead of requiring users to type one combined path manually.
+For SQL databases, DataPad++ can show objects such as:
 
-## Explorer And Object Actions
+- databases
+- schemas
+- tables
+- views
+- columns
+- indexes
+- functions
+- stored procedures where supported
 
-Connections and explorer nodes expose datastore-aware object trees. Examples:
+For MongoDB, it can show:
 
-- SQL-family connections show database/schema/table/view/index/procedure-style objects where supported.
-- MongoDB shows databases and collections.
-- Redis/Valkey show key-oriented groups and typed key surfaces.
-- Search engines show indices and data streams.
-- DynamoDB shows tables and index-like children.
-- Cassandra shows keyspaces, tables, indexes, and materialized views.
+- databases
+- collections
+- indexes
+- document samples and inferred shapes
 
-Object context menus can open scoped query tabs. Builder-capable objects open the same unified query window as raw query tabs; the toolbar controls whether the user sees Builder + Raw, Builder only, or Raw only.
+For Redis and Valkey, it can show:
 
-## Query Editors And Builders
+- key groups
+- key names
+- types
+- TTL information
+- memory usage
+- typed value previews
 
-Query windows support raw editors and visual builders when an engine/family exposes a builder state.
+For search engines, it can show:
 
-Current builder types:
+- indexes
+- mappings
+- aliases
+- data streams
+- search result structures
 
-- MongoDB find builder with collection dropdown, grouped filters, AND/OR logic, filter enable/disable toggles, projection include/exclude controls, sort controls, and direct raw JSON synchronization.
-- SQL SELECT builder for SQL-family table targets.
-- DynamoDB key-condition builder.
-- Cassandra CQL partition-key-first builder.
-- Elasticsearch/OpenSearch query DSL builder.
+For wide-column stores such as Cassandra, it can show:
 
-Builder changes update the raw query immediately. Raw query and builder modes are layout choices, not separate tabs. Builder controls only appear for engines and scoped objects that support builders.
+- keyspaces
+- tables
+- primary-key structure
+- indexes
+- materialized views
 
-MongoDB document fields can be dragged from document results into builder drop targets:
+Object menus provide relevant actions for the selected item. A table, collection, key, index, or folder should expose actions that make sense for that kind of object.
 
-- drop on Filters to create a filter using the field path and value
-- drop on Projection to add a projection field
-- drop on Sort to add an order field
+## Querying
 
-## Results Workbench
+DataPad++ supports both raw query editors and visual query builders.
 
-Results are normalized into renderer-friendly payloads and then displayed in rich read-only or safely editable views.
+Raw editors are useful when you already know the query language. Visual builders help when the datastore has a common query shape or when you want to build from existing result fields.
 
-Supported renderers include:
+Current query experiences include:
 
-- table
-- document
-- JSON tree
-- key-value
-- search hits
-- graph details
-- raw payloads
-- schema
-- plans, profiles, metrics, series, and cost estimates
+- SQL editors for relational databases
+- SQL SELECT builder for table-focused queries
+- MongoDB find builder
+- Redis and Valkey key browser
+- Elasticsearch/OpenSearch query builder
+- DynamoDB key-condition builder
+- Cassandra partition-key builder
+
+When a builder is available, the toolbar can switch between:
+
+- Builder and Raw
+- Builder only
+- Raw only
+
+The builder and raw query stay synchronized, so the visual view can teach you the underlying query instead of hiding it.
+
+## MongoDB Experience
+
+MongoDB gets a document-first workflow.
+
+You can:
+
+- browse databases and collections
+- open a collection directly into a Mongo find builder
+- choose a collection from a dropdown
+- add filters with AND/OR grouping
+- turn filters on and off without deleting them
+- add projections and sort fields
+- control result size through paging
+- view documents as expandable rows
+- drag document fields into filters, projections, or sort
+- edit fields, values, and types where safe
+- inspect JSON and raw result output
+
+Document editing is deliberate. You double-click to edit, and the app only enables edits when the adapter can identify the document safely.
+
+## Redis And Valkey Experience
+
+Redis and Valkey use a key-browser workflow by default instead of starting with a blank command console.
+
+The Redis browser includes:
+
+- key pattern filtering
+- key type filtering
+- tree and list views
+- scan progress
+- Scan more
+- refresh
+- typed badges
+- TTL, memory, and length columns
+- add key and delete key actions
+- type-aware result views
+
+Selecting a key opens its value in the Results panel. DataPad++ can inspect common Redis types such as strings, hashes, lists, sets, sorted sets, and streams. Redis Stack-style types such as JSON, TimeSeries, and probabilistic structures are detected when the server supports them, with unsupported actions shown as unavailable instead of failing mysteriously.
+
+Raw Redis commands are still available from the query toolbar when you need the console.
+
+## SQL Experience
+
+SQL-family databases use familiar table and query workflows.
+
+You can:
+
+- browse schemas and tables
+- open scoped queries from tables and views
+- run raw SQL
+- use a SELECT builder for simple table queries
+- inspect result tables with a grid-like interface
+- copy selected cells or rows with keyboard shortcuts
+- view schema and diagnostics where supported
+- plan table, column, index, and admin operations behind guardrails
+
+DataPad++ aims to respect each SQL dialect. PostgreSQL, SQL Server, MySQL, MariaDB, SQLite, and CockroachDB have different identifier rules, metadata surfaces, and diagnostics. The app should guide you instead of pretending they are all identical.
+
+## Search Experience
+
+For Elasticsearch and OpenSearch, DataPad++ focuses on search-oriented workflows.
+
+You can:
+
+- browse indexes, data streams, and mappings
+- build search queries visually
+- inspect search hits, source documents, highlights, and aggregations
+- switch to raw query DSL
+- view profile, explain, shard, index, and cluster diagnostics where supported
+- plan index and mapping operations behind safety prompts
+
+## Results
+
+The Results panel is one of the main parts of the app. It is designed for repeated database work, not just showing a blob of JSON.
 
 ### Table Results
 
-The table view follows common database-grid behavior:
+Table results support:
 
-- sticky headers and row-number gutter
-- full-width grid surface
-- buffered virtualization for large non-document result sets
-- selected cell/row behavior
-- local sort and filter controls for buffered rows
-- copy cell/range/row/all as tab-separated text
-- column resizing and compact null/empty value styling
+- full-width grids
+- sticky column headers
+- row numbers
+- row and cell selection
+- keyboard copy shortcuts
+- column resizing
+- large-result virtualization
+- compact display for null and empty values
 
-Non-document result sets are not locally paged by the result UI. They render the buffered result with virtualization.
+Selecting the row-number column selects the full row.
 
 ### Document Results
 
-The document view uses a table/tree hybrid:
+Document results combine a table and a tree:
 
-- each root row is labeled by the document id value, not `document 1`
-- field/type/value columns are used for root and child rows
-- object and array children are collapsed by default
-- types are color-coded for quick scanning
-- field names and values are draggable into query builders
-- paging is available for document-family payloads
+- root rows are named by document id
+- children expand and collapse
+- type values use color
+- fields can be dragged into query builders
+- editing starts only on double-click or explicit context-menu actions
+- document-family results can page through large responses
 
-Inline editing is intentionally explicit. A user must double-click or choose an edit context-menu action before a field, value, or type becomes editable. Type cells render as plain badges until editing begins.
+### Key-Value Results
 
-Supported safe document edits include field rename, field set/unset, value change, and type conversion when the backing datastore adapter can plan the edit safely. For MongoDB this maps to guarded document update operations.
+Key-value results show the selected key or item with useful metadata. For Redis and Valkey, this includes type, TTL, memory, encoding, length, and a bounded value sample.
 
-### Key-Value And Search Results
+### JSON, Raw, Details, And History
 
-Key-value renderers support typed value displays and edit planning for supported Redis/Valkey-style values. Search result renderers support hit/source display, tree inspection, and guarded document update/delete/index operation planning where the adapter supports it.
+You can switch between rich renderers and raw payloads when needed. Messages, details, and query history live in the bottom panel so they are close to the result that produced them.
 
-## Safe Edits And Operations
+## Library
 
-DataPad++ uses two classes of mutation:
+The Library replaces a simple saved-query list with a richer workspace for reusable work.
 
-- safe live data edits for natural row/document/key/item changes when the adapter can identify the target unambiguously
-- guarded preview operation plans for destructive/admin/schema/cloud-cost workflows
+You can save:
 
-Safe live edit examples:
+- queries
+- scripts
+- snippets
+- notes
+- bookmarks
+- snapshots
 
-- SQL row insert/update/delete only with clear table and primary-key context
-- MongoDB document field set/unset/rename/type-change with a document id
-- Redis/Valkey key value and TTL changes
-- DynamoDB item changes with complete keys
-- Cassandra row updates only when primary-key conditions are complete
-- search document update/delete/index requests when index and id are known
+The Library supports folders, nested folders, drag-and-drop moves, rename/delete actions, recents, and environment inheritance. Saving a query can target either the Library or a local file.
 
-Admin/destructive operations remain plan-first. Users should see generated SQL/API payloads, risk level, permission requirements, and confirmation text before execution is enabled.
+## Safe Editing
 
-## Diagnostics
+DataPad++ supports live edits only where the target is clear and the datastore can be updated safely.
 
-Adapters can surface:
+Examples:
 
-- connection-test warnings
-- permissions and unavailable actions
-- query plans and profiles
-- metrics and chartable series
-- query history and runtime
-- cloud cost estimates or dry-run signals
-- engine-specific stats such as `pg_stat*`, SQL Server DMV/Query Store, MongoDB explain/index stats, Redis INFO/SLOWLOG/ACL, Elasticsearch/OpenSearch profile/cat stats, DynamoDB capacity, and Cassandra tracing surfaces
+- SQL row edits need table and primary-key context
+- MongoDB document edits need collection and document id context
+- Redis key edits need a concrete key
+- DynamoDB item edits need complete key conditions
+- Cassandra row edits need complete primary-key conditions
 
-Not every adapter has the same depth yet. Capability manifests and experience manifests define which diagnostics should be shown.
+When DataPad++ cannot prove the target is safe, the action is disabled or shown as a preview plan instead of being executed silently.
+
+## Operations And Diagnostics
+
+Some work is not a simple query or edit. DataPad++ can expose operation previews and diagnostics where adapters support them.
+
+Examples include:
+
+- execution plans
+- query profiles
+- slow-query or query-history panels
+- permission inspection
+- session and lock information
+- index and storage stats
+- Redis INFO, SLOWLOG, ACL, and memory information
+- search-engine profile and shard details
+- cloud dry-run or cost estimates where available
+
+Destructive or administrative actions should be previewed first, with the generated SQL, command, or API request visible before execution is allowed.
 
 ## Datastore Coverage
 
-Core+popular engines are the current completion priority:
+DataPad++ is growing in layers.
+
+### Main Completion Focus
+
+These engines are the main product focus:
 
 - PostgreSQL
 - CockroachDB
-- SQL Server / Azure SQL
+- SQL Server and Azure SQL
 - MySQL
 - MariaDB
 - SQLite
 - MongoDB
-- Redis / Valkey
-- Elasticsearch / OpenSearch
+- Redis and Valkey
+- Elasticsearch and OpenSearch
 - DynamoDB
 - Cassandra
 
-The broader catalog also includes Oracle, TimescaleDB, Cosmos DB, LiteDB, Memcached, Neo4j, Neptune, ArangoDB, JanusGraph, InfluxDB, Prometheus, OpenTSDB, ClickHouse, DuckDB, Snowflake, and BigQuery. Many of these have beta or contract-backed surfaces and local/mock fixtures.
+### Broader Roadmap
 
-## Docker Fixtures
+The broader roadmap includes:
 
-The Docker fixture matrix provides repeatable seeded databases for debugging and integration testing:
+- Oracle
+- TimescaleDB
+- Cosmos DB
+- LiteDB
+- Memcached
+- Neo4j
+- Amazon Neptune
+- ArangoDB
+- JanusGraph
+- InfluxDB
+- Prometheus
+- OpenTSDB
+- ClickHouse
+- DuckDB
+- Snowflake
+- BigQuery
 
-- core default: PostgreSQL, MySQL, SQL Server, MongoDB, Redis, and SQLite file seed
-- `cache`: Valkey and Memcached
-- `sqlplus`: MariaDB, CockroachDB, TimescaleDB
-- `analytics`: ClickHouse, InfluxDB, Prometheus, DuckDB seed
-- `search`: OpenSearch and Elasticsearch
-- `graph`: Neo4j, ArangoDB, JanusGraph
-- `widecolumn`: Cassandra
-- `oracle`: Oracle Free
-- `cloud-contract`: DynamoDB Local plus HTTP mocks for BigQuery, Snowflake, Cosmos DB, and Neptune
+Some roadmap adapters are available as beta, preview, local fixture, mock, or read-oriented experiences while live production workflows are hardened.
 
-See [Docker Fixtures](../tests/fixtures/README.md) for commands, ports, credentials, profiles, and resource expectations.
+## Sample Data And Fixtures
+
+For contributors and testers, the repository includes repeatable Docker fixtures with seeded sample data.
+
+The default fixture set includes PostgreSQL, MySQL, SQL Server, MongoDB, Redis, and SQLite. Optional profiles add Redis Stack, search engines, cache stores, analytics stores, graph stores, Cassandra, Oracle, and cloud-contract mocks.
+
+See [Docker Fixtures](../tests/fixtures/README.md) for setup commands and connection details.
 
 ## Releases
 
-Releases are manual GitHub Actions workflows with automated version updates:
+Desktop releases are produced through GitHub Actions and attached to GitHub Releases as draft-reviewed artifacts.
 
-1. Run the `Release` workflow with a semver version.
-2. The workflow updates release version files.
-3. It commits `chore: release v<version>`.
-4. It creates or reuses `app-v<version>` at that commit.
-5. It builds draft Tauri artifacts for Windows, Linux, macOS Intel, and macOS Apple Silicon.
-6. It uploads installer/bundle outputs plus raw executable archives:
-   - Windows x64: NSIS installer, MSI installer, zipped `.exe`.
-   - Linux x64: `.deb`, `.rpm`, AppImage, tarred executable.
-   - macOS Intel and Apple Silicon: app/DMG bundles plus tarred executable.
+Look for platform assets such as:
 
-Release artifacts are draft-first so installers can be smoke-tested before publication.
+- Windows: NSIS installer, MSI installer, or zipped executable
+- Linux: `.deb`, `.rpm`, AppImage, or tarred executable
+- macOS Apple Silicon: DMG or app bundle artifact
+
+GitHub also displays automatic source-code zip/tar archives. Those are normal GitHub files, but they are not the desktop app installers.

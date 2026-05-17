@@ -6,8 +6,10 @@ Expected release assets:
 
 - Windows x64: NSIS installer, MSI installer, and zipped raw `.exe`.
 - Linux x64: `.deb`, `.rpm`, AppImage, and tarred raw executable.
-- macOS Intel: `.app`/DMG bundle outputs and tarred raw executable.
 - macOS Apple Silicon: `.app`/DMG bundle outputs and tarred raw executable.
+- macOS Intel: temporarily disabled until a reliable runner is available.
+
+GitHub also lists automatic source-code zip/tar archives on releases. Those archives are expected, but they are not DataPad++ desktop installers.
 
 ## Before Running Release
 
@@ -59,7 +61,7 @@ Windows Authenticode signing is not configured yet. Before a public stable Windo
 3. Wait for the workflow to commit `chore: release v<version>` and create `app-v<version>`.
 4. Wait for all platform builds to finish.
 5. Open the draft GitHub Release named `DataPad++ v<version>`.
-6. Confirm release assets exist for Windows, Linux, macOS Intel, and macOS Apple Silicon where each platform build succeeded. Windows should include both NSIS and MSI installer outputs.
+6. Confirm release assets exist for Windows, Linux, and macOS Apple Silicon where each platform build succeeded. Windows should include both NSIS and MSI installer outputs.
 7. Download representative installers and smoke-test launch.
 8. Publish the draft release only after smoke tests pass.
 

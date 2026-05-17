@@ -15,7 +15,8 @@ use crate::domain::{
         ExecutionRequest, ExecutionResultEnvelope, ExplorerInspectRequest, ExplorerInspectResponse,
         ExplorerNode, ExplorerRequest, ExplorerResponse, LocalDatabaseManifest,
         OperationExecutionRequest, OperationExecutionResponse, OperationPlan, PermissionInspection,
-        QueryExecutionNotice, ResolvedConnectionProfile, ResultPageInfo, ResultPageRequest,
+        QueryExecutionNotice, RedisKeyInspectRequest, RedisKeyScanRequest, RedisKeyScanResponse,
+        RedisKeySummary, ResolvedConnectionProfile, ResultPageInfo, ResultPageRequest,
         ResultPageResponse, StructureEdge, StructureField, StructureGroup, StructureNode,
         StructureRequest, StructureResponse,
     },
@@ -37,6 +38,6 @@ pub use registry::{execution_capabilities, manifests};
 pub use runtime::{
     cancel, collect_diagnostics, execute, execute_data_edit, execute_operation,
     experience_manifests, fetch_result_page, inspect_explorer_node, inspect_permissions,
-    list_explorer_nodes, load_structure_map, operation_manifests, plan_data_edit, plan_operation,
-    test_connection,
+    inspect_redis_key, list_explorer_nodes, load_structure_map, operation_manifests,
+    plan_data_edit, plan_operation, scan_redis_keys, test_connection,
 };

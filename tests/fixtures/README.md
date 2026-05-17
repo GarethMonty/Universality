@@ -29,6 +29,7 @@ npm run rust:test
 | --- | --- | --- |
 | default | PostgreSQL, MySQL, SQL Server, MongoDB, Redis, SQLite file | Fast path used by existing E2E. |
 | `cache` | Valkey, Memcached | Lightweight cache fixtures. |
+| `redis-stack` | Redis Stack | Optional Redis JSON/Search/TimeSeries/probabilistic module coverage. |
 | `sqlplus` | MariaDB, CockroachDB, TimescaleDB | Additional SQL and PostgreSQL-wire engines. |
 | `analytics` | ClickHouse, InfluxDB, Prometheus, DuckDB file | OLAP/time-series fixtures. |
 | `search` | OpenSearch, Elasticsearch | Single-node, security-disabled, memory-limited. |
@@ -60,6 +61,7 @@ If an existing local fixture container was created before the current credential
 | SQL Server | 14333 | datapadplusplus | sa | DataPadPlusPlus_pwd_123 |
 | MongoDB | 27018 | catalog | datapadplusplus | datapadplusplus |
 | Redis | 6380 | 0 | | |
+| Redis Stack | 6382 | 0 | | |
 | Valkey | 6381 | 0 | | |
 | Memcached | 11212 | | | |
 | MariaDB | 33061 | commerce | datapadplusplus | datapadplusplus |

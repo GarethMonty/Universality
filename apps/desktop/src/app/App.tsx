@@ -53,6 +53,10 @@ import {
   isSearchDslBuilderState,
   parseSearchDslQueryText,
 } from './components/workbench/query-builder/search-dsl'
+import {
+  isRedisKeyBrowserState,
+  parseRedisKeyBrowserQueryText,
+} from './components/workbench/query-builder/redis-key-browser'
 import { AppStateProvider, useAppState } from './state/app-state'
 import { createConnectionProfile, createEnvironmentProfile } from './state/app-state-factories'
 import {
@@ -1057,6 +1061,7 @@ function DesktopWorkspace() {
                       }
                       onOpenConnectionDrawer={openConnectionDrawer}
                       canToggleBuilderView={hasBuilderQuery}
+                      builderKind={activeBuilderKind}
                       queryWindowMode={queryWindowMode}
                       onToggleQueryWindowMode={setQueryWindowMode}
                       onToggleBottomPanel={() =>
@@ -1084,6 +1089,9 @@ function DesktopWorkspace() {
                             collectionOptions={queryBuilderOptions}
                             tableOptions={queryBuilderOptions}
                             onBuilderStateChange={persistBuilderState}
+                            onExecuteDataEdit={actions.executeDataEdit}
+                            onScanRedisKeys={actions.scanRedisKeys}
+                            onInspectRedisKey={actions.inspectRedisKey}
                           />
                         ) : null}
                         {!hasBuilderQuery || activeQueryWindowMode !== 'builder' ? (
@@ -1297,6 +1305,10 @@ function buildQueryTextForBuilderState(
     return buildSearchDslQueryText(builderState)
   }
 
+  if (isRedisKeyBrowserState(builderState)) {
+    return undefined
+  }
+
   return undefined
 }
 
@@ -1305,6 +1317,10 @@ function defaultQueryWindowModeForBuilderKind(
 ): 'both' | 'builder' | 'raw' {
   if (builderKind === 'sql-select') {
     return 'raw'
+  }
+
+  if (builderKind === 'redis-key-browser') {
+    return 'builder'
   }
 
   return 'both'
@@ -1333,6 +1349,10 @@ function parseBuilderStateFromQueryText(
 
   if (isSearchDslBuilderState(currentBuilderState)) {
     return parseSearchDslQueryText(queryText)
+  }
+
+  if (isRedisKeyBrowserState(currentBuilderState)) {
+    return parseRedisKeyBrowserQueryText(queryText)
   }
 
   return undefined

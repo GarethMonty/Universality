@@ -113,6 +113,27 @@ jobs:
               echo "::error title=Release already published::${tag} already exists and is not a draft."
               exit 1
             fi
+            gh release edit "${tag}" \
+              --title "DataPad++ v${RELEASE_VERSION}" \
+              --notes "Desktop release artifacts for DataPad++.
+
+          This release is created as a draft for manual installer smoke testing before publication.
+          Release checklist: docs/release-checklist.md"
+          else
+            release_args=(
+              "${tag}"
+              "--draft"
+              "--title" "DataPad++ v${RELEASE_VERSION}"
+              "--notes" "Desktop release artifacts for DataPad++.
+
+          This release is created as a draft for manual installer smoke testing before publication.
+          Release checklist: docs/release-checklist.md"
+              "--target" "${release_sha}"
+            )
+            if [[ "${prerelease}" == "true" ]]; then
+              release_args+=("--prerelease")
+            fi
+            gh release create "${release_args[@]}"
           fi
 
   publish:
@@ -132,11 +153,6 @@ jobs:
             args: '--bundles nsis,msi'
             rust-targets: ''
             artifact-suffix: windows-x64
-          - label: macOS Intel
-            platform: macos-13
-            args: '--target x86_64-apple-darwin --bundles app,dmg'
-            rust-targets: x86_64-apple-darwin
-            artifact-suffix: macos-x64
           - label: macOS Apple Silicon
             platform: macos-latest
             args: '--target aarch64-apple-darwin --bundles app,dmg'
@@ -335,6 +351,51 @@ jobs:
           prerelease: ${{ contains(inputs.version, '-') }}
           releaseCommitish: ${{ needs.validate.outputs.release-sha }}
           args: ${{ matrix.args }}
+
+      - name: Upload Tauri bundle artifacts to draft release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: app-v${{ inputs.version }}
+          RUST_TARGET: ${{ matrix.rust-targets }}
+        run: |
+          $targetRoot = Join-Path "apps/desktop/src-tauri" "target"
+          if ($env:RUST_TARGET) {
+            $releaseDir = Join-Path $targetRoot (Join-Path $env:RUST_TARGET "release")
+          } else {
+            $releaseDir = Join-Path $targetRoot "release"
+          }
+
+          $bundleRoot = Join-Path $releaseDir "bundle"
+          if (-not (Test-Path -LiteralPath $bundleRoot)) {
+            throw "Expected Tauri bundle directory was not found at $bundleRoot"
+          }
+
+          $allowedNames = @(
+            "*.msi",
+            "*.exe",
+            "*.deb",
+            "*.rpm",
+            "*.AppImage",
+            "*.dmg",
+            "*.tar.gz",
+            "*.sig"
+          )
+
+          $assets = Get-ChildItem -LiteralPath $bundleRoot -Recurse -File |
+            Where-Object {
+              $assetName = $_.Name
+              $allowedNames | Where-Object { $assetName -like $_ }
+            } |
+            Select-Object -ExpandProperty FullName
+
+          if (-not $assets -or $assets.Count -eq 0) {
+            throw "No Tauri installer or bundle assets were found under $bundleRoot"
+          }
+
+          foreach ($asset in $assets) {
+            gh release upload $env:TAG_NAME $asset --clobber
+          }
 
       - name: Package raw executable
         shell: pwsh

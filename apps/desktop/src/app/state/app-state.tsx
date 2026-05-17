@@ -55,6 +55,8 @@ const defaultActions: Actions = {
   loadExplorer: noop,
   loadStructureMap: noop,
   inspectExplorer: noop,
+  scanRedisKeys: async () => undefined,
+  inspectRedisKey: noop,
   executeQuery: noop,
   fetchResultPage: noop,
   cancelExecution: noop,

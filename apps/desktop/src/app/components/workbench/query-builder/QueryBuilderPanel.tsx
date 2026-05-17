@@ -1,8 +1,13 @@
 import type {
   ConnectionProfile,
+  DataEditExecutionRequest,
+  DataEditExecutionResponse,
   MongoFindBuilderState,
   QueryBuilderState,
   QueryTabState,
+  RedisKeyInspectRequest,
+  RedisKeyScanRequest,
+  RedisKeyScanResponse,
 } from '@datapadplusplus/shared-types'
 import { useState } from 'react'
 import type { DragEvent } from 'react'
@@ -25,6 +30,8 @@ import { isSqlSelectBuilderState } from './sql-select'
 import { SqlSelectBuilder } from './SqlSelectBuilder'
 import { isSearchDslBuilderState } from './search-dsl'
 import { SearchDslBuilder } from './SearchDslBuilder'
+import { RedisKeyBrowserPanel } from './RedisKeyBrowserPanel'
+import { isRedisKeyBrowserState } from './redis-key-browser'
 
 interface QueryBuilderPanelProps {
   connection?: ConnectionProfile
@@ -33,6 +40,11 @@ interface QueryBuilderPanelProps {
   collectionOptions?: string[]
   tableOptions?: string[]
   onBuilderStateChange?(tabId: string, builderState: QueryBuilderState): void
+  onExecuteDataEdit?(
+    request: DataEditExecutionRequest,
+  ): Promise<DataEditExecutionResponse | undefined>
+  onInspectRedisKey?(request: RedisKeyInspectRequest): Promise<void>
+  onScanRedisKeys?(request: RedisKeyScanRequest): Promise<RedisKeyScanResponse | undefined>
 }
 
 export function QueryBuilderPanel({
@@ -42,6 +54,9 @@ export function QueryBuilderPanel({
   tab,
   tableOptions = [],
   onBuilderStateChange,
+  onExecuteDataEdit,
+  onInspectRedisKey,
+  onScanRedisKeys,
 }: QueryBuilderPanelProps) {
   const resolvedBuilderState = builderState ?? tab.builderState
 
@@ -102,6 +117,20 @@ export function QueryBuilderPanel({
         builderState={resolvedBuilderState}
         indexOptions={tableOptions}
         onBuilderStateChange={onBuilderStateChange}
+      />
+    )
+  }
+
+  if (isRedisKeyBrowserState(resolvedBuilderState)) {
+    return (
+      <RedisKeyBrowserPanel
+        key={tab.id}
+        tab={tab}
+        builderState={resolvedBuilderState}
+        onBuilderStateChange={onBuilderStateChange}
+        onExecuteDataEdit={onExecuteDataEdit}
+        onInspectRedisKey={onInspectRedisKey}
+        onScanRedisKeys={onScanRedisKeys}
       />
     )
   }

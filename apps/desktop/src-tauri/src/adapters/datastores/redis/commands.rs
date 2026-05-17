@@ -1,6 +1,27 @@
 pub(super) fn is_supported_redis_read_command(command: &str, part_count: usize) -> bool {
     matches!(command, "PING" | "SCAN")
-        || matches!(command, "HGETALL" | "GET" | "TYPE" | "TTL") && part_count > 1
+        || matches!(
+            command,
+            "HGETALL"
+                | "GET"
+                | "TYPE"
+                | "TTL"
+                | "PTTL"
+                | "STRLEN"
+                | "HLEN"
+                | "LLEN"
+                | "LRANGE"
+                | "SCARD"
+                | "SSCAN"
+                | "ZRANGE"
+                | "ZCARD"
+                | "XLEN"
+                | "XRANGE"
+                | "MEMORY"
+                | "OBJECT"
+                | "JSON.GET"
+                | "TS.RANGE"
+        ) && part_count > 1
 }
 
 pub(super) fn is_redis_write_command(command: &str) -> bool {

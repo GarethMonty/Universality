@@ -239,6 +239,10 @@ function browserQueryBuilders(
     ]
   }
 
+  if (engine === 'redis' || engine === 'valkey') {
+    return [{ kind: 'redis-key-browser', label: 'Key Browser', scope: 'key', defaultMode: 'visual' }]
+  }
+
   if (['postgresql', 'cockroachdb', 'sqlserver', 'mysql', 'mariadb', 'sqlite'].includes(engine)) {
     return [{ kind: 'sql-select', label: 'SQL SELECT Builder', scope: 'table', defaultMode: 'split' }]
   }
@@ -279,7 +283,20 @@ function browserEditableScopes(
       {
         scope: 'key',
         label: 'Keys',
-        editKinds: ['set-key-value', 'set-ttl', 'delete-key'],
+        editKinds: [
+          'set-key-value',
+          'set-ttl',
+          'delete-key',
+          'hash-set-field',
+          'hash-delete-field',
+          'list-set-index',
+          'list-push',
+          'list-remove-value',
+          'set-add-member',
+          'set-remove-member',
+          'zset-add-member',
+          'zset-remove-member',
+        ],
         requiresPrimaryKey: false,
         liveExecution: false,
       },

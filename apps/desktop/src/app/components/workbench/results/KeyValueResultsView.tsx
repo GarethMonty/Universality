@@ -3,6 +3,7 @@ import type {
   ConnectionProfile,
   DataEditExecutionRequest,
   DataEditExecutionResponse,
+  KeyValuePayload,
 } from '@datapadplusplus/shared-types'
 import type { DocumentEditContext } from './document-edit-context'
 import {
@@ -14,6 +15,7 @@ import { KeyValueEntryRows } from './KeyValueEntryRows'
 import { KeyValueContextMenu } from './KeyValueContextMenu'
 import {
   buildKeyValueEditRequest,
+  buildRedisMemberEditRequest,
   keyValueCanEdit,
   keyValueConfirmationText,
   parseKeyValueInput,
@@ -23,6 +25,7 @@ interface KeyValueResultsViewProps {
   connection?: ConnectionProfile
   editContext?: DocumentEditContext
   entries: Record<string, string>
+  payload?: KeyValuePayload
   onExecuteDataEdit?(
     request: DataEditExecutionRequest,
   ): Promise<DataEditExecutionResponse | undefined>
@@ -54,6 +57,7 @@ export function KeyValueResultsView({
   connection,
   editContext,
   entries,
+  payload,
   onExecuteDataEdit,
 }: KeyValueResultsViewProps) {
   const [draftEntries, setDraftEntries] = useState(entries)
@@ -107,13 +111,23 @@ export function KeyValueResultsView({
     }
 
     const nextValue = parseKeyValueInput(editingValue)
-    const request = buildKeyValueEditRequest({
-      connection,
-      editContext,
-      editKind: 'set-key-value',
-      key: editingKey,
-      value: nextValue,
-    })
+    const request =
+      selectedKey && redisType && redisType !== 'string'
+        ? buildRedisMemberEditRequest({
+            connection,
+            editContext,
+            editKind: redisEditKindForValue(redisType),
+            key: selectedKey,
+            field: editingKey,
+            value: nextValue,
+          })
+        : buildKeyValueEditRequest({
+            connection,
+            editContext,
+            editKind: 'set-key-value',
+            key: selectedKey ?? editingKey,
+            value: nextValue,
+          })
     const keyName = editingKey
     setEditingKey(undefined)
 
@@ -231,10 +245,27 @@ export function KeyValueResultsView({
     }
   }
 
+  const redisType = payload?.redisType
+  const selectedKey = payload?.key
+
   return (
     <div className="keyvalue-results" aria-label="Key-value results">
+      {selectedKey ? (
+        <div className="redis-key-detail-header">
+          <div>
+            <strong>{selectedKey}</strong>
+            <span className={`redis-type-badge is-${redisType ?? 'unknown'}`}>
+              {redisType ?? 'unknown'}
+            </span>
+          </div>
+          <span>{payload?.ttl ?? 'TTL unavailable'}</span>
+          <span>{payload?.memoryUsage ?? 'Memory unavailable'}</span>
+          {payload?.encoding ? <span>{payload.encoding}</span> : null}
+          {payload?.length !== undefined ? <span>{payload.length} item(s)</span> : null}
+        </div>
+      ) : null}
       <div className="keyvalue-results-header" role="row">
-        <span>Key</span>
+        <span>{redisType === 'hash' ? 'Field' : redisType === 'list' ? 'Index' : redisType === 'zset' ? 'Member' : 'Key'}</span>
         <span>Type</span>
         <span>Value</span>
       </div>
@@ -343,4 +374,21 @@ export function KeyValueResultsView({
 
 function serializedKeyValue(value: unknown) {
   return typeof value === 'string' ? value : JSON.stringify(value)
+}
+
+function redisEditKindForValue(
+  redisType: string,
+): 'hash-set-field' | 'list-set-index' | 'set-add-member' | 'zset-add-member' {
+  switch (redisType) {
+    case 'hash':
+      return 'hash-set-field'
+    case 'list':
+      return 'list-set-index'
+    case 'set':
+      return 'set-add-member'
+    case 'zset':
+      return 'zset-add-member'
+    default:
+      return 'hash-set-field'
+  }
 }

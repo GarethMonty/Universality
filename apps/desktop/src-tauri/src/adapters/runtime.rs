@@ -57,6 +57,34 @@ pub async fn fetch_result_page(
         .await
 }
 
+pub async fn scan_redis_keys(
+    connection: &ResolvedConnectionProfile,
+    request: &RedisKeyScanRequest,
+) -> Result<RedisKeyScanResponse, CommandError> {
+    if connection.engine != "redis" && connection.engine != "valkey" {
+        return Err(CommandError::new(
+            "redis-browser-unsupported",
+            "Redis key browsing is only available for Redis and Valkey connections.",
+        ));
+    }
+
+    super::datastores::redis::scan_redis_keys(connection, request).await
+}
+
+pub async fn inspect_redis_key(
+    connection: &ResolvedConnectionProfile,
+    request: &RedisKeyInspectRequest,
+) -> Result<ExecutionResultEnvelope, CommandError> {
+    if connection.engine != "redis" && connection.engine != "valkey" {
+        return Err(CommandError::new(
+            "redis-browser-unsupported",
+            "Redis key inspection is only available for Redis and Valkey connections.",
+        ));
+    }
+
+    super::datastores::redis::inspect_redis_key(connection, request).await
+}
+
 pub async fn cancel(
     connection: &ResolvedConnectionProfile,
     request: &CancelExecutionRequest,

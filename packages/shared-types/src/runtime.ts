@@ -131,7 +131,7 @@ export interface DatastoreExperienceAction {
 }
 
 export interface DatastoreExperienceBuilder {
-  kind: QueryBuilderKind | 'sql-select' | 'search-dsl' | 'dynamodb-key-condition' | 'cql-partition'
+  kind: QueryBuilderKind | 'sql-select' | 'search-dsl' | 'dynamodb-key-condition' | 'cql-partition' | 'redis-key-browser'
   label: string
   scope: DatastoreOperationScope
   defaultMode: 'visual' | 'split' | 'raw'
@@ -181,6 +181,26 @@ export type DataEditKind =
   | 'set-key-value'
   | 'set-ttl'
   | 'delete-key'
+  | 'rename-key'
+  | 'persist-ttl'
+  | 'hash-set-field'
+  | 'hash-delete-field'
+  | 'list-push'
+  | 'list-set-index'
+  | 'list-remove-value'
+  | 'set-add-member'
+  | 'set-remove-member'
+  | 'zset-add-member'
+  | 'zset-remove-member'
+  | 'stream-add-entry'
+  | 'stream-delete-entry'
+  | 'json-set-path'
+  | 'json-delete-path'
+  | 'timeseries-add-sample'
+  | 'timeseries-delete-sample'
+  | 'vector-add-member'
+  | 'vector-remove-member'
+  | 'vector-set-attributes'
   | 'put-item'
   | 'update-item'
   | 'delete-item'
@@ -422,6 +442,48 @@ export interface ResultPageResponse {
   payload: ResultPayload
   pageInfo: ResultPageInfo
   notices: string[]
+}
+
+export interface RedisKeySummary {
+  key: string
+  type: string
+  ttlSeconds?: number
+  ttlLabel?: string
+  memoryUsageBytes?: number
+  memoryUsageLabel?: string
+  length?: number
+  encoding?: string
+}
+
+export interface RedisKeyScanRequest {
+  tabId?: string
+  connectionId: string
+  environmentId: string
+  pattern?: string
+  typeFilter?: string
+  cursor?: string
+  count?: number
+  pageSize?: number
+}
+
+export interface RedisKeyScanResponse {
+  connectionId: string
+  environmentId: string
+  cursor: string
+  nextCursor?: string
+  scannedCount: number
+  keys: RedisKeySummary[]
+  usedTypeFilterFallback: boolean
+  moduleTypes: string[]
+  warnings: string[]
+}
+
+export interface RedisKeyInspectRequest {
+  tabId: string
+  connectionId: string
+  environmentId: string
+  key: string
+  sampleSize?: number
 }
 
 export interface CancelExecutionRequest {

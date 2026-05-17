@@ -1,0 +1,678 @@
+use std::collections::BTreeMap;
+
+use redis::Value as RedisValue;
+use serde_json::{json, Map, Value as JsonValue};
+
+use super::super::super::*;
+use super::connection::redis_connection;
+
+const DEFAULT_SCAN_COUNT: u32 = 100;
+const DEFAULT_KEY_SAMPLE_SIZE: u32 = 200;
+const MAX_SCAN_ROUNDS: usize = 12;
+
+pub(crate) async fn scan_redis_keys(
+    connection: &ResolvedConnectionProfile,
+    request: &RedisKeyScanRequest,
+) -> Result<RedisKeyScanResponse, CommandError> {
+    let mut redis = redis_connection(connection).await?;
+    let pattern = request
+        .pattern
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("*");
+    let type_filter = request
+        .type_filter
+        .as_deref()
+        .map(normalize_requested_type)
+        .unwrap_or_else(|| "all".into());
+    let count = request
+        .count
+        .or(request.page_size)
+        .unwrap_or(DEFAULT_SCAN_COUNT)
+        .clamp(1, MAX_PAGE_SIZE);
+    let page_size = request.page_size.unwrap_or(count).clamp(1, MAX_PAGE_SIZE) as usize;
+    let mut cursor = request
+        .cursor
+        .as_deref()
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(0);
+    let mut scanned_count = 0;
+    let mut keys = Vec::new();
+    let mut warnings = Vec::new();
+    let mut used_type_filter_fallback = false;
+    let scan_type = redis_scan_type_argument(&type_filter);
+
+    for round in 0..MAX_SCAN_ROUNDS {
+        let scan_result = scan_page(&mut redis, cursor, pattern, count, scan_type.as_deref()).await;
+        let (next_cursor, page_keys) = match scan_result {
+            Ok(value) => value,
+            Err(error) if scan_type.is_some() && round == 0 => {
+                used_type_filter_fallback = true;
+                warnings.push(format!(
+                    "Redis did not accept SCAN TYPE for `{type_filter}`; DataPad++ filtered returned keys client-side instead. Details: {}",
+                    error.message
+                ));
+                scan_page(&mut redis, cursor, pattern, count, None).await?
+            }
+            Err(error) => return Err(error),
+        };
+
+        scanned_count += page_keys.len() as u32;
+        for key in page_keys {
+            if keys.len() >= page_size {
+                break;
+            }
+
+            let summary = key_summary(&mut redis, &key)
+                .await
+                .unwrap_or_else(|_| RedisKeySummary {
+                    key: key.clone(),
+                    key_type: "unknown".into(),
+                    ..Default::default()
+                });
+
+            if type_filter == "all" || redis_type_matches(&summary.key_type, &type_filter) {
+                keys.push(summary);
+            }
+        }
+
+        cursor = next_cursor;
+        if cursor == 0 || keys.len() >= page_size {
+            break;
+        }
+    }
+
+    let module_types = module_types(&mut redis).await.unwrap_or_default();
+    Ok(RedisKeyScanResponse {
+        connection_id: request.connection_id.clone(),
+        environment_id: request.environment_id.clone(),
+        cursor: request.cursor.clone().unwrap_or_else(|| "0".into()),
+        next_cursor: (cursor != 0).then(|| cursor.to_string()),
+        scanned_count,
+        keys,
+        used_type_filter_fallback,
+        module_types,
+        warnings,
+    })
+}
+
+pub(crate) async fn inspect_redis_key(
+    connection: &ResolvedConnectionProfile,
+    request: &RedisKeyInspectRequest,
+) -> Result<ExecutionResultEnvelope, CommandError> {
+    let started = Instant::now();
+    let mut redis = redis_connection(connection).await?;
+    let key = request.key.trim();
+
+    if key.is_empty() || key.contains('*') {
+        return Err(CommandError::new(
+            "redis-key-invalid",
+            "Redis key inspection needs one concrete key; wildcard keys are not allowed.",
+        ));
+    }
+
+    let sample_size = request
+        .sample_size
+        .unwrap_or(DEFAULT_KEY_SAMPLE_SIZE)
+        .clamp(1, MAX_PAGE_SIZE);
+    let summary = key_summary(&mut redis, key).await?;
+    let value = key_value_sample(&mut redis, key, &summary.key_type, sample_size).await?;
+    let entries = entries_for_value(key, &summary.key_type, &value);
+    let disabled_actions = disabled_module_actions(&summary.key_type);
+    let payload_keyvalue = json!({
+        "renderer": "keyvalue",
+        "entries": entries,
+        "ttl": summary.ttl_label,
+        "memoryUsage": summary.memory_usage_label,
+        "key": key,
+        "redisType": summary.key_type,
+        "ttlSeconds": summary.ttl_seconds,
+        "memoryUsageBytes": summary.memory_usage_bytes,
+        "encoding": summary.encoding,
+        "length": summary.length,
+        "value": value,
+        "members": members_for_value(&summary.key_type, &value),
+        "metadata": {
+            "key": key,
+            "type": summary.key_type,
+            "ttl": summary.ttl_label,
+            "memory": summary.memory_usage_label,
+            "sampleSize": sample_size,
+        },
+        "supports": supports_for_type(&summary.key_type),
+        "disabledActions": disabled_actions,
+    });
+    let payloads = vec![
+        payload_keyvalue,
+        payload_json(json!({
+            "key": key,
+            "type": summary.key_type,
+            "ttlSeconds": summary.ttl_seconds,
+            "memoryUsageBytes": summary.memory_usage_bytes,
+            "encoding": summary.encoding,
+            "length": summary.length,
+            "value": value,
+        })),
+        payload_raw(format!("INSPECT {key}")),
+    ];
+
+    Ok(build_result(ResultEnvelopeInput {
+        engine: &connection.engine,
+        summary: format!("Redis key `{}` loaded as {}.", key, summary.key_type),
+        default_renderer: "keyvalue",
+        renderer_modes: vec!["keyvalue", "json", "raw"],
+        payloads,
+        notices: Vec::new(),
+        duration_ms: duration_ms(started),
+        row_limit: Some(sample_size),
+        truncated: false,
+        explain_payload: None,
+    }))
+}
+
+async fn scan_page(
+    redis: &mut redis::aio::MultiplexedConnection,
+    cursor: u64,
+    pattern: &str,
+    count: u32,
+    type_filter: Option<&str>,
+) -> Result<(u64, Vec<String>), CommandError> {
+    let mut command = redis::cmd("SCAN");
+    command
+        .arg(cursor)
+        .arg("MATCH")
+        .arg(pattern)
+        .arg("COUNT")
+        .arg(count);
+    if let Some(type_filter) = type_filter {
+        command.arg("TYPE").arg(type_filter);
+    }
+    Ok(command.query_async(redis).await?)
+}
+
+async fn key_summary(
+    redis: &mut redis::aio::MultiplexedConnection,
+    key: &str,
+) -> Result<RedisKeySummary, CommandError> {
+    let key_type: String = redis::cmd("TYPE").arg(key).query_async(redis).await?;
+    let normalized_type = normalize_redis_type(&key_type);
+    let ttl_seconds: i64 = redis::cmd("TTL")
+        .arg(key)
+        .query_async(redis)
+        .await
+        .unwrap_or(-2);
+    let memory_usage_bytes = redis::cmd("MEMORY")
+        .arg("USAGE")
+        .arg(key)
+        .query_async::<u64>(redis)
+        .await
+        .ok();
+    let encoding = redis::cmd("OBJECT")
+        .arg("ENCODING")
+        .arg(key)
+        .query_async::<String>(redis)
+        .await
+        .ok();
+    let length = key_length(redis, key, &normalized_type).await.ok();
+
+    Ok(RedisKeySummary {
+        key: key.into(),
+        key_type: normalized_type,
+        ttl_seconds: Some(ttl_seconds),
+        ttl_label: Some(ttl_label(ttl_seconds)),
+        memory_usage_bytes,
+        memory_usage_label: memory_usage_bytes.map(format_bytes),
+        length,
+        encoding,
+    })
+}
+
+async fn key_length(
+    redis: &mut redis::aio::MultiplexedConnection,
+    key: &str,
+    key_type: &str,
+) -> Result<u64, CommandError> {
+    let length = match key_type {
+        "hash" => {
+            redis::cmd("HLEN")
+                .arg(key)
+                .query_async::<u64>(redis)
+                .await?
+        }
+        "list" => {
+            redis::cmd("LLEN")
+                .arg(key)
+                .query_async::<u64>(redis)
+                .await?
+        }
+        "set" => {
+            redis::cmd("SCARD")
+                .arg(key)
+                .query_async::<u64>(redis)
+                .await?
+        }
+        "zset" => {
+            redis::cmd("ZCARD")
+                .arg(key)
+                .query_async::<u64>(redis)
+                .await?
+        }
+        "stream" => {
+            redis::cmd("XLEN")
+                .arg(key)
+                .query_async::<u64>(redis)
+                .await?
+        }
+        "string" => {
+            redis::cmd("STRLEN")
+                .arg(key)
+                .query_async::<u64>(redis)
+                .await?
+        }
+        "json" => redis::cmd("JSON.OBJLEN")
+            .arg(key)
+            .arg("$")
+            .query_async::<u64>(redis)
+            .await
+            .unwrap_or(0),
+        "timeseries" => redis::cmd("TS.INFO")
+            .arg(key)
+            .query_async::<RedisValue>(redis)
+            .await
+            .ok()
+            .and_then(|value| {
+                field_from_array(&value, "totalSamples").and_then(|item| item.as_u64())
+            })
+            .unwrap_or(0),
+        _ => 0,
+    };
+    Ok(length)
+}
+
+async fn key_value_sample(
+    redis: &mut redis::aio::MultiplexedConnection,
+    key: &str,
+    key_type: &str,
+    sample_size: u32,
+) -> Result<JsonValue, CommandError> {
+    match key_type {
+        "hash" => {
+            let values: Vec<String> = redis::cmd("HGETALL").arg(key).query_async(redis).await?;
+            let mut map = Map::new();
+            for chunk in values.chunks(2).take(sample_size as usize) {
+                if let [field, value] = chunk {
+                    map.insert(field.clone(), JsonValue::String(value.clone()));
+                }
+            }
+            Ok(JsonValue::Object(map))
+        }
+        "list" => {
+            let values: Vec<String> = redis::cmd("LRANGE")
+                .arg(key)
+                .arg(0)
+                .arg(sample_size.saturating_sub(1))
+                .query_async(redis)
+                .await?;
+            Ok(json!(values))
+        }
+        "set" => {
+            let (_cursor, values): (u64, Vec<String>) = redis::cmd("SSCAN")
+                .arg(key)
+                .arg(0)
+                .arg("COUNT")
+                .arg(sample_size)
+                .query_async(redis)
+                .await?;
+            Ok(json!(values))
+        }
+        "zset" => {
+            let values: Vec<String> = redis::cmd("ZRANGE")
+                .arg(key)
+                .arg(0)
+                .arg(sample_size.saturating_sub(1))
+                .arg("WITHSCORES")
+                .query_async(redis)
+                .await?;
+            let mut members = Vec::new();
+            for chunk in values.chunks(2) {
+                if let [member, score] = chunk {
+                    members.push(json!({ "member": member, "score": score }));
+                }
+            }
+            Ok(json!(members))
+        }
+        "stream" => {
+            let value: RedisValue = redis::cmd("XRANGE")
+                .arg(key)
+                .arg("-")
+                .arg("+")
+                .arg("COUNT")
+                .arg(sample_size)
+                .query_async(redis)
+                .await?;
+            Ok(redis_value_to_json(&value))
+        }
+        "json" => {
+            let value: Option<String> = redis::cmd("JSON.GET")
+                .arg(key)
+                .arg("$")
+                .query_async(redis)
+                .await
+                .ok();
+            Ok(value
+                .as_deref()
+                .and_then(|raw| serde_json::from_str(raw).ok())
+                .unwrap_or(JsonValue::Null))
+        }
+        "timeseries" => {
+            let value: RedisValue = redis::cmd("TS.RANGE")
+                .arg(key)
+                .arg("-")
+                .arg("+")
+                .arg("COUNT")
+                .arg(sample_size)
+                .query_async(redis)
+                .await?;
+            Ok(redis_value_to_json(&value))
+        }
+        "none" => Ok(JsonValue::Null),
+        _ => {
+            let value: Option<String> = redis::cmd("GET").arg(key).query_async(redis).await.ok();
+            Ok(value.map(JsonValue::String).unwrap_or(JsonValue::Null))
+        }
+    }
+}
+
+async fn module_types(
+    redis: &mut redis::aio::MultiplexedConnection,
+) -> Result<Vec<String>, CommandError> {
+    let value: RedisValue = redis::cmd("MODULE").arg("LIST").query_async(redis).await?;
+    let names = redis_value_to_json(&value);
+    let mut modules = Vec::new();
+    collect_module_names(&names, &mut modules);
+    modules.sort();
+    modules.dedup();
+    Ok(modules)
+}
+
+fn collect_module_names(value: &JsonValue, modules: &mut Vec<String>) {
+    match value {
+        JsonValue::Object(map) => {
+            if let Some(JsonValue::String(name)) = map.get("name") {
+                modules.push(name.clone());
+            }
+            for child in map.values() {
+                collect_module_names(child, modules);
+            }
+        }
+        JsonValue::Array(items) => {
+            for item in items {
+                collect_module_names(item, modules);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn entries_for_value(key: &str, key_type: &str, value: &JsonValue) -> BTreeMap<String, String> {
+    let mut entries = BTreeMap::new();
+    match (key_type, value) {
+        ("hash", JsonValue::Object(map)) => {
+            for (field, value) in map {
+                entries.insert(field.clone(), display_json_value(value));
+            }
+        }
+        ("list", JsonValue::Array(items)) => {
+            for (index, value) in items.iter().enumerate() {
+                entries.insert(index.to_string(), display_json_value(value));
+            }
+        }
+        ("set", JsonValue::Array(items)) => {
+            for value in items {
+                let member = display_json_value(value);
+                entries.insert(member.clone(), member);
+            }
+        }
+        ("zset", JsonValue::Array(items)) => {
+            for item in items {
+                if let Some(member) = item.get("member").and_then(JsonValue::as_str) {
+                    entries.insert(
+                        member.into(),
+                        item.get("score")
+                            .map(display_json_value)
+                            .unwrap_or_default(),
+                    );
+                }
+            }
+        }
+        _ => {
+            entries.insert(key.into(), display_json_value(value));
+        }
+    }
+    entries
+}
+
+fn members_for_value(key_type: &str, value: &JsonValue) -> Vec<BTreeMap<String, JsonValue>> {
+    match (key_type, value) {
+        ("hash", JsonValue::Object(map)) => map
+            .iter()
+            .map(|(field, value)| {
+                BTreeMap::from([
+                    ("field".into(), JsonValue::String(field.clone())),
+                    ("value".into(), value.clone()),
+                ])
+            })
+            .collect(),
+        ("list", JsonValue::Array(items)) => items
+            .iter()
+            .enumerate()
+            .map(|(index, value)| {
+                BTreeMap::from([
+                    ("index".into(), json!(index)),
+                    ("value".into(), value.clone()),
+                ])
+            })
+            .collect(),
+        ("set", JsonValue::Array(items)) => items
+            .iter()
+            .map(|value| BTreeMap::from([("member".into(), value.clone())]))
+            .collect(),
+        ("zset", JsonValue::Array(items)) => items
+            .iter()
+            .filter_map(|item| item.as_object())
+            .map(|item| {
+                item.iter()
+                    .map(|(key, value)| (key.clone(), value.clone()))
+                    .collect()
+            })
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+fn supports_for_type(key_type: &str) -> BTreeMap<String, bool> {
+    let mut supports = BTreeMap::new();
+    supports.insert("deleteKey".into(), key_type != "none");
+    supports.insert("ttl".into(), key_type != "none");
+    supports.insert("setValue".into(), key_type == "string");
+    supports.insert("hashFields".into(), key_type == "hash");
+    supports.insert("listItems".into(), key_type == "list");
+    supports.insert("setMembers".into(), key_type == "set");
+    supports.insert("zsetMembers".into(), key_type == "zset");
+    supports.insert("streamEntries".into(), key_type == "stream");
+    supports.insert("jsonPaths".into(), key_type == "json");
+    supports
+}
+
+fn disabled_module_actions(key_type: &str) -> BTreeMap<String, String> {
+    let mut disabled = BTreeMap::new();
+    match key_type {
+        "json" => {}
+        "timeseries" => {
+            disabled.insert(
+                "deleteSample".into(),
+                "TimeSeries delete requires TS.DEL support on Redis Stack.".into(),
+            );
+        }
+        "bloom" | "cuckoo" | "cms" | "topk" | "tdigest" | "vectorset" | "module" => {
+            disabled.insert(
+                "edit".into(),
+                format!(
+                    "DataPad++ detected Redis module type `{key_type}`. Editing is disabled until the matching module commands are confirmed."
+                ),
+            );
+        }
+        _ => {}
+    }
+    disabled
+}
+
+fn field_from_array(value: &RedisValue, field: &str) -> Option<JsonValue> {
+    let json = redis_value_to_json(value);
+    if let JsonValue::Array(items) = json {
+        for chunk in items.chunks(2) {
+            if let [JsonValue::String(name), value] = chunk {
+                if name == field {
+                    return Some(value.clone());
+                }
+            }
+        }
+    }
+    None
+}
+
+fn redis_value_to_json(value: &RedisValue) -> JsonValue {
+    match value {
+        RedisValue::Nil => JsonValue::Null,
+        RedisValue::Int(value) => json!(value),
+        RedisValue::BulkString(bytes) => JsonValue::String(String::from_utf8_lossy(bytes).into()),
+        RedisValue::Array(values) => {
+            JsonValue::Array(values.iter().map(redis_value_to_json).collect())
+        }
+        RedisValue::SimpleString(value) => JsonValue::String(value.clone()),
+        RedisValue::Okay => JsonValue::String("OK".into()),
+        RedisValue::Map(values) => JsonValue::Object(
+            values
+                .iter()
+                .map(|(key, value)| {
+                    (
+                        display_json_value(&redis_value_to_json(key)),
+                        redis_value_to_json(value),
+                    )
+                })
+                .collect(),
+        ),
+        RedisValue::Attribute { data, attributes } => json!({
+            "data": redis_value_to_json(data),
+            "attributes": attributes
+                .iter()
+                .map(|(key, value)| json!({
+                    "key": redis_value_to_json(key),
+                    "value": redis_value_to_json(value),
+                }))
+                .collect::<Vec<_>>(),
+        }),
+        RedisValue::Set(values) => {
+            JsonValue::Array(values.iter().map(redis_value_to_json).collect())
+        }
+        RedisValue::Double(value) => json!(value),
+        RedisValue::Boolean(value) => json!(value),
+        RedisValue::VerbatimString { text, .. } => JsonValue::String(text.clone()),
+        RedisValue::BigNumber(value) => JsonValue::String(format!("{value:?}")),
+        RedisValue::Push { kind, data } => json!({
+            "kind": format!("{kind:?}"),
+            "data": data.iter().map(redis_value_to_json).collect::<Vec<_>>(),
+        }),
+        RedisValue::ServerError(error) => JsonValue::String(error.to_string()),
+        _ => JsonValue::String(format!("{value:?}")),
+    }
+}
+
+fn display_json_value(value: &JsonValue) -> String {
+    match value {
+        JsonValue::String(value) => value.clone(),
+        JsonValue::Null => "null".into(),
+        other => other.to_string(),
+    }
+}
+
+fn normalize_requested_type(value: &str) -> String {
+    let normalized = value.trim().to_ascii_lowercase();
+    if normalized.is_empty() {
+        "all".into()
+    } else {
+        normalized
+    }
+}
+
+fn redis_scan_type_argument(type_filter: &str) -> Option<String> {
+    match type_filter {
+        "all" | "search-index" | "module" | "unknown" => None,
+        "json" => Some("ReJSON-RL".into()),
+        "timeseries" => Some("TSDB-TYPE".into()),
+        other => Some(other.into()),
+    }
+}
+
+fn normalize_redis_type(value: &str) -> String {
+    match value.to_ascii_lowercase().as_str() {
+        "rejson-rl" | "json" => "json".into(),
+        "tsdb-type" | "timeseries" => "timeseries".into(),
+        "bf" | "bloom" => "bloom".into(),
+        "cf" | "cuckoo" => "cuckoo".into(),
+        "cmsketch" | "cms" => "cms".into(),
+        "topk" => "topk".into(),
+        "tdigest" => "tdigest".into(),
+        "vectorset" | "vector" | "vectors" => "vectorset".into(),
+        known @ ("string" | "hash" | "list" | "set" | "zset" | "stream" | "none") => known.into(),
+        other if other.is_empty() => "unknown".into(),
+        _ => "module".into(),
+    }
+}
+
+fn redis_type_matches(redis_type: &str, type_filter: &str) -> bool {
+    normalize_redis_type(redis_type) == normalize_requested_type(type_filter)
+}
+
+fn ttl_label(ttl_seconds: i64) -> String {
+    match ttl_seconds {
+        -2 => "Missing".into(),
+        -1 => "No limit".into(),
+        seconds => format!("{seconds}s"),
+    }
+}
+
+fn format_bytes(bytes: u64) -> String {
+    if bytes < 1024 {
+        return format!("{bytes} B");
+    }
+    let kib = bytes as f64 / 1024.0;
+    if kib < 1024.0 {
+        return format!("{kib:.1} KiB");
+    }
+    format!("{:.1} MiB", kib / 1024.0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn redis_type_normalization_handles_core_and_module_types() {
+        assert_eq!(normalize_redis_type("ReJSON-RL"), "json");
+        assert_eq!(normalize_redis_type("TSDB-TYPE"), "timeseries");
+        assert_eq!(normalize_redis_type("hash"), "hash");
+        assert_eq!(normalize_redis_type("bf"), "bloom");
+        assert_eq!(normalize_redis_type("custom-module"), "module");
+    }
+
+    #[test]
+    fn ttl_and_memory_labels_are_stable() {
+        assert_eq!(ttl_label(-2), "Missing");
+        assert_eq!(ttl_label(-1), "No limit");
+        assert_eq!(ttl_label(60), "60s");
+        assert_eq!(format_bytes(120), "120 B");
+        assert_eq!(format_bytes(2048), "2.0 KiB");
+    }
+}
