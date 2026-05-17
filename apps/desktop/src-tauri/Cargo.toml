@@ -1,6 +1,6 @@
 [package]
 name = "datapadplusplus-desktop"
-version = "0.1.3"
+version = "0.1.4"
 description = "DataPad++ desktop shell"
 edition = "2021"
 
